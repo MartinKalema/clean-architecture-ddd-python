@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class BookCreate(BaseModel):
     title: str
@@ -10,5 +10,4 @@ class BookResponse(BaseModel):
     author: str
     is_borrowed: bool
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
