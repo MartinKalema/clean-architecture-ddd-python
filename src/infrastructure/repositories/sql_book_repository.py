@@ -3,7 +3,6 @@ from sqlalchemy import Column, String, Boolean, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.entities.book import Book
 from src.domain.value_objects.book_value_objects import BookId, Title, Author
-from src.domain.interfaces.book_repository import BookRepository
 from src.infrastructure.external.database import Base
 
 class BookModel(Base):
@@ -31,7 +30,7 @@ class BookModel(Base):
             is_borrowed=book.is_borrowed
         )
 
-class SQLBookRepository(BookRepository):
+class SQLBookRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
