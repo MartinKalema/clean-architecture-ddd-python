@@ -31,36 +31,40 @@ class BookModel(Base):
         )
 
 class SQLBookRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, session_factory):
+        self.session_factory = session_factory
 
     async def add(self, book: Book) -> Book:
-        db_book = BookModel.from_entity(book)
-        self.session.add(db_book)
-        await self.session.commit()
-        await self.session.refresh(db_book)
-        return db_book.to_entity()
+        async with self.session_factory() as session:
+            db_book = BookModel.from_entity(book)
+            session.add(db_book)
+            await session.commit()
+            await session.refresh(db_book)
+            return db_book.to_entity()
 
     async def get_all(self) -> List[Book]:
-        result = await self.session.execute(select(BookModel))
-        db_books = result.scalars().all()
-        return [db_book.to_entity() for db_book in db_books]
+        async with self.session_factory() as session:
+            result = await session.execute(select(BookModel))
+            db_books = result.scalars().all()
+            return [db_book.to_entity() for db_book in db_books]
 
     async def get_by_id(self, book_id: str) -> Optional[Book]:
-        result = await self.session.execute(select(BookModel).filter(BookModel.id == book_id))
-        db_book = result.scalars().first()
-        if db_book:
-            return db_book.to_entity()
-        return None
+        async with self.session_factory() as session:
+            result = await session.execute(select(BookModel).filter(BookModel.id == book_id))
+            db_book = result.scalars().first()
+            if db_book:
+                return db_book.to_entity()
+            return None
 
     async def update(self, book: Book) -> None:
-        result = await self.session.execute(select(BookModel).filter(BookModel.id == book.id.value))
-        db_book = result.scalars().first()
-        if db_book:
-            db_book.is_borrowed = book.is_borrowed
-            await self.session.commit()
-            
-            # Dispatch Domain Events
-            for event in book.get_domain_events():
-                print(f"[EVENT DISPATCHED]: {event}")
-            book.clear_events()
+        async with self.session_factory() as session:
+            result = await session.execute(select(BookModel).filter(BookModel.id == book.id.value))
+            db_book = result.scalars().first()
+            if db_book:
+                db_book.is_borrowed = book.is_borrowed
+                await session.commit()
+                
+                # Dispatch Domain Events
+                for event in book.get_domain_events():
+                    print(f"[EVENT DISPATCHED]: {event}")
+                book.clear_events()

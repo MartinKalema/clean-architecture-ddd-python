@@ -13,11 +13,11 @@ class Container(containers.DeclarativeContainer):
         "src.presentation.cli.main"
     ])
 
-    db_session = providers.Factory(SessionLocal)
+    session_factory = providers.Object(SessionLocal)
 
     book_repository = providers.Factory(
         SQLBookRepository,
-        session=db_session
+        session_factory=session_factory
     )
 
     # Use Cases
