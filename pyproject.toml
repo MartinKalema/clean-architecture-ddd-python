@@ -1,0 +1,24 @@
+[project]
+name = "clean_architecture_app"
+version = "0.1.0"
+description = "A Python backend application demonstrating Clean Architecture and DDD."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "dependency-injector",
+    "requests",
+    "PyYAML",
+    "click",
+    "pydantic",
+    "aiosqlite",
+    "pytest-asyncio",
+    "httpx",
+    "greenlet"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
