@@ -52,16 +52,11 @@ async def borrow_book(
     book_id: str,
     use_case: BorrowBook = Depends(Provide[Container.borrow_book_use_case])
 ):
-    try:
-        input_dto = BorrowBookInputDto(book_id=book_id)
-        output_dto = await use_case.execute(input_dto)
-        return BookResponse(
-            id=output_dto.id,
-            title=output_dto.title,
-            author=output_dto.author,
-            is_borrowed=output_dto.is_borrowed
-        )
-    except BookNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except DomainException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    input_dto = BorrowBookInputDto(book_id=book_id)
+    output_dto = await use_case.execute(input_dto)
+    return BookResponse(
+        id=output_dto.id,
+        title=output_dto.title,
+        author=output_dto.author,
+        is_borrowed=output_dto.is_borrowed
+    )

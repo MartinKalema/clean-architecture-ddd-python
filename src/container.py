@@ -15,7 +15,7 @@ class Container(containers.DeclarativeContainer):
         "src.presentation.cli.commands.borrow_book_command"
     ])
 
-    session_factory = providers.Object(SessionLocal)
+    session_factory = providers.Callable(lambda: SessionLocal)
 
     book_repository = providers.Factory(
         SQLBookRepository,

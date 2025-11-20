@@ -19,6 +19,12 @@ dependencies = [
     "greenlet"
 ]
 
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = ["tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "session"
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
