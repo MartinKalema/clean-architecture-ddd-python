@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import uuid
+from src.domain.exceptions.book_exceptions import ValidationException
 
 @dataclass(frozen=True)
 class BookId:
@@ -7,7 +8,7 @@ class BookId:
 
     def __post_init__(self):
         if not self.value:
-            raise ValueError("BookId cannot be empty")
+            raise ValidationException("BookId cannot be empty")
 
     @classmethod
     def next_id(cls) -> 'BookId':
@@ -19,9 +20,9 @@ class Title:
 
     def __post_init__(self):
         if not self.value:
-            raise ValueError("Title cannot be empty")
+            raise ValidationException("Title cannot be empty")
         if len(self.value) > 100:
-            raise ValueError("Title cannot be longer than 100 characters")
+            raise ValidationException("Title cannot be longer than 100 characters")
 
 @dataclass(frozen=True)
 class Author:
@@ -29,4 +30,4 @@ class Author:
 
     def __post_init__(self):
         if not self.value:
-            raise ValueError("Author cannot be empty")
+            raise ValidationException("Author cannot be empty")

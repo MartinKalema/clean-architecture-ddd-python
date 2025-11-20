@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from src.infrastructure.external.database import engine, Base
@@ -5,8 +6,14 @@ from src.domain.exceptions.book_exceptions import DomainException, BookNotFoundE
 from src.presentation.api.routes import book_routes
 from src.container import Container
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Create tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # Shutdown: Dispose engine
+    await engine.dispose()
 
 container = Container()
 

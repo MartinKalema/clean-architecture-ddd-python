@@ -1,10 +1,10 @@
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from src.presentation.api.main import app
 
 @pytest.mark.asyncio
 async def test_add_and_list_books():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # 1. Add a book
         response = await ac.post(
             "/books",

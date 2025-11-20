@@ -13,3 +13,7 @@ class BookAlreadyBorrowedException(DomainException):
 class BookNotBorrowedException(DomainException):
     def __init__(self, book_id: str):
         super().__init__(f"Book with id {book_id} is not borrowed.")
+
+class ValidationException(DomainException):
+    def __init__(self, message: str):
+        super().__init__(message)
