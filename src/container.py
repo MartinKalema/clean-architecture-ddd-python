@@ -10,7 +10,9 @@ from src.application.use_cases.borrow_book import BorrowBook
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(modules=[
         "src.presentation.api.routes.book_routes",
-        "src.presentation.cli.main"
+        "src.presentation.cli.commands.add_book_command",
+        "src.presentation.cli.commands.list_books_command",
+        "src.presentation.cli.commands.borrow_book_command"
     ])
 
     session_factory = providers.Object(SessionLocal)
