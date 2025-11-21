@@ -6,6 +6,8 @@ from src.domain.exceptions.book_exceptions import DomainException, BookNotFoundE
 from src.presentation.api.routes import book_routes
 from src.container import Container
 
+from src.infrastructure.exceptions import InfrastructureException
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Initialize database
@@ -19,6 +21,10 @@ container = Container()
 
 app = FastAPI()
 app.container = container
+
+@app.exception_handler(InfrastructureException)
+async def infrastructure_exception_handler(request: Request, exc: InfrastructureException):
+    return JSONResponse(status_code=500, content={"message": "Internal Server Error"})
 
 @app.exception_handler(DomainException)
 async def domain_exception_handler(request: Request, exc: DomainException):
