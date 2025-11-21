@@ -5,4 +5,4 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
-config = load_config()
+

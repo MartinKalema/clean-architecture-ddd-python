@@ -7,8 +7,8 @@ from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto
 from src.domain.exceptions.book_exceptions import BookAlreadyBorrowedException
 
 @pytest.mark.asyncio
-async def test_add_book_use_case(db_engine):
-    session_factory = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+async def test_add_book_use_case(test_db):
+    session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     repo = SQLBookRepository(session_factory)
     use_case = AddBook(repo)
     
@@ -19,8 +19,8 @@ async def test_add_book_use_case(db_engine):
     assert result.id is not None
 
 @pytest.mark.asyncio
-async def test_borrow_book_use_case(db_engine):
-    session_factory = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+async def test_borrow_book_use_case(test_db):
+    session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     repo = SQLBookRepository(session_factory)
     add_use_case = AddBook(repo)
     borrow_use_case = BorrowBook(repo)
@@ -40,8 +40,8 @@ async def test_borrow_book_use_case(db_engine):
     assert fetched_book.is_borrowed is True
 
 @pytest.mark.asyncio
-async def test_borrow_book_already_borrowed(db_engine):
-    session_factory = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+async def test_borrow_book_already_borrowed(test_db):
+    session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     repo = SQLBookRepository(session_factory)
     add_use_case = AddBook(repo)
     borrow_use_case = BorrowBook(repo)

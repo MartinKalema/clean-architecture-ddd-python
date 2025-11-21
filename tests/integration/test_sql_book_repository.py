@@ -5,9 +5,9 @@ from src.domain.entities.book import Book
 from src.domain.value_objects.book_value_objects import BookId, Title, Author
 
 @pytest.mark.asyncio
-async def test_repository_add_and_get(db_engine):
+async def test_repository_add_and_get(test_db):
     # Setup factory for this test
-    session_factory = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+    session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     repo = SQLBookRepository(session_factory)
     
     book = Book(
@@ -29,8 +29,8 @@ async def test_repository_add_and_get(db_engine):
     assert fetched_book.title.value == "Integration Test Book"
 
 @pytest.mark.asyncio
-async def test_repository_update(db_engine):
-    session_factory = async_sessionmaker(bind=db_engine, expire_on_commit=False)
+async def test_repository_update(test_db):
+    session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     repo = SQLBookRepository(session_factory)
     
     book = Book(
