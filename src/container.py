@@ -1,6 +1,6 @@
 from dependency_injector import containers, providers
 from src.infrastructure.repositories.sql_book_repository import SQLBookRepository
-from src.presentation.api.controllers.book_controller import BookController
+
 from src.infrastructure.external.database import SessionLocal
 
 from src.application.use_cases.add_book import AddBook
@@ -38,7 +38,4 @@ class Container(containers.DeclarativeContainer):
         repository=book_repository
     )
 
-    book_controller = providers.Factory(
-        BookController,
-        repository=book_repository
-    )
+

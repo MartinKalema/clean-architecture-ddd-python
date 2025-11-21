@@ -33,34 +33,11 @@ async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
     await connection.close()
 
 @pytest_asyncio.fixture
-async def client(db_session) -> AsyncGenerator[AsyncClient, None]:
-    # Override the container's session factory with the test session
-    # Note: For the factory pattern in repository, we need to mock the factory to return our test session
-    # This is a bit tricky with the current implementation where repository creates its own session from a factory.
-    # A better approach for integration tests might be to let the repository use a factory that returns our test session.
-    
-    # However, since we are using dependency injection, we can override the provider.
-    
-    # Create a factory that returns the active test session
-    # But async_sessionmaker returns a new session. 
-    # We need the repository to use a factory that yields our `db_session` or connects to our `connection`.
-    
-    # Simplified approach for E2E:
-    # We override the session_factory in the container to return a factory that binds to our test engine.
+async def client(db_engine) -> AsyncGenerator[AsyncClient, None]:
+    # Create a session factory bound to the SHARED db_engine
+    test_session_factory = async_sessionmaker(bind=db_engine, class_=AsyncSession, expire_on_commit=False)
     
     container = Container()
-    
-    # For E2E, we want the app to use a session factory bound to our test DB.
-    # We can't easily share the *exact* same session object across requests in E2E 
-    # because the app creates a new session per request (or per repo op).
-    # So we override the session_factory to point to the test DB engine.
-    
-    test_engine = create_async_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
-    test_session_factory = async_sessionmaker(bind=test_engine, class_=AsyncSession, expire_on_commit=False)
-    
     container.session_factory.override(providers.Callable(lambda: test_session_factory))
     app.container = container
     

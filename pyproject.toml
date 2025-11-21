@@ -16,7 +16,8 @@ dependencies = [
     "aiosqlite",
     "pytest-asyncio",
     "httpx",
-    "greenlet"
+    "greenlet",
+    "locust"
 ]
 
 [tool.pytest.ini_options]
