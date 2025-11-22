@@ -41,7 +41,10 @@ async def test_sendgrid_service():
 @pytest.mark.asyncio
 async def test_book_handler():
     mock_email_service = AsyncMock()
-    handler = BookHandlers(email_service=mock_email_service)
+    mock_template_renderer = MagicMock()
+    mock_template_renderer.render.return_value = "<html>Content</html>"
+    
+    handler = BookHandlers(email_service=mock_email_service, template_renderer=mock_template_renderer)
     
     event = BookBorrowed(
         book_id="123",
@@ -53,7 +56,13 @@ async def test_book_handler():
     
     await handler.handle_book_borrowed(event)
     
+    mock_template_renderer.render.assert_called_once()
+    # Verify it was called with the Enum, not a string
+    from src.domain.value_objects.email_template import EmailTemplate
+    assert mock_template_renderer.render.call_args[0][0] == EmailTemplate.BOOK_BORROWED
+    
     mock_email_service.send_email.assert_called_once()
     call_args = mock_email_service.send_email.call_args
     assert call_args.kwargs['to_email'] == "user@example.com"
     assert "Test Book" in call_args.kwargs['subject']
+    assert call_args.kwargs['content'] == "<html>Content</html>"

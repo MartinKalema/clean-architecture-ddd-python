@@ -16,6 +16,9 @@ from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import Sql
 from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
 
+from src.infrastructure.adapters.templates.jinja2_template_renderer import Jinja2TemplateRenderer
+import os
+
 class Container(containers.DeclarativeContainer):
     # ... (wiring config same) ...
     wiring_config = containers.WiringConfiguration(modules=[
@@ -63,9 +66,17 @@ class Container(containers.DeclarativeContainer):
         admin_email=config.sendgrid.admin_email
     )
 
+    # Template Renderer
+    template_renderer = providers.Singleton(
+        Jinja2TemplateRenderer,
+        template_dir=os.path.join(os.path.dirname(__file__), "infrastructure/templates"),
+        template_map=config.templates
+    )
+
     book_handlers = providers.Singleton(
         BookHandlers,
-        email_service=email_service
+        email_service=email_service,
+        template_renderer=template_renderer
     )
 
     uow = providers.Factory(

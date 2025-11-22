@@ -8,3 +8,6 @@ sendgrid:
   api_key: "SG.placeholder"
   from_email: "admin@library.com"
   admin_email: "admin@library.com"
+
+templates:
+  book_borrowed: "email/book_borrowed.html"

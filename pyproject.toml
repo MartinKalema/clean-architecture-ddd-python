@@ -19,7 +19,8 @@ dependencies = [
     "greenlet",
     "locust",
     "aio_pika",
-    "sendgrid"
+    "sendgrid",
+    "jinja2"
 ]
 
 [tool.pytest.ini_options]
