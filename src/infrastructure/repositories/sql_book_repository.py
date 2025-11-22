@@ -34,52 +34,48 @@ class BookModel(Base):
         )
 
 class SQLBookRepository:
-    def __init__(self, session_factory):
-        self.session_factory = session_factory
+    def __init__(self, session: AsyncSession):
+        self.session = session
 
     async def add(self, book: Book) -> Book:
         try:
-            async with self.session_factory() as session:
-                db_book = BookModel.from_entity(book)
-                session.add(db_book)
-                await session.commit()
-                await session.refresh(db_book)
-                return db_book.to_entity()
+            db_book = BookModel.from_entity(book)
+            self.session.add(db_book)
+            # We don't commit here. UoW handles it.
+            # We might flush if we needed DB-generated IDs, but we use UUIDs.
+            return db_book.to_entity()
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error adding book: {str(e)}", original_exception=e)
 
     async def get_all(self) -> List[Book]:
         try:
-            async with self.session_factory() as session:
-                result = await session.execute(select(BookModel))
-                db_books = result.scalars().all()
-                return [db_book.to_entity() for db_book in db_books]
+            result = await self.session.execute(select(BookModel))
+            db_books = result.scalars().all()
+            return [db_book.to_entity() for db_book in db_books]
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error retrieving books: {str(e)}", original_exception=e)
 
     async def get_by_id(self, book_id: str) -> Optional[Book]:
         try:
-            async with self.session_factory() as session:
-                result = await session.execute(select(BookModel).filter(BookModel.id == book_id))
-                db_book = result.scalars().first()
-                if db_book:
-                    return db_book.to_entity()
-                return None
+            result = await self.session.execute(select(BookModel).filter(BookModel.id == book_id))
+            db_book = result.scalars().first()
+            if db_book:
+                return db_book.to_entity()
+            return None
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error retrieving book {book_id}: {str(e)}", original_exception=e)
 
     async def update(self, book: Book) -> None:
         try:
-            async with self.session_factory() as session:
-                result = await session.execute(select(BookModel).filter(BookModel.id == book.id.value))
-                db_book = result.scalars().first()
-                if db_book:
-                    db_book.is_borrowed = book.is_borrowed
-                    await session.commit()
-                    
-                    # Dispatch Domain Events
-                    for event in book.get_domain_events():
-                        print(f"[EVENT DISPATCHED]: {event}")
-                    book.clear_events()
+            result = await self.session.execute(select(BookModel).filter(BookModel.id == book.id.value))
+            db_book = result.scalars().first()
+            if db_book:
+                db_book.is_borrowed = book.is_borrowed
+                # No commit here.
+                
+                # Dispatch Domain Events (Placeholder - will move to UoW/Dispatcher later)
+                for event in book.get_domain_events():
+                    print(f"[EVENT DISPATCHED]: {event}")
+                book.clear_events()
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error updating book {book.id.value}: {str(e)}", original_exception=e)

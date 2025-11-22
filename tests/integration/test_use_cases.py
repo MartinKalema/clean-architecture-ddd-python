@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
-from src.infrastructure.repositories.sql_book_repository import SQLBookRepository
+from src.infrastructure.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.borrow_book import BorrowBook
 from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto
@@ -9,8 +9,8 @@ from src.domain.exceptions.book_exceptions import BookAlreadyBorrowedException
 @pytest.mark.asyncio
 async def test_add_book_use_case(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
-    repo = SQLBookRepository(session_factory)
-    use_case = AddBook(repo)
+    uow = SqlAlchemyUnitOfWork(session_factory)
+    use_case = AddBook(uow)
     
     dto = AddBookInputDto(title="Use Case Book", author="UC Tester")
     result = await use_case.execute(dto)
@@ -21,9 +21,9 @@ async def test_add_book_use_case(test_db):
 @pytest.mark.asyncio
 async def test_borrow_book_use_case(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
-    repo = SQLBookRepository(session_factory)
-    add_use_case = AddBook(repo)
-    borrow_use_case = BorrowBook(repo)
+    uow = SqlAlchemyUnitOfWork(session_factory)
+    add_use_case = AddBook(uow)
+    borrow_use_case = BorrowBook(uow)
     
     # Add
     add_dto = AddBookInputDto(title="Borrowable Book", author="UC Tester")
@@ -36,15 +36,16 @@ async def test_borrow_book_use_case(test_db):
     assert borrowed_book.is_borrowed is True
     
     # Verify persistence
-    fetched_book = await repo.get_by_id(book_dto.id)
-    assert fetched_book.is_borrowed is True
+    async with uow:
+        fetched_book = await uow.books.get_by_id(book_dto.id)
+        assert fetched_book.is_borrowed is True
 
 @pytest.mark.asyncio
 async def test_borrow_book_already_borrowed(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
-    repo = SQLBookRepository(session_factory)
-    add_use_case = AddBook(repo)
-    borrow_use_case = BorrowBook(repo)
+    uow = SqlAlchemyUnitOfWork(session_factory)
+    add_use_case = AddBook(uow)
+    borrow_use_case = BorrowBook(uow)
     
     # Add
     add_dto = AddBookInputDto(title="Twice Borrowed", author="UC Tester")
