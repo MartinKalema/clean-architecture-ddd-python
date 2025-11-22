@@ -56,7 +56,7 @@ class Container(containers.DeclarativeContainer):
     event_dispatcher = providers.Singleton(
         RabbitMQEventDispatcher,
         client=rabbitmq_client,
-        exchange_name="domain_events"
+        exchange_name=config.rabbitmq.exchange_name
     )
 
     email_service = providers.Singleton(

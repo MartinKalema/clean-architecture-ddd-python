@@ -2,7 +2,8 @@ database:
   url: "sqlite:///./books.db"
 
 rabbitmq:
-  url: "amqp://guest:guest@localhost/"
+  url: "amqp://guest:guest@localhost:5672/"
+  exchange_name: "domain_events"
 
 sendgrid:
   api_key: "SG.placeholder"
