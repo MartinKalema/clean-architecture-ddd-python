@@ -69,8 +69,8 @@ class Container(containers.DeclarativeContainer):
     # Template Renderer
     template_renderer = providers.Singleton(
         Jinja2TemplateRenderer,
-        template_dir=os.path.join(os.path.dirname(__file__), "infrastructure/templates"),
-        template_map=config.templates
+        template_dir=config.templates.dir,
+        template_map=config.templates.map
     )
 
     book_handlers = providers.Singleton(

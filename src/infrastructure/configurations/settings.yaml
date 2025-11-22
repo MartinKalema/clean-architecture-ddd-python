@@ -10,4 +10,6 @@ sendgrid:
   admin_email: "admin@library.com"
 
 templates:
-  book_borrowed: "email/book_borrowed.html"
+  dir: "src/infrastructure/templates"
+  map:
+    book_borrowed: "email/book_borrowed.html"
