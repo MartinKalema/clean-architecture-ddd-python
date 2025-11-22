@@ -1,9 +1,12 @@
 import sendgrid
 from sendgrid.helpers.mail import Mail, Email, To, Content, Cc
 
+from src.domain.interfaces.logger import Logger
+
 class SendGridClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, logger: Logger):
         self.sg = sendgrid.SendGridAPIClient(api_key=api_key)
+        self.logger = logger
 
     def send(self, from_email: str, to_email: str, subject: str, content_str: str, cc_email: str = None):
         # This is a synchronous call, but we wrap it in the client.
@@ -21,7 +24,8 @@ class SendGridClient:
             
         try:
             response = self.sg.client.mail.send.post(request_body=message.get())
+            self.logger.info(f"Email sent to {to_email}. Status: {response.status_code}")
             return response.status_code
         except Exception as e:
-            print(f"[SendGridClient] Error: {e}")
+            self.logger.error(f"SendGrid API Error: {e}", exception=e)
             raise e

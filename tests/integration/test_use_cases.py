@@ -4,13 +4,16 @@ from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import Sql
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.borrow_book import BorrowBook
 from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto
+from unittest.mock import MagicMock
+from src.domain.value_objects.book_value_objects import BookId
 from src.domain.exceptions.book_exceptions import BookAlreadyBorrowedException
 
 @pytest.mark.asyncio
 async def test_add_book_use_case(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     uow = SqlAlchemyUnitOfWork(session_factory)
-    use_case = AddBook(uow)
+    mock_logger = MagicMock()
+    use_case = AddBook(uow, logger=mock_logger)
     
     dto = AddBookInputDto(title="Use Case Book", author="UC Tester")
     result = await use_case.execute(dto)
@@ -22,8 +25,9 @@ async def test_add_book_use_case(test_db):
 async def test_borrow_book_use_case(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     uow = SqlAlchemyUnitOfWork(session_factory)
-    add_use_case = AddBook(uow)
-    borrow_use_case = BorrowBook(uow)
+    mock_logger = MagicMock()
+    add_use_case = AddBook(uow, logger=mock_logger)
+    borrow_use_case = BorrowBook(uow, logger=mock_logger)
     
     # Add
     add_dto = AddBookInputDto(title="Borrowable Book", author="UC Tester")
@@ -44,8 +48,9 @@ async def test_borrow_book_use_case(test_db):
 async def test_borrow_book_already_borrowed(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     uow = SqlAlchemyUnitOfWork(session_factory)
-    add_use_case = AddBook(uow)
-    borrow_use_case = BorrowBook(uow)
+    mock_logger = MagicMock()
+    add_use_case = AddBook(uow, logger=mock_logger)
+    borrow_use_case = BorrowBook(uow, logger=mock_logger)
     
     # Add
     add_dto = AddBookInputDto(title="Twice Borrowed", author="UC Tester")

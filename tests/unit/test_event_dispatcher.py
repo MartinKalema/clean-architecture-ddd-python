@@ -10,8 +10,9 @@ from src.domain.events.book_events import BookBorrowed
 async def test_rabbitmq_dispatcher():
     # Mock the client
     mock_client = AsyncMock()
+    mock_logger = MagicMock()
     
-    dispatcher = RabbitMQEventDispatcher(client=mock_client)
+    dispatcher = RabbitMQEventDispatcher(client=mock_client, exchange_name="test_exchange", logger=mock_logger)
     event = BookBorrowed(
         book_id="123",
         title="Test Book",
@@ -23,15 +24,16 @@ async def test_rabbitmq_dispatcher():
     await dispatcher.dispatch(event)
     
     # Verify
-    mock_client.connect.assert_called_once()
+    # mock_client.connect.assert_called_once() # Removed connect call in adapter
     mock_client.publish.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_sendgrid_service():
     # Mock the client
     mock_client = MagicMock()
+    mock_logger = MagicMock()
     
-    service = SendGridEmailService(client=mock_client, from_email="from@test.com", admin_email="admin@test.com")
+    service = SendGridEmailService(client=mock_client, from_email="from@test.com", admin_email="admin@test.com", logger=mock_logger)
     
     await service.send_email("to@test.com", "Subject", "Body")
     
@@ -42,9 +44,10 @@ async def test_sendgrid_service():
 async def test_book_handler():
     mock_email_service = AsyncMock()
     mock_template_renderer = MagicMock()
+    mock_logger = MagicMock()
     mock_template_renderer.render.return_value = "<html>Content</html>"
     
-    handler = BookHandlers(email_service=mock_email_service, template_renderer=mock_template_renderer)
+    handler = BookHandlers(email_service=mock_email_service, template_renderer=mock_template_renderer, logger=mock_logger)
     
     event = BookBorrowed(
         book_id="123",

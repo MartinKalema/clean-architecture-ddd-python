@@ -29,3 +29,4 @@ class BorrowBookOutputDto:
     title: str
     author: str
     is_borrowed: bool
+    return_due_date: str | None = None

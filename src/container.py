@@ -17,6 +17,7 @@ from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
 
 from src.infrastructure.adapters.templates.jinja2_template_renderer import Jinja2TemplateRenderer
+from src.infrastructure.adapters.logger.standard_logger import StandardLogger
 import os
 
 class Container(containers.DeclarativeContainer):
@@ -31,6 +32,9 @@ class Container(containers.DeclarativeContainer):
     config = providers.Configuration()
     config.from_dict(load_config())
 
+    # Logger
+    logger = providers.Singleton(StandardLogger)
+
     database = providers.Singleton(
         Database,
         db_url=config.database.url
@@ -44,39 +48,45 @@ class Container(containers.DeclarativeContainer):
     # External Drivers
     rabbitmq_client = providers.Singleton(
         RabbitMQClient,
-        amqp_url=config.rabbitmq.url
+        amqp_url=config.rabbitmq.url,
+        logger=logger
     )
 
     sendgrid_client = providers.Singleton(
         SendGridClient,
-        api_key=config.sendgrid.api_key
+        api_key=config.sendgrid.api_key,
+        logger=logger
     )
 
     # Adapters
     event_dispatcher = providers.Singleton(
         RabbitMQEventDispatcher,
         client=rabbitmq_client,
-        exchange_name=config.rabbitmq.exchange_name
+        exchange_name=config.rabbitmq.exchange_name,
+        logger=logger
     )
 
     email_service = providers.Singleton(
         SendGridEmailService,
         client=sendgrid_client,
         from_email=config.sendgrid.from_email,
-        admin_email=config.sendgrid.admin_email
+        admin_email=config.sendgrid.admin_email,
+        logger=logger
     )
 
     # Template Renderer
     template_renderer = providers.Singleton(
         Jinja2TemplateRenderer,
         template_dir=config.templates.dir,
-        template_map=config.templates.map
+        template_map=config.templates.map,
+        logger=logger
     )
 
     book_handlers = providers.Singleton(
         BookHandlers,
         email_service=email_service,
-        template_renderer=template_renderer
+        template_renderer=template_renderer,
+        logger=logger
     )
 
     uow = providers.Factory(
@@ -87,17 +97,20 @@ class Container(containers.DeclarativeContainer):
 
     add_book_use_case = providers.Factory(
         AddBook,
-        uow=uow
+        uow=uow,
+        logger=logger
     )
 
     list_books_use_case = providers.Factory(
         ListBooks,
-        uow=uow
+        uow=uow,
+        logger=logger
     )
 
     borrow_book_use_case = providers.Factory(
         BorrowBook,
-        uow=uow
+        uow=uow,
+        logger=logger
     )
 
 
