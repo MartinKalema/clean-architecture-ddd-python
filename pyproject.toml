@@ -17,7 +17,9 @@ dependencies = [
     "pytest-asyncio",
     "httpx",
     "greenlet",
-    "locust"
+    "locust",
+    "aio_pika",
+    "sendgrid"
 ]
 
 [tool.pytest.ini_options]

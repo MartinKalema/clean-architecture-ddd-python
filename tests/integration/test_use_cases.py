@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
-from src.infrastructure.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
+from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.borrow_book import BorrowBook
 from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto

@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
-from src.infrastructure.repositories.sql_book_repository import SQLBookRepository
+from src.infrastructure.adapters.repositories.sql_book_repository import SQLBookRepository
 from src.domain.entities.book import Book
 from src.domain.value_objects.book_value_objects import BookId, Title, Author
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import List
+from datetime import datetime, timedelta
+from typing import List, Optional
 from src.domain.value_objects.book_value_objects import BookId, Title, Author
 from src.domain.exceptions.book_exceptions import BookAlreadyBorrowedException, BookNotBorrowedException
 from src.domain.events.book_events import DomainEvent, BookBorrowed, BookReturned
@@ -23,12 +24,24 @@ class Book(AggregateRoot):
     author: Author
     id: BookId = field(default_factory=BookId.next_id)
     is_borrowed: bool = False
+    borrowed_at: Optional[datetime] = None
+    return_due_date: Optional[datetime] = None
 
     def borrow(self):
         if self.is_borrowed:
             raise BookAlreadyBorrowedException(self.id.value)
+        
         self.is_borrowed = True
-        self.add_event(BookBorrowed(book_id=self.id.value))
+        self.borrowed_at = datetime.now()
+        self.return_due_date = self.borrowed_at + timedelta(days=14)
+        
+        self.add_event(BookBorrowed(
+            book_id=self.id.value,
+            title=self.title.value,
+            borrowed_at=self.borrowed_at,
+            return_due_date=self.return_due_date,
+            borrower_email="user@example.com" # Placeholder until we have users
+        ))
 
     def return_book(self):
         if not self.is_borrowed:

@@ -34,15 +34,18 @@ class BookModel(Base):
         )
 
 class SQLBookRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, identity_map: List[Book] = None):
         self.session = session
+        self.identity_map = identity_map if identity_map is not None else []
 
     async def add(self, book: Book) -> Book:
         try:
             db_book = BookModel.from_entity(book)
             self.session.add(db_book)
-            # We don't commit here. UoW handles it.
-            # We might flush if we needed DB-generated IDs, but we use UUIDs.
+            
+            # Track entity for events
+            self.identity_map.append(book)
+            
             return db_book.to_entity()
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error adding book: {str(e)}", original_exception=e)
@@ -71,11 +74,8 @@ class SQLBookRepository:
             db_book = result.scalars().first()
             if db_book:
                 db_book.is_borrowed = book.is_borrowed
-                # No commit here.
                 
-                # Dispatch Domain Events (Placeholder - will move to UoW/Dispatcher later)
-                for event in book.get_domain_events():
-                    print(f"[EVENT DISPATCHED]: {event}")
-                book.clear_events()
+                # Track entity for events
+                self.identity_map.append(book)
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error updating book {book.id.value}: {str(e)}", original_exception=e)

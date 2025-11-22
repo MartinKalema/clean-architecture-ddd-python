@@ -1,2 +1,10 @@
 database:
   url: "sqlite:///./books.db"
+
+rabbitmq:
+  url: "amqp://guest:guest@localhost/"
+
+sendgrid:
+  api_key: "SG.placeholder"
+  from_email: "admin@library.com"
+  admin_email: "admin@library.com"

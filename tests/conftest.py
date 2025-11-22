@@ -35,9 +35,17 @@ async def db_session(test_db) -> AsyncGenerator[AsyncSession, None]:
 async def client(test_db) -> AsyncGenerator[AsyncClient, None]:
     container = Container()
     container.database.override(providers.Object(test_db))
+    
+    # Mock external services
+    from unittest.mock import AsyncMock
+    container.event_dispatcher.override(providers.Object(AsyncMock()))
+    container.email_service.override(providers.Object(AsyncMock()))
+    
     app.container = container
     
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
         
     container.database.reset_override()
+    container.event_dispatcher.reset_override()
+    container.email_service.reset_override()
