@@ -224,3 +224,4 @@ reports/
 # Temporary files
 tmp/
 temp/
+uv.lock

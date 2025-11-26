@@ -1,1 +1,1 @@
-from .book_models import BookCreate, BookResponse
+from .book_models import BookCreate, BookResponse, BorrowRequest

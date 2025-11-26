@@ -1,9 +1,9 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from src.infrastructure.adapters.repositories.sql_book_repository import SQLBookRepository
 
-from typing import List
+from typing import Dict
 from src.domain.interfaces.event_dispatcher import EventDispatcher
-from src.domain.entities.book import AggregateRoot
+from src.domain.entities.book import Book
 
 class SqlAlchemyUnitOfWork:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession], event_dispatcher: EventDispatcher = None):
@@ -13,7 +13,7 @@ class SqlAlchemyUnitOfWork:
 
     async def __aenter__(self) -> "SqlAlchemyUnitOfWork":
         self._session = self.session_factory()
-        self.identity_map = []
+        self.identity_map: Dict[str, Book] = {}
         self.books = SQLBookRepository(self._session, self.identity_map)
         return self
 
@@ -41,12 +41,12 @@ class SqlAlchemyUnitOfWork:
         if self._session:
             await self._session.rollback()
 
-    def _collect_events(self) -> List:
+    def _collect_events(self) -> list:
         events = []
         if not hasattr(self, 'identity_map'):
             return events
-            
-        for aggregate in self.identity_map:
+
+        for aggregate in self.identity_map.values():
             events.extend(aggregate.get_domain_events())
             aggregate.clear_events()
         return events

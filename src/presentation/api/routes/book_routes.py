@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from dependency_injector.wiring import inject, Provide
 
-from src.presentation.api.models.book_models import BookCreate, BookResponse
+from src.presentation.api.models.book_models import BookCreate, BookResponse, BorrowRequest
 from src.container import Container
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.list_books import ListBooks
 from src.application.use_cases.borrow_book import BorrowBook
 from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto
-from src.domain.exceptions.book_exceptions import BookNotFoundException, DomainException
+from src.domain.exceptions.book_exceptions import DomainException
 
 router = APIRouter()
 
@@ -50,9 +50,13 @@ async def list_books(
 @inject
 async def borrow_book(
     book_id: str,
+    borrow_request: BorrowRequest,
     use_case: BorrowBook = Depends(Provide[Container.borrow_book_use_case])
 ):
-    input_dto = BorrowBookInputDto(book_id=book_id)
+    input_dto = BorrowBookInputDto(
+        book_id=book_id,
+        borrower_email=borrow_request.borrower_email
+    )
     output_dto = await use_case.execute(input_dto)
     return BookResponse(
         id=output_dto.id,
