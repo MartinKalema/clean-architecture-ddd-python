@@ -1,12 +1,13 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from unittest.mock import MagicMock
+
 from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.borrow_book import BorrowBook
 from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto
-from unittest.mock import MagicMock
-from src.domain.value_objects.book_value_objects import BookId
-from src.domain.exceptions.book_exceptions import BookAlreadyBorrowedException
+from src.domain.catalog import BookId, BookAlreadyBorrowedException
+
 
 @pytest.mark.asyncio
 async def test_add_book_use_case(test_db):
@@ -14,12 +15,13 @@ async def test_add_book_use_case(test_db):
     uow = SqlAlchemyUnitOfWork(session_factory)
     mock_logger = MagicMock()
     use_case = AddBook(uow, logger=mock_logger)
-    
+
     dto = AddBookInputDto(title="Use Case Book", author="UC Tester")
     result = await use_case.execute(dto)
-    
+
     assert result.title == "Use Case Book"
     assert result.id is not None
+
 
 @pytest.mark.asyncio
 async def test_borrow_book_use_case(test_db):

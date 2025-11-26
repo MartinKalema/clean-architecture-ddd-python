@@ -3,26 +3,26 @@ Repository interface for the Catalog bounded context.
 """
 from typing import List, Optional, Protocol
 
-from src.domain.catalog.entities import CatalogBook
+from src.domain.catalog.entities import Book
 
 
-class CatalogBookRepository(Protocol):
-    """Repository for CatalogBook aggregates."""
+class BookRepository(Protocol):
+    """Repository for Book aggregates."""
 
-    async def add(self, book: CatalogBook) -> CatalogBook:
+    async def add(self, book: Book) -> Book:
         """Add a new book to the catalog."""
         ...
 
-    async def get_by_id(self, book_id: str) -> Optional[CatalogBook]:
+    async def get_by_id(self, book_id: str) -> Optional[Book]:
         """Find a book by its ID."""
         ...
 
-    async def get_all(self) -> List[CatalogBook]:
+    async def get_all(self) -> List[Book]:
         """Get all books in the catalog."""
         ...
 
-    async def update(self, book: CatalogBook) -> None:
-        """Update a book's metadata."""
+    async def update(self, book: Book) -> None:
+        """Update a book."""
         ...
 
     async def remove(self, book_id: str) -> None:

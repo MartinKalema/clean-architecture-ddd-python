@@ -1,7 +1,6 @@
-from src.domain.interfaces.unit_of_work import UnitOfWork
+from src.domain.catalog import UnitOfWork, BookNotFoundException
+from src.domain.shared_kernel import Logger
 from src.application.dto.book_dto import BorrowBookInputDto, BorrowBookOutputDto
-from src.domain.interfaces.logger import Logger
-from src.domain.exceptions.book_exceptions import BookNotFoundException
 
 
 class BorrowBook:

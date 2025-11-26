@@ -1,6 +1,6 @@
 from src.infrastructure.external.sendgrid_client import SendGridClient
-from src.domain.interfaces.email_service import EmailService
-from src.domain.interfaces.logger import Logger
+from src.domain.shared_kernel import EmailService, Logger
+
 
 class SendGridEmailService(EmailService):
     def __init__(self, client: SendGridClient, from_email: str, admin_email: str, logger: Logger):

@@ -1,12 +1,14 @@
 import logging
 import sys
-from src.domain.interfaces.logger import Logger
+
+from src.domain.shared_kernel import Logger
+
 
 class StandardLogger(Logger):
     def __init__(self, name: str = "clean_architecture"):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
-        
+
         if not self.logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
             formatter = logging.Formatter(

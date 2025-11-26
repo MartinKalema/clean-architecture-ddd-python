@@ -1,49 +1,49 @@
 """
-CatalogBook Aggregate Root for the Catalog bounded context.
-
-In this context, a Book is purely a bibliographic record - metadata about
-a published work. It does NOT track:
-- Whether the book is borrowed (that's Lending's responsibility)
-- Who has it (that's Lending's responsibility)
-- Due dates (that's Lending's responsibility)
-
-This separation follows DDD's bounded context principle - each context
-has its own model of "Book" optimized for its specific needs.
+Book Aggregate Root for the Catalog bounded context.
 """
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Optional
 
 from src.domain.shared_kernel import AggregateRoot
-from src.domain.catalog.value_objects import CatalogBookId, Title, Author, ISBN
-from src.domain.catalog.events.catalog_events import BookAddedToCatalog
+from src.domain.catalog.value_objects import BookId, Title, Author
+from src.domain.catalog.events import BookBorrowed, BookReturned
+from src.domain.catalog.exceptions import BookAlreadyBorrowedException, BookNotBorrowedException
 
 
 @dataclass
-class CatalogBook(AggregateRoot):
-    """
-    A bibliographic record in the library catalog.
-
-    This is the Catalog context's view of a book - purely metadata.
-    The Lending context has its own model (LoanableBook) that references
-    this via CatalogBookId.
-    """
-
+class Book(AggregateRoot):
+    """A book in the library catalog."""
     title: Title
     author: Author
-    id: CatalogBookId = field(default_factory=CatalogBookId.next_id)
-    isbn: Optional[ISBN] = None
-    description: Optional[str] = None
+    id: BookId = field(default_factory=BookId.next_id)
+    is_borrowed: bool = False
+    borrowed_at: Optional[datetime] = None
+    return_due_date: Optional[datetime] = None
 
-    def __post_init__(self):
-        # Raise event when book is created
-        self.add_event(
-            BookAddedToCatalog(
-                book_id=self.id.value,
-                title=self.title.value,
-                author=self.author.value,
-            )
-        )
+    def borrow(self, borrower_email: str):
+        """Borrow the book."""
+        if self.is_borrowed:
+            raise BookAlreadyBorrowedException(self.id.value)
 
-    def update_description(self, description: str) -> None:
-        """Update the book's description."""
-        self.description = description
+        if not borrower_email or not borrower_email.strip():
+            raise ValueError("Borrower email is required")
+
+        self.is_borrowed = True
+        self.borrowed_at = datetime.now()
+        self.return_due_date = self.borrowed_at + timedelta(days=14)
+
+        self.add_event(BookBorrowed(
+            book_id=self.id.value,
+            title=self.title.value,
+            borrowed_at=self.borrowed_at,
+            return_due_date=self.return_due_date,
+            borrower_email=borrower_email
+        ))
+
+    def return_book(self):
+        """Return the book."""
+        if not self.is_borrowed:
+            raise BookNotBorrowedException(self.id.value)
+        self.is_borrowed = False
+        self.add_event(BookReturned(book_id=self.id.value))

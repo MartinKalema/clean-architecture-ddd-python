@@ -2,11 +2,10 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.domain.entities.book import Book
-from src.domain.value_objects.book_value_objects import BookId, Title, Author
-from src.infrastructure.external.database import Base
-
 from sqlalchemy.exc import SQLAlchemyError
+
+from src.domain.catalog import Book, BookId, Title, Author
+from src.infrastructure.external.database import Base
 from src.infrastructure.exceptions import DatabaseException
 
 

@@ -1,7 +1,7 @@
-from src.infrastructure.external.rabbitmq_client import RabbitMQClient
-from src.domain.events.domain_event import DomainEvent
-from src.domain.interfaces.logger import Logger
 import json
+
+from src.infrastructure.external.rabbitmq_client import RabbitMQClient
+from src.domain.shared_kernel import DomainEvent, Logger
 
 
 class RabbitMQEventDispatcher:
