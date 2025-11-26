@@ -8,7 +8,7 @@ and dispatching them to RabbitMQ.
 This ensures at-least-once delivery of domain events.
 
 Usage:
-    python -m src.workers.outbox_worker
+    python -m src.presentation.workers.outbox_worker
 """
 import asyncio
 import signal
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.container import Container
 from src.infrastructure.adapters.outbox.outbox_processor import OutboxProcessor

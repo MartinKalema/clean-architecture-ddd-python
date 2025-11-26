@@ -6,7 +6,7 @@ Runs the event consumer that listens to RabbitMQ and dispatches
 events to the appropriate handlers.
 
 Usage:
-    python -m src.workers.event_worker
+    python -m src.presentation.workers.event_worker
 """
 import asyncio
 import signal
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.container import Container
 from src.infrastructure.adapters.messaging.event_consumer import EventConsumer
