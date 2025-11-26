@@ -27,10 +27,14 @@ class BookUser(HttpUser):
     def borrow_book(self):
         if not self.book_ids:
             return
-            
+
         # Try to borrow a recently added book
         book_id = self.book_ids.pop()
-        with self.client.post(f"/books/{book_id}/borrow", catch_response=True) as response:
+        with self.client.post(
+            f"/books/{book_id}/borrow",
+            json={"borrower_email": "loadtest@example.com"},
+            catch_response=True
+        ) as response:
             if response.status_code == 200:
                 response.success()
             elif response.status_code == 409:
