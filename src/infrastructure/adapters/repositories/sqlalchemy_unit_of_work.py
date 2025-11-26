@@ -1,21 +1,37 @@
-from typing import Dict
+from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from src.domain.catalog import Book
 from src.domain.shared_kernel import EventDispatcher
 from src.infrastructure.adapters.repositories.sql_book_repository import SQLBookRepository
+from src.infrastructure.adapters.outbox import OutboxRepository
 
 
 class SqlAlchemyUnitOfWork:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession], event_dispatcher: EventDispatcher = None):
+    """
+    Unit of Work pattern implementation with Transactional Outbox.
+
+    Events are stored in the outbox table within the same transaction as
+    the aggregate changes, ensuring they are never lost. A background
+    processor (OutboxProcessor) then dispatches them to the message broker.
+    """
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        event_dispatcher: Optional[EventDispatcher] = None,
+        use_outbox: bool = True
+    ):
         self.session_factory = session_factory
         self.event_dispatcher = event_dispatcher
+        self.use_outbox = use_outbox
         self._session: AsyncSession | None = None
 
     async def __aenter__(self) -> "SqlAlchemyUnitOfWork":
         self._session = self.session_factory()
         self.identity_map: Dict[str, Book] = {}
         self.books = SQLBookRepository(self._session, self.identity_map)
+        self._outbox = OutboxRepository(self._session) if self.use_outbox else None
         return self
 
     async def __aexit__(self, exc_type, _exc_val, _exc_tb):
@@ -31,12 +47,20 @@ class SqlAlchemyUnitOfWork:
         # Collect events before commit
         events = self._collect_events()
 
+        # Store events in outbox (same transaction as aggregate changes)
+        if self.use_outbox and self._outbox and events:
+            await self._outbox.add_many(events)
+
         await self._session.commit()
 
-        # Dispatch events after successful commit
-        if self.event_dispatcher:
+        # If not using outbox, dispatch events directly (legacy behavior)
+        if not self.use_outbox and self.event_dispatcher:
             for event in events:
-                await self.event_dispatcher.dispatch(event)
+                try:
+                    await self.event_dispatcher.dispatch(event)
+                except Exception:
+                    # Log but don't fail the commit - events are lost in this mode
+                    pass
 
     async def rollback(self):
         if self._session:

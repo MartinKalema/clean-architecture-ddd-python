@@ -20,7 +20,8 @@ dependencies = [
     "locust",
     "aio_pika",
     "sendgrid",
-    "jinja2"
+    "jinja2",
+    "alembic"
 ]
 
 [tool.pytest.ini_options]

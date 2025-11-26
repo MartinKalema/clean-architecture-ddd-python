@@ -13,6 +13,7 @@ from .exceptions import (
     BookNotFoundException,
     BookAlreadyBorrowedException,
     BookNotBorrowedException,
+    ConcurrentModificationException,
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     "BookNotFoundException",
     "BookAlreadyBorrowedException",
     "BookNotBorrowedException",
+    "ConcurrentModificationException",
 ]
