@@ -28,12 +28,18 @@ async def test_api_borrow_book(client: AsyncClient):
         json={"title": "Borrow API Book", "author": "E2E Tester"}
     )
     book_id = response.json()["id"]
-    
+
     # 2. Borrow
-    response = await client.post(f"/books/{book_id}/borrow")
+    response = await client.post(
+        f"/books/{book_id}/borrow",
+        json={"borrower_email": "borrower@example.com"}
+    )
     assert response.status_code == 200
     assert response.json()["is_borrowed"] is True
-    
+
     # 3. Borrow again (fail)
-    response = await client.post(f"/books/{book_id}/borrow")
+    response = await client.post(
+        f"/books/{book_id}/borrow",
+        json={"borrower_email": "another@example.com"}
+    )
     assert response.status_code == 409, f"Expected 409, got {response.status_code}. Body: {response.text}"

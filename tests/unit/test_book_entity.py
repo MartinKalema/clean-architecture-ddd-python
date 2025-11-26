@@ -21,14 +21,16 @@ def test_mark_as_borrowed():
         author=Author("Uncle Bob"),
         is_borrowed=False
     )
-    
-    book.borrow()
-    
+
+    book.borrow("borrower@example.com")
+
     assert book.is_borrowed is True
     events = book.get_domain_events()
     assert len(events) == 1
     assert isinstance(events[0], BookBorrowed)
     assert events[0].book_id == book.id.value
+    assert events[0].borrower_email == "borrower@example.com"
+
 
 def test_borrow_already_borrowed():
     book = Book(
@@ -37,7 +39,7 @@ def test_borrow_already_borrowed():
         author=Author("Uncle Bob"),
         is_borrowed=True
     )
-    
+
     # Should raise exception
     with pytest.raises(BookAlreadyBorrowedException):
-        book.borrow()
+        book.borrow("borrower@example.com")

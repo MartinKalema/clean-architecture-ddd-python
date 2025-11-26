@@ -28,21 +28,22 @@ async def test_borrow_book_use_case(test_db):
     mock_logger = MagicMock()
     add_use_case = AddBook(uow, logger=mock_logger)
     borrow_use_case = BorrowBook(uow, logger=mock_logger)
-    
+
     # Add
     add_dto = AddBookInputDto(title="Borrowable Book", author="UC Tester")
     book_dto = await add_use_case.execute(add_dto)
-    
+
     # Borrow
-    borrow_dto = BorrowBookInputDto(book_id=book_dto.id)
+    borrow_dto = BorrowBookInputDto(book_id=book_dto.id, borrower_email="test@example.com")
     borrowed_book = await borrow_use_case.execute(borrow_dto)
-    
+
     assert borrowed_book.is_borrowed is True
-    
+
     # Verify persistence
     async with uow:
         fetched_book = await uow.books.get_by_id(book_dto.id)
         assert fetched_book.is_borrowed is True
+
 
 @pytest.mark.asyncio
 async def test_borrow_book_already_borrowed(test_db):
@@ -51,14 +52,14 @@ async def test_borrow_book_already_borrowed(test_db):
     mock_logger = MagicMock()
     add_use_case = AddBook(uow, logger=mock_logger)
     borrow_use_case = BorrowBook(uow, logger=mock_logger)
-    
+
     # Add
     add_dto = AddBookInputDto(title="Twice Borrowed", author="UC Tester")
     book_dto = await add_use_case.execute(add_dto)
-    
+
     # Borrow once
-    await borrow_use_case.execute(BorrowBookInputDto(book_id=book_dto.id))
-    
+    await borrow_use_case.execute(BorrowBookInputDto(book_id=book_dto.id, borrower_email="test@example.com"))
+
     # Borrow again - should fail
     with pytest.raises(BookAlreadyBorrowedException):
-        await borrow_use_case.execute(BorrowBookInputDto(book_id=book_dto.id))
+        await borrow_use_case.execute(BorrowBookInputDto(book_id=book_dto.id, borrower_email="another@example.com"))

@@ -49,7 +49,7 @@ async def test_repository_update(test_db):
         await session.commit()
         
         # Update
-        book.borrow()
+        book.borrow("test@example.com")
         await repo.update(book)
         await session.commit()
         

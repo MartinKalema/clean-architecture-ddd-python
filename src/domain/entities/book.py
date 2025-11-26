@@ -27,20 +27,23 @@ class Book(AggregateRoot):
     borrowed_at: Optional[datetime] = None
     return_due_date: Optional[datetime] = None
 
-    def borrow(self):
+    def borrow(self, borrower_email: str):
         if self.is_borrowed:
             raise BookAlreadyBorrowedException(self.id.value)
-        
+
+        if not borrower_email or not borrower_email.strip():
+            raise ValueError("Borrower email is required")
+
         self.is_borrowed = True
         self.borrowed_at = datetime.now()
         self.return_due_date = self.borrowed_at + timedelta(days=14)
-        
+
         self.add_event(BookBorrowed(
             book_id=self.id.value,
             title=self.title.value,
             borrowed_at=self.borrowed_at,
             return_due_date=self.return_due_date,
-            borrower_email="user@example.com" # Placeholder until we have users
+            borrower_email=borrower_email
         ))
 
     def return_book(self):

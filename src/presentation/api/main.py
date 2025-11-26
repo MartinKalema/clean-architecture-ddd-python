@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
 
 container = Container()
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 app.container = container
 
 @app.exception_handler(InfrastructureException)
