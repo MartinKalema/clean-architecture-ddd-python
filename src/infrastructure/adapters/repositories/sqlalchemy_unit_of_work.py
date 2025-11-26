@@ -1,9 +1,10 @@
+from typing import Dict
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+from src.domain.catalog import Book
+from src.domain.shared_kernel import EventDispatcher
 from src.infrastructure.adapters.repositories.sql_book_repository import SQLBookRepository
 
-from typing import Dict
-from src.domain.interfaces.event_dispatcher import EventDispatcher
-from src.domain.entities.book import Book
 
 class SqlAlchemyUnitOfWork:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession], event_dispatcher: EventDispatcher = None):

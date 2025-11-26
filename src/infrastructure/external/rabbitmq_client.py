@@ -1,7 +1,7 @@
 import aio_pika
-import json
 
-from src.domain.interfaces.logger import Logger
+from src.domain.shared_kernel import Logger
+
 
 class RabbitMQClient:
     def __init__(self, amqp_url: str, logger: Logger):

@@ -1,8 +1,6 @@
 import pytest
-from src.domain.entities.book import Book
-from src.domain.value_objects.book_value_objects import BookId, Title, Author
-from src.domain.events.book_events import BookBorrowed
-from src.domain.exceptions.book_exceptions import BookAlreadyBorrowedException
+from src.domain.catalog import Book, BookId, Title, Author, BookBorrowed, BookAlreadyBorrowedException
+
 
 def test_book_creation():
     book = Book(
@@ -13,6 +11,7 @@ def test_book_creation():
     )
     assert book.title.value == "Clean Architecture"
     assert book.is_borrowed is False
+
 
 def test_mark_as_borrowed():
     book = Book(

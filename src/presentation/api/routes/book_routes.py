@@ -8,9 +8,10 @@ from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.list_books import ListBooks
 from src.application.use_cases.borrow_book import BorrowBook
 from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto
-from src.domain.exceptions.book_exceptions import DomainException
+from src.domain.catalog import DomainException
 
 router = APIRouter()
+
 
 @router.post("/books", response_model=BookResponse)
 @inject
@@ -30,6 +31,7 @@ async def create_book(
     except DomainException as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @router.get("/books", response_model=List[BookResponse])
 @inject
 async def list_books(
@@ -45,6 +47,7 @@ async def list_books(
         )
         for dto in output_dtos
     ]
+
 
 @router.post("/books/{book_id}/borrow", response_model=BookResponse)
 @inject

@@ -1,9 +1,8 @@
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from typing import Dict, Any
-from src.domain.interfaces.template_renderer import TemplateRenderer
-from src.domain.value_objects.email_template import EmailTemplate
-from src.domain.interfaces.logger import Logger
-import os
+
+from src.domain.shared_kernel import TemplateRenderer, Logger, EmailTemplate
+
 
 class Jinja2TemplateRenderer:
     def __init__(self, template_dir: str, template_map: Dict[str, str], logger: Logger):
@@ -23,7 +22,7 @@ class Jinja2TemplateRenderer:
                 raise ValueError(f"No template mapped for {template.value}")
         else:
             template_name = str(template)
-            
+
         try:
             jinja_template = self.env.get_template(template_name)
             return jinja_template.render(**context)
