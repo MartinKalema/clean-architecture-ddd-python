@@ -1,15 +1,16 @@
 from typing import Dict, List, Optional
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, select
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.domain.catalog import Book, BookId, Title, Author
+from src.domain.catalog import Book, BookId, Title, Author, ConcurrentModificationException
 from src.infrastructure.external.database import Base
 from src.infrastructure.exceptions import DatabaseException
 
 
 class BookModel(Base):
+    """SQLAlchemy model for Book aggregate."""
     __tablename__ = "books"
 
     id = Column(String, primary_key=True, index=True)
@@ -18,9 +19,11 @@ class BookModel(Base):
     is_borrowed = Column(Boolean, default=False)
     borrowed_at = Column(DateTime, nullable=True)
     return_due_date = Column(DateTime, nullable=True)
+    version = Column(Integer, default=0, nullable=False)
 
     def to_entity(self) -> Book:
-        return Book(
+        """Convert DB model to domain entity."""
+        book = Book(
             id=BookId(self.id),
             title=Title(self.title),
             author=Author(self.author),
@@ -28,20 +31,27 @@ class BookModel(Base):
             borrowed_at=self.borrowed_at,
             return_due_date=self.return_due_date
         )
+        # Set the internal version from DB
+        book._version = self.version
+        return book
 
     @staticmethod
     def from_entity(book: Book) -> "BookModel":
+        """Convert domain entity to DB model."""
         return BookModel(
             id=book.id.value,
             title=book.title.value,
             author=book.author.value,
             is_borrowed=book.is_borrowed,
             borrowed_at=book.borrowed_at,
-            return_due_date=book.return_due_date
+            return_due_date=book.return_due_date,
+            version=book.version
         )
 
 
 class SQLBookRepository:
+    """Repository implementation with optimistic locking support."""
+
     def __init__(self, session: AsyncSession, identity_map: Dict[str, Book] = None):
         self.session = session
         self.identity_map = identity_map if identity_map is not None else {}
@@ -94,15 +104,47 @@ class SQLBookRepository:
             raise DatabaseException(f"Error retrieving book {book_id}: {str(e)}", original_exception=e)
 
     async def update(self, book: Book) -> None:
-        try:
-            result = await self.session.execute(select(BookModel).filter(BookModel.id == book.id.value))
-            db_book = result.scalars().first()
-            if db_book:
-                db_book.is_borrowed = book.is_borrowed
-                db_book.borrowed_at = book.borrowed_at
-                db_book.return_due_date = book.return_due_date
+        """
+        Update a book with optimistic locking.
 
-                # Track entity for events (may already be tracked from get_by_id)
-                self.identity_map[book.id.value] = book
+        Uses WHERE version = expected_version to ensure no concurrent modification.
+        If the update affects 0 rows, it means the version changed (concurrent modification).
+        """
+        try:
+            expected_version = book.version
+            new_version = expected_version + 1
+
+            # Update only if version matches (optimistic locking)
+            result = await self.session.execute(
+                update(BookModel)
+                .where(BookModel.id == book.id.value)
+                .where(BookModel.version == expected_version)
+                .values(
+                    is_borrowed=book.is_borrowed,
+                    borrowed_at=book.borrowed_at,
+                    return_due_date=book.return_due_date,
+                    version=new_version
+                )
+            )
+
+            if result.rowcount == 0:
+                # Either the book doesn't exist or version mismatch
+                # Check if book exists
+                check_result = await self.session.execute(
+                    select(BookModel).filter(BookModel.id == book.id.value)
+                )
+                if check_result.scalars().first() is None:
+                    raise DatabaseException(f"Book {book.id.value} not found")
+                else:
+                    raise ConcurrentModificationException("Book", book.id.value)
+
+            # Update the entity's version
+            book._version = new_version
+
+            # Track entity for events (may already be tracked from get_by_id)
+            self.identity_map[book.id.value] = book
+
+        except ConcurrentModificationException:
+            raise
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error updating book {book.id.value}: {str(e)}", original_exception=e)

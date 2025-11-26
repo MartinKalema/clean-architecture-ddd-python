@@ -8,6 +8,7 @@ must go through the root.
 Key responsibilities:
 - Maintains list of domain events raised by the aggregate
 - Ensures consistency boundaries within the aggregate
+- Provides optimistic locking via version field
 """
 from dataclasses import dataclass, field
 from typing import List, TYPE_CHECKING
@@ -23,6 +24,16 @@ class AggregateRoot:
     _domain_events: List["DomainEvent"] = field(
         default_factory=list, init=False, repr=False
     )
+    _version: int = field(default=0, init=False, repr=False)
+
+    @property
+    def version(self) -> int:
+        """Current version for optimistic locking."""
+        return self._version
+
+    def _increment_version(self) -> None:
+        """Increment version after successful update."""
+        self._version += 1
 
     def add_event(self, event: "DomainEvent") -> None:
         """Register a domain event to be dispatched after commit."""

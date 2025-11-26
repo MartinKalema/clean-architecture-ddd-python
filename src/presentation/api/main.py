@@ -3,8 +3,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from src.infrastructure.external.database import Base
-from src.domain.catalog import DomainException, BookNotFoundException, BookAlreadyBorrowedException
-from src.presentation.api.routes import book_routes
+from src.domain.catalog import (
+    DomainException,
+    BookNotFoundException,
+    BookAlreadyBorrowedException,
+    ConcurrentModificationException,
+)
+from src.presentation.api.routes import book_routes, health_routes
 from src.container import Container
 from src.infrastructure.exceptions import InfrastructureException
 
@@ -21,7 +26,12 @@ async def lifespan(app: FastAPI):
 
 container = Container()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Library API",
+    description="Clean Architecture Library Management System",
+    version="1.0.0",
+    lifespan=lifespan
+)
 app.container = container
 
 
@@ -36,7 +46,10 @@ async def domain_exception_handler(request: Request, exc: DomainException):
         return JSONResponse(status_code=404, content={"message": str(exc)})
     if isinstance(exc, BookAlreadyBorrowedException):
         return JSONResponse(status_code=409, content={"message": str(exc)})
+    if isinstance(exc, ConcurrentModificationException):
+        return JSONResponse(status_code=409, content={"message": str(exc)})
     return JSONResponse(status_code=400, content={"message": str(exc)})
 
 
+app.include_router(health_routes.router)
 app.include_router(book_routes.router)

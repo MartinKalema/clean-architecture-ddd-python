@@ -1,5 +1,5 @@
+import os
 from dependency_injector import containers, providers
-
 
 from src.infrastructure.configurations.settings import load_config
 from src.infrastructure.external.database import Database
@@ -18,12 +18,21 @@ from src.infrastructure.external.sendgrid_client import SendGridClient
 
 from src.infrastructure.adapters.templates.jinja2_template_renderer import Jinja2TemplateRenderer
 from src.infrastructure.adapters.logger.standard_logger import StandardLogger
-import os
+from src.infrastructure.adapters.logger.json_logger import JsonLogger
+
+
+def create_logger(config: dict):
+    """Factory function to create appropriate logger based on config."""
+    log_format = config.get("logging", {}).get("format", "json")
+    if log_format == "json":
+        return JsonLogger()
+    return StandardLogger()
+
 
 class Container(containers.DeclarativeContainer):
-    # ... (wiring config same) ...
     wiring_config = containers.WiringConfiguration(modules=[
         "src.presentation.api.routes.book_routes",
+        "src.presentation.api.routes.health_routes",
         "src.presentation.cli.commands.add_book_command",
         "src.presentation.cli.commands.list_books_command",
         "src.presentation.cli.commands.borrow_book_command"
@@ -32,8 +41,11 @@ class Container(containers.DeclarativeContainer):
     config = providers.Configuration()
     config.from_dict(load_config())
 
-    # Logger
-    logger = providers.Singleton(StandardLogger)
+    # Logger - uses JSON format by default, configurable via LOG_FORMAT env var
+    logger = providers.Singleton(
+        create_logger,
+        config=config
+    )
 
     database = providers.Singleton(
         Database,
@@ -112,5 +124,3 @@ class Container(containers.DeclarativeContainer):
         uow=uow,
         logger=logger
     )
-
-
