@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -29,28 +27,26 @@ services:
       retries: 5
 
   pgbouncer:
-    image: edoburu/pgbouncer:1.21.0
+    image: bitnami/pgbouncer:latest
     container_name: clean_arch_pgbouncer
     ports:
       - "6432:6432"
     environment:
-      DATABASE_URL: postgres://library:library_secret@postgres:5432/library_db
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: 1000
-      DEFAULT_POOL_SIZE: 50
-      MIN_POOL_SIZE: 10
-      RESERVE_POOL_SIZE: 25
-      RESERVE_POOL_TIMEOUT: 3
-      SERVER_RESET_QUERY: DISCARD ALL
-      AUTH_TYPE: scram-sha-256
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_USERNAME: library
+      POSTGRESQL_PASSWORD: library_secret
+      POSTGRESQL_DATABASE: library_db
+      PGBOUNCER_PORT: 6432
+      PGBOUNCER_DATABASE: library_db
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: 1000
+      PGBOUNCER_DEFAULT_POOL_SIZE: 50
+      PGBOUNCER_MIN_POOL_SIZE: 10
+      PGBOUNCER_RESERVE_POOL_SIZE: 25
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "6432"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   rabbitmq:
     image: rabbitmq:3-management
