@@ -49,7 +49,11 @@ class Container(containers.DeclarativeContainer):
 
     database = providers.Singleton(
         Database,
-        db_url=config.database.url
+        db_url=config.database.url,
+        pool_size=config.database.pool_size,
+        max_overflow=config.database.max_overflow,
+        pool_timeout=config.database.pool_timeout,
+        pool_recycle=config.database.pool_recycle,
     )
 
     session_factory = providers.Resource(

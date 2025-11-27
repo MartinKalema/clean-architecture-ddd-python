@@ -6,6 +6,10 @@ The YAML file serves as default values for development only.
 
 Environment Variables:
     DATABASE_URL: Database connection URL
+    DB_POOL_SIZE: Connection pool size (default: 20)
+    DB_MAX_OVERFLOW: Max overflow connections (default: 30)
+    DB_POOL_TIMEOUT: Pool timeout in seconds (default: 30)
+    DB_POOL_RECYCLE: Recycle connections after N seconds (default: 1800)
     RABBITMQ_URL: RabbitMQ connection URL
     RABBITMQ_EXCHANGE: RabbitMQ exchange name
     SENDGRID_API_KEY: SendGrid API key
@@ -58,6 +62,10 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
                 "DATABASE_URL",
                 yaml_config.get("database", {}).get("url", "sqlite:///./books.db")
             ),
+            "pool_size": int(_get_env("DB_POOL_SIZE", 20)),
+            "max_overflow": int(_get_env("DB_MAX_OVERFLOW", 30)),
+            "pool_timeout": int(_get_env("DB_POOL_TIMEOUT", 30)),
+            "pool_recycle": int(_get_env("DB_POOL_RECYCLE", 1800)),
         },
         "rabbitmq": {
             "url": _get_env(
