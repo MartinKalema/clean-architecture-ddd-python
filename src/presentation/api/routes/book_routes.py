@@ -7,7 +7,9 @@ from src.container import Container
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.list_books import ListBooks
 from src.application.use_cases.borrow_book import BorrowBook
-from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto
+from src.application.use_cases.return_book import ReturnBook
+from src.application.use_cases.get_book import GetBook
+from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto, ReturnBookInputDto, GetBookInputDto
 from src.domain.catalog import DomainException
 
 router = APIRouter()
@@ -49,6 +51,25 @@ async def list_books(
     ]
 
 
+@router.get("/books/{book_id}", response_model=BookResponse)
+@inject
+async def get_book(
+    book_id: str,
+    use_case: GetBook = Depends(Provide[Container.get_book_use_case])
+):
+    try:
+        input_dto = GetBookInputDto(book_id=book_id)
+        output_dto = await use_case.execute(input_dto)
+        return BookResponse(
+            id=output_dto.id,
+            title=output_dto.title,
+            author=output_dto.author,
+            is_borrowed=output_dto.is_borrowed
+        )
+    except DomainException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @router.post("/books/{book_id}/borrow", response_model=BookResponse)
 @inject
 async def borrow_book(
@@ -60,6 +81,22 @@ async def borrow_book(
         book_id=book_id,
         borrower_email=borrow_request.borrower_email
     )
+    output_dto = await use_case.execute(input_dto)
+    return BookResponse(
+        id=output_dto.id,
+        title=output_dto.title,
+        author=output_dto.author,
+        is_borrowed=output_dto.is_borrowed
+    )
+
+
+@router.post("/books/{book_id}/return", response_model=BookResponse)
+@inject
+async def return_book(
+    book_id: str,
+    use_case: ReturnBook = Depends(Provide[Container.return_book_use_case])
+):
+    input_dto = ReturnBookInputDto(book_id=book_id)
     output_dto = await use_case.execute(input_dto)
     return BookResponse(
         id=output_dto.id,

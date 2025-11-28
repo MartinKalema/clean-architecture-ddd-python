@@ -49,6 +49,19 @@ async def liveness():
     )
 
 
+@router.get("/live", response_model=HealthStatus)
+async def liveness_check():
+    """
+    K8s Liveness check.
+    
+    Returns 200 if the application is running.
+    """
+    return HealthStatus(
+        status="healthy",
+        timestamp=datetime.utcnow().isoformat()
+    )
+
+
 @router.get("/ready", response_model=HealthStatus)
 @inject
 async def readiness(
