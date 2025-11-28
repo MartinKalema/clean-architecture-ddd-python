@@ -20,6 +20,8 @@ from src.infrastructure.adapters.templates.jinja2_template_renderer import Jinja
 from src.infrastructure.adapters.logger.standard_logger import StandardLogger
 from src.infrastructure.adapters.logger.json_logger import JsonLogger
 
+from src.infrastructure.adapters.resilience import CircuitBreaker, circuit_breaker_registry
+
 
 def create_logger(config: dict):
     """Factory function to create appropriate logger based on config."""
@@ -27,6 +29,25 @@ def create_logger(config: dict):
     if log_format == "json":
         return JsonLogger()
     return StandardLogger()
+
+
+def create_circuit_breaker(
+    name: str,
+    failure_threshold: int,
+    success_threshold: int,
+    timeout: float,
+    logger,
+) -> CircuitBreaker:
+    """Factory to create and register circuit breakers."""
+    cb = CircuitBreaker(
+        name=name,
+        failure_threshold=failure_threshold,
+        success_threshold=success_threshold,
+        timeout=timeout,
+        logger=logger,
+    )
+    circuit_breaker_registry.register(cb)
+    return cb
 
 
 class Container(containers.DeclarativeContainer):
@@ -74,12 +95,32 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
+    # Circuit Breakers - configured per external service
+    rabbitmq_circuit_breaker = providers.Singleton(
+        create_circuit_breaker,
+        name="rabbitmq",
+        failure_threshold=5,
+        success_threshold=2,
+        timeout=30.0,
+        logger=logger,
+    )
+
+    sendgrid_circuit_breaker = providers.Singleton(
+        create_circuit_breaker,
+        name="sendgrid",
+        failure_threshold=3,
+        success_threshold=2,
+        timeout=60.0,
+        logger=logger,
+    )
+
     # Adapters
     event_dispatcher = providers.Singleton(
         RabbitMQEventDispatcher,
         client=rabbitmq_client,
         exchange_name=config.rabbitmq.exchange_name,
-        logger=logger
+        logger=logger,
+        circuit_breaker=rabbitmq_circuit_breaker,
     )
 
     email_service = providers.Singleton(
@@ -87,7 +128,8 @@ class Container(containers.DeclarativeContainer):
         client=sendgrid_client,
         from_email=config.sendgrid.from_email,
         admin_email=config.sendgrid.admin_email,
-        logger=logger
+        logger=logger,
+        circuit_breaker=sendgrid_circuit_breaker,
     )
 
     # Template Renderer

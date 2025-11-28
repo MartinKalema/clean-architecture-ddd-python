@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import RabbitMQEventDispatcher
 from src.infrastructure.adapters.email.sendgrid_email_service import SendGridEmailService
+from src.infrastructure.adapters.resilience import CircuitBreaker
 from src.application.handlers.book_handlers import BookHandlers
 from src.domain.catalog import BookBorrowed
 from src.domain.shared_kernel import EmailTemplate
@@ -11,11 +12,17 @@ from src.domain.shared_kernel import EmailTemplate
 
 @pytest.mark.asyncio
 async def test_rabbitmq_dispatcher():
-    # Mock the client
+    # Mock the client and dependencies
     mock_client = AsyncMock()
     mock_logger = MagicMock()
+    circuit_breaker = CircuitBreaker(name="test_rabbitmq", logger=mock_logger)
 
-    dispatcher = RabbitMQEventDispatcher(client=mock_client, exchange_name="test_exchange", logger=mock_logger)
+    dispatcher = RabbitMQEventDispatcher(
+        client=mock_client,
+        exchange_name="test_exchange",
+        logger=mock_logger,
+        circuit_breaker=circuit_breaker,
+    )
     event = BookBorrowed(
         book_id="123",
         title="Test Book",
@@ -31,11 +38,18 @@ async def test_rabbitmq_dispatcher():
 
 @pytest.mark.asyncio
 async def test_sendgrid_service():
-    # Mock the client
+    # Mock the client and dependencies
     mock_client = MagicMock()
     mock_logger = MagicMock()
+    circuit_breaker = CircuitBreaker(name="test_sendgrid", logger=mock_logger)
 
-    service = SendGridEmailService(client=mock_client, from_email="from@test.com", admin_email="admin@test.com", logger=mock_logger)
+    service = SendGridEmailService(
+        client=mock_client,
+        from_email="from@test.com",
+        admin_email="admin@test.com",
+        logger=mock_logger,
+        circuit_breaker=circuit_breaker,
+    )
 
     await service.send_email("to@test.com", "Subject", "Body")
 

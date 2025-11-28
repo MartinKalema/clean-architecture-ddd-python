@@ -6,14 +6,12 @@ allowing the system to fail fast and potentially use fallback mechanisms
 (like the transactional outbox pattern).
 """
 import json
-from typing import Optional
 
 from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.domain.shared_kernel import DomainEvent, Logger
 from src.infrastructure.adapters.resilience import (
     CircuitBreaker,
     CircuitBreakerOpenException,
-    circuit_breaker_registry,
 )
 
 
@@ -22,7 +20,7 @@ class RabbitMQEventDispatcher:
     Event dispatcher that publishes domain events to RabbitMQ.
 
     Features:
-    - Circuit breaker protection for resilience
+    - Circuit breaker protection for resilience (injected)
     - Automatic reconnection
     - Structured logging
     """
@@ -32,24 +30,13 @@ class RabbitMQEventDispatcher:
         client: RabbitMQClient,
         exchange_name: str,
         logger: Logger,
-        circuit_breaker: Optional[CircuitBreaker] = None,
+        circuit_breaker: CircuitBreaker,
     ):
         self.client = client
         self.exchange_name = exchange_name
         self.logger = logger
         self._connected = False
-
-        # Circuit breaker with sensible defaults for messaging
-        self._circuit_breaker = circuit_breaker or CircuitBreaker(
-            name="rabbitmq",
-            failure_threshold=5,      # Open after 5 failures
-            success_threshold=2,       # Close after 2 successes in half-open
-            timeout=30.0,              # Wait 30s before testing recovery
-            logger=logger,
-        )
-
-        # Register for centralized monitoring
-        circuit_breaker_registry.register(self._circuit_breaker)
+        self._circuit_breaker = circuit_breaker
 
     @property
     def circuit_breaker_status(self) -> dict:

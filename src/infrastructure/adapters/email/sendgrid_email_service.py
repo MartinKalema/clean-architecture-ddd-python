@@ -5,14 +5,11 @@ The circuit breaker prevents cascading failures when SendGrid is unavailable,
 allowing the system to queue emails for later delivery or use fallback
 notification mechanisms.
 """
-from typing import Optional
-
 from src.infrastructure.external.sendgrid_client import SendGridClient
 from src.domain.shared_kernel import EmailService, Logger
 from src.infrastructure.adapters.resilience import (
     CircuitBreaker,
     CircuitBreakerOpenException,
-    circuit_breaker_registry,
 )
 
 
@@ -21,7 +18,7 @@ class SendGridEmailService(EmailService):
     Email service implementation using SendGrid.
 
     Features:
-    - Circuit breaker protection for resilience
+    - Circuit breaker protection for resilience (injected)
     - Automatic CC to admin for audit trail
     - Structured logging
     """
@@ -32,25 +29,13 @@ class SendGridEmailService(EmailService):
         from_email: str,
         admin_email: str,
         logger: Logger,
-        circuit_breaker: Optional[CircuitBreaker] = None,
+        circuit_breaker: CircuitBreaker,
     ):
         self.client = client
         self.from_email = from_email
         self.admin_email = admin_email
         self.logger = logger
-
-        # Circuit breaker with sensible defaults for email
-        # Email services typically have higher latency, so we're more tolerant
-        self._circuit_breaker = circuit_breaker or CircuitBreaker(
-            name="sendgrid",
-            failure_threshold=3,       # Open after 3 failures (email is critical)
-            success_threshold=2,        # Close after 2 successes in half-open
-            timeout=60.0,               # Wait 60s before testing recovery
-            logger=logger,
-        )
-
-        # Register for centralized monitoring
-        circuit_breaker_registry.register(self._circuit_breaker)
+        self._circuit_breaker = circuit_breaker
 
     @property
     def circuit_breaker_status(self) -> dict:
