@@ -1,128 +1,240 @@
 # Clean Architecture & DDD in Python
 
-This repository demonstrates a robust implementation of **Clean Architecture** and **Domain-Driven Design (DDD)** principles in Python. It serves as a reference for building scalable, maintainable, and testable backend applications.
+A production-grade implementation of **Clean Architecture** and **Domain-Driven Design (DDD)** principles in Python. This project demonstrates enterprise patterns for building scalable, maintainable, and resilient backend applications.
 
-## 🏗 Architecture Overview
+## Architecture Overview
 
-The project is structured into four strict layers, ensuring separation of concerns and dependency inversion:
+The project follows strict layered architecture with dependency inversion:
 
-1.  **Domain Layer** (`src/domain`):
-    *   **Enterprise Business Rules**.
-    *   Contains Entities (`Book`), Value Objects (`BookId`, `Title`, `Author`), Domain Events, Exceptions, and **Repository Interfaces** (`BookRepository`).
-    *   **Pure Python**: No external dependencies (no frameworks, no ORMs).
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Presentation Layer                        │
+│                  (FastAPI, CLI, Controllers)                 │
+├─────────────────────────────────────────────────────────────┤
+│                    Application Layer                         │
+│               (Use Cases, DTOs, Event Handlers)              │
+├─────────────────────────────────────────────────────────────┤
+│                      Domain Layer                            │
+│        (Entities, Value Objects, Domain Events, Interfaces)  │
+├─────────────────────────────────────────────────────────────┤
+│                   Infrastructure Layer                       │
+│    (Repositories, Message Brokers, Email, Circuit Breakers)  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-2.  **Application Layer** (`src/application`):
-    *   **Application Business Rules**.
-    *   Orchestrates domain logic using Use Cases (`AddBook`, `ListBooks`, `BorrowBook`) and DTOs.
-    *   Depends ONLY on the Domain Layer.
+### Layer Responsibilities
 
-3.  **Infrastructure Layer** (`src/infrastructure`):
-    *   **Frameworks & Drivers**.
-    *   Implements interfaces defined in the Domain Layer.
-    *   Handles persistence (`SQLBookRepository` with SQLAlchemy/aiosqlite), configuration, and external adapters.
+1. **Domain Layer** (`src/domain/`)
+   - Enterprise business rules
+   - Entities (`Book`), Value Objects (`BookId`, `Title`, `Author`)
+   - Domain Events (`BookBorrowed`, `BookReturned`)
+   - Repository interfaces (contracts)
+   - **Pure Python** - no external dependencies
 
-4.  **Presentation Layer** (`src/presentation`):
-    *   **Interface Adapters**.
-    *   Entry points for the application.
-    *   **API**: FastAPI application.
-    *   **CLI**: Command-line interface using `click`.
+2. **Application Layer** (`src/application/`)
+   - Application business rules
+   - Use Cases (`AddBook`, `ListBooks`, `BorrowBook`, `ReturnBook`, `GetBook`)
+   - DTOs for input/output
+   - Event handlers for async processing
 
-> **Note**: In practice, we often group the "Driven" adapters (Repositories) into `infrastructure` and the "Driving" adapters (API/CLI) into `presentation` to keep the project structure clean, even though they both technically live in the "Adapter" ring.
+3. **Infrastructure Layer** (`src/infrastructure/`)
+   - Repository implementations (SQLAlchemy)
+   - External service adapters (RabbitMQ, SendGrid)
+   - Resilience patterns (Circuit Breaker)
+   - Configuration management
 
-## 🚀 Key Features
+4. **Presentation Layer** (`src/presentation/`)
+   - FastAPI REST endpoints
+   - CLI commands (Click)
+   - Request/response models
 
-*   **Async First**: Built from the ground up with `asyncio`, `aiosqlite`, and async SQLAlchemy.
-*   **Dependency Injection**: Uses `dependency-injector` for wiring components.
-*   **Strict Typing**: Comprehensive type hinting and `typing.Protocol` for interfaces.
-*   **Testing**: Stratified testing suite (Unit, Integration, E2E) with `pytest`.
-*   **Load Testing**: Performance testing setup with `locust`.
-*   **Configuration**: YAML-based settings management.
+## Key Features
 
-## 📂 Directory Structure
+### Core Patterns
+- **Async-First**: Built with `asyncio`, async SQLAlchemy, and `aio-pika`
+- **Dependency Injection**: `dependency-injector` for IoC container
+- **Unit of Work**: Transactional consistency across aggregates
+- **Repository Pattern**: Abstract data access behind interfaces
+
+### Resilience Patterns
+- **Circuit Breaker**: Prevents cascading failures to external services (RabbitMQ, SendGrid)
+  - States: CLOSED → OPEN → HALF_OPEN
+  - Configurable thresholds via `settings.yaml`
+  - Registry for monitoring all circuit breakers
+
+- **Transactional Outbox**: Guarantees event delivery
+  - Events stored in same transaction as aggregate changes
+  - Background processor dispatches to message broker
+  - At-least-once delivery semantics
+
+### Event-Driven Architecture
+- **Domain Events**: Published when significant state changes occur
+- **RabbitMQ Integration**: Async event dispatching
+- **Event Handlers**: Process events for notifications, analytics, etc.
+
+### Infrastructure
+- **PgBouncer**: Connection pooling for PostgreSQL (10k+ concurrent users)
+- **Health Endpoints**: `/health` and `/health/ready` for orchestration
+- **YAML Configuration**: Environment-aware settings with env var overrides
+
+## Directory Structure
 
 ```
 src/
-├── domain/         # Enterprise Business Rules (Entities, VOs, Events, Interfaces)
-├── application/    # Application Business Rules (Use Cases, DTOs)
-├── infrastructure/ # Frameworks & Drivers (DB, Config, Repositories)
-├── presentation/   # Interface Adapters (API, CLI)
-└── container.py    # Dependency Injection Container
+├── domain/
+│   ├── catalog/          # Book aggregate
+│   ├── lending/          # Loan aggregate
+│   ├── patron/           # Patron aggregate
+│   └── shared_kernel/    # Cross-cutting domain concerns
+├── application/
+│   ├── use_cases/        # Application services
+│   ├── handlers/         # Event handlers
+│   └── dto/              # Data transfer objects
+├── infrastructure/
+│   ├── adapters/
+│   │   ├── repositories/ # SQLAlchemy implementations
+│   │   ├── messaging/    # RabbitMQ dispatcher
+│   │   ├── email/        # SendGrid service
+│   │   ├── resilience/   # Circuit breaker
+│   │   └── outbox/       # Transactional outbox
+│   ├── configurations/   # YAML settings
+│   └── external/         # External clients
+├── presentation/
+│   ├── api/              # FastAPI routes
+│   └── cli/              # Click commands
+└── container.py          # DI container
+
 tests/
-├── unit/           # Fast, isolated domain tests
-├── integration/    # Database and Use Case integration tests
-├── e2e/            # Full system API and CLI tests
-└── load/           # Locust load testing scripts
+├── domain/               # Entity & value object tests
+├── unit/                 # Isolated unit tests
+├── infrastructure/       # Adapter tests (circuit breaker, etc.)
+├── integration/          # Repository & use case tests
+├── e2e/                  # API & CLI tests
+└── load/                 # Locust performance tests
 ```
 
-## 🛠 Getting Started
+## Getting Started
 
 ### Prerequisites
-*   Python 3.10+
-*   Virtual environment (recommended)
+- Python 3.10+
+- Docker & Docker Compose (for full stack)
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Clone and setup
 git clone <repository-url>
 cd clean-architecture-ddd-python
 
-# Create and activate virtual environment
+# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install .
+pip install -e ".[dev]"
 ```
 
-## 🏃‍♂️ Running the Application
+### Running the Application
 
-### API Server
-Start the FastAPI server:
+#### API Server
 ```bash
 uvicorn src.presentation.api.main:app --reload
 ```
-Access the API docs at: `http://127.0.0.1:8000/docs`
+API docs: http://127.0.0.1:8000/docs
 
-### CLI
-Use the command-line interface:
+#### CLI
 ```bash
 # Add a book
-python src/presentation/cli/main.py add "Clean Architecture" "Robert C. Martin"
+python -m src.presentation.cli.main add "Clean Architecture" "Robert C. Martin"
 
-# List books
-python src/presentation/cli/main.py list
+# List all books
+python -m src.presentation.cli.main list
 
 # Borrow a book
-python src/presentation/cli/main.py borrow <book_id>
+python -m src.presentation.cli.main borrow <book_id> user@example.com
+
+# Return a book
+python -m src.presentation.cli.main return <book_id>
 ```
 
-## 🧪 Testing
+#### Full Stack (Docker)
+```bash
+docker-compose up -d
+```
 
-The project uses a stratified testing strategy:
+## Testing
 
 ```bash
-# Run all tests
+# All tests
 pytest
 
-# Run Unit Tests (Domain Logic)
-pytest tests/unit
+# By category
+pytest tests/domain          # Domain logic
+pytest tests/unit            # Unit tests
+pytest tests/infrastructure  # Circuit breaker, adapters
+pytest tests/integration     # Repository, use cases
+pytest tests/e2e             # API, CLI
 
-# Run Integration Tests (Use Cases & DB)
-pytest tests/integration
-
-# Run E2E Tests (API & CLI)
-pytest tests/e2e
+# With coverage
+pytest --cov=src --cov-report=html
 ```
 
 ### Load Testing
-To benchmark performance:
-1.  Start the API server.
-2.  Run Locust:
-    ```bash
-    locust -f tests/load/locustfile.py
-    ```
-3.  Open `http://localhost:8089` in your browser.
+```bash
+# Start API server, then:
+locust -f tests/load/locustfile.py
 
-## 📝 License
-This project is open source and available under the MIT License.
+# Open http://localhost:8089
+```
+
+## Configuration
+
+Settings are managed via `src/infrastructure/configurations/settings.yaml`:
+
+```yaml
+database:
+  url: "sqlite+aiosqlite:///./library.db"
+
+rabbitmq:
+  host: localhost
+  exchange: library_events
+
+circuit_breakers:
+  rabbitmq:
+    failure_threshold: 5
+    success_threshold: 2
+    timeout: 30.0
+  sendgrid:
+    failure_threshold: 3
+    success_threshold: 2
+    timeout: 60.0
+```
+
+Override with environment variables:
+```bash
+export DATABASE_URL="postgresql+asyncpg://..."
+export RABBITMQ_HOST="rabbitmq.prod"
+export CIRCUIT_BREAKER_RABBITMQ_FAILURE_THRESHOLD=10
+```
+
+## Code Style
+
+### TYPE_CHECKING Pattern
+For type-hint-only imports, we use `TYPE_CHECKING` to avoid runtime overhead:
+
+```python
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.domain.catalog import UnitOfWork
+
+class MyUseCase:
+    def __init__(self, uow: UnitOfWork): ...
+```
+
+**Note**: FastAPI routes cannot use this pattern as FastAPI needs runtime type evaluation for request body detection.
+
+## License
+
+MIT License
