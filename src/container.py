@@ -7,6 +7,8 @@ from src.infrastructure.external.database import Database
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.list_books import ListBooks
 from src.application.use_cases.borrow_book import BorrowBook
+from src.application.use_cases.return_book import ReturnBook
+from src.application.use_cases.get_book import GetBook
 
 from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import RabbitMQEventDispatcher
 from src.infrastructure.adapters.email.sendgrid_email_service import SendGridEmailService
@@ -167,6 +169,18 @@ class Container(containers.DeclarativeContainer):
 
     borrow_book_use_case = providers.Factory(
         BorrowBook,
+        uow=uow,
+        logger=logger
+    )
+
+    return_book_use_case = providers.Factory(
+        ReturnBook,
+        uow=uow,
+        logger=logger
+    )
+
+    get_book_use_case = providers.Factory(
+        GetBook,
         uow=uow,
         logger=logger
     )
