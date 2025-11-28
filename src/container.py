@@ -1,4 +1,10 @@
-import os
+"""
+Dependency Injection Container.
+
+This is the composition root - the only place where dependencies are wired together.
+The container should ONLY contain wiring logic, not creation/business logic.
+All factory logic belongs in the infrastructure layer.
+"""
 from dependency_injector import containers, providers
 
 from src.infrastructure.configurations.settings import load_config
@@ -19,40 +25,18 @@ from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
 
 from src.infrastructure.adapters.templates.jinja2_template_renderer import Jinja2TemplateRenderer
-from src.infrastructure.adapters.logger.standard_logger import StandardLogger
-from src.infrastructure.adapters.logger.json_logger import JsonLogger
-
-from src.infrastructure.adapters.resilience import CircuitBreaker, circuit_breaker_registry
-
-
-def create_logger(config: dict):
-    """Factory function to create appropriate logger based on config."""
-    log_format = config.get("logging", {}).get("format", "json")
-    if log_format == "json":
-        return JsonLogger()
-    return StandardLogger()
-
-
-def create_circuit_breaker(
-    name: str,
-    failure_threshold: int,
-    success_threshold: int,
-    timeout: float,
-    logger,
-) -> CircuitBreaker:
-    """Factory to create and register circuit breakers."""
-    cb = CircuitBreaker(
-        name=name,
-        failure_threshold=failure_threshold,
-        success_threshold=success_threshold,
-        timeout=timeout,
-        logger=logger,
-    )
-    circuit_breaker_registry.register(cb)
-    return cb
+from src.infrastructure.adapters.logger import LoggerFactory
+from src.infrastructure.adapters.resilience import CircuitBreakerFactory
 
 
 class Container(containers.DeclarativeContainer):
+    """
+    Application dependency injection container.
+
+    Wires all dependencies together. No business logic should be here -
+    only provider declarations that connect components.
+    """
+
     wiring_config = containers.WiringConfiguration(modules=[
         "src.presentation.api.routes.book_routes",
         "src.presentation.api.routes.health_routes",
@@ -64,12 +48,13 @@ class Container(containers.DeclarativeContainer):
     config = providers.Configuration()
     config.from_dict(load_config())
 
-    # Logger - uses JSON format by default, configurable via LOG_FORMAT env var
+    # Logger - created via factory based on config
     logger = providers.Singleton(
-        create_logger,
+        LoggerFactory.create,
         config=config
     )
 
+    # Database
     database = providers.Singleton(
         Database,
         db_url=config.database.url,
@@ -84,7 +69,7 @@ class Container(containers.DeclarativeContainer):
         db=database
     )
 
-    # External Drivers
+    # External Clients
     rabbitmq_client = providers.Singleton(
         RabbitMQClient,
         amqp_url=config.rabbitmq.url,
@@ -97,9 +82,9 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # Circuit Breakers - configured per external service via settings
+    # Circuit Breakers - created via factory, configured per service
     rabbitmq_circuit_breaker = providers.Singleton(
-        create_circuit_breaker,
+        CircuitBreakerFactory.create,
         name="rabbitmq",
         failure_threshold=config.circuit_breakers.rabbitmq.failure_threshold,
         success_threshold=config.circuit_breakers.rabbitmq.success_threshold,
@@ -108,7 +93,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     sendgrid_circuit_breaker = providers.Singleton(
-        create_circuit_breaker,
+        CircuitBreakerFactory.create,
         name="sendgrid",
         failure_threshold=config.circuit_breakers.sendgrid.failure_threshold,
         success_threshold=config.circuit_breakers.sendgrid.success_threshold,
@@ -134,7 +119,6 @@ class Container(containers.DeclarativeContainer):
         circuit_breaker=sendgrid_circuit_breaker,
     )
 
-    # Template Renderer
     template_renderer = providers.Singleton(
         Jinja2TemplateRenderer,
         template_dir=config.templates.dir,
@@ -142,6 +126,7 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
+    # Handlers
     book_handlers = providers.Singleton(
         BookHandlers,
         email_service=email_service,
@@ -149,12 +134,14 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
+    # Unit of Work
     uow = providers.Factory(
         SqlAlchemyUnitOfWork,
         session_factory=session_factory,
         event_dispatcher=event_dispatcher
     )
 
+    # Use Cases
     add_book_use_case = providers.Factory(
         AddBook,
         uow=uow,
