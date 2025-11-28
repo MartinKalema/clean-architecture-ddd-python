@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 import uuid
 
+from src.domain.lending.exceptions import InvalidLoanIdException
+
 
 @dataclass(frozen=True)
 class LoanId:
@@ -15,7 +17,7 @@ class LoanId:
 
     def __post_init__(self):
         if not self.value:
-            raise ValueError("LoanId cannot be empty")
+            raise InvalidLoanIdException()
 
     @classmethod
     def next_id(cls) -> "LoanId":

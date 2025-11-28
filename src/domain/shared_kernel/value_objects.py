@@ -7,6 +7,8 @@ between all bounded contexts that use them.
 from dataclasses import dataclass
 import re
 
+from src.domain.shared_kernel.exceptions import InvalidEmailException
+
 
 @dataclass(frozen=True)
 class EmailAddress:
@@ -23,7 +25,7 @@ class EmailAddress:
 
     def __post_init__(self):
         if not self.value or not self._is_valid_email(self.value):
-            raise ValueError(f"Invalid email address: {self.value}")
+            raise InvalidEmailException(self.value)
 
     @staticmethod
     def _is_valid_email(email: str) -> bool:

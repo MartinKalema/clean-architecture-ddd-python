@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from enum import Enum
 import uuid
 
+from src.domain.patron.exceptions import InvalidPatronIdException, InvalidPatronNameException
+
 
 @dataclass(frozen=True)
 class PatronId:
@@ -14,7 +16,7 @@ class PatronId:
 
     def __post_init__(self):
         if not self.value:
-            raise ValueError("PatronId cannot be empty")
+            raise InvalidPatronIdException()
 
     @classmethod
     def next_id(cls) -> "PatronId":
@@ -30,9 +32,9 @@ class PatronName:
 
     def __post_init__(self):
         if not self.first_name:
-            raise ValueError("First name cannot be empty")
+            raise InvalidPatronNameException("First name")
         if not self.last_name:
-            raise ValueError("Last name cannot be empty")
+            raise InvalidPatronNameException("Last name")
 
     @property
     def full_name(self) -> str:

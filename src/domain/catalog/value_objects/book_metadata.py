@@ -4,7 +4,7 @@ Value Objects for the Catalog bounded context.
 from dataclasses import dataclass
 import uuid
 
-from src.domain.catalog.exceptions import ValidationException
+from src.domain.shared_kernel.exceptions import ValidationException
 
 
 @dataclass(frozen=True)
