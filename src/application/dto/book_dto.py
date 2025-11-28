@@ -25,6 +25,14 @@ class BorrowBookInputDto:
     borrower_email: str
 
 @dataclass
+class ReturnBookInputDto:
+    book_id: str
+
+@dataclass
+class GetBookInputDto:
+    book_id: str
+
+@dataclass
 class BorrowBookOutputDto:
     id: str
     title: str

@@ -14,6 +14,11 @@ from typing import Optional
 
 from src.domain.shared_kernel import AggregateRoot, EmailAddress
 from src.domain.patron.value_objects import PatronId, PatronName, MembershipTier
+from src.domain.patron.exceptions import (
+    PatronAlreadySuspendedException,
+    PatronNotSuspendedException,
+    InvalidTierUpgradeException,
+)
 from src.domain.patron.events.patron_events import (
     PatronRegistered,
     PatronSuspended,
@@ -72,7 +77,7 @@ class Patron(AggregateRoot):
     def suspend(self, reason: str) -> None:
         """Suspend a patron's borrowing privileges."""
         if self.is_suspended:
-            raise ValueError("Patron is already suspended")
+            raise PatronAlreadySuspendedException(self.id.value)
         self.is_suspended = True
         self.suspended_reason = reason
         self.add_event(
@@ -85,7 +90,7 @@ class Patron(AggregateRoot):
     def reinstate(self) -> None:
         """Reinstate a suspended patron."""
         if not self.is_suspended:
-            raise ValueError("Patron is not suspended")
+            raise PatronNotSuspendedException(self.id.value)
         self.is_suspended = False
         self.suspended_reason = None
         self.add_event(PatronReinstated(patron_id=self.id.value))
@@ -93,5 +98,7 @@ class Patron(AggregateRoot):
     def upgrade_tier(self, new_tier: MembershipTier) -> None:
         """Upgrade patron to a higher membership tier."""
         if new_tier.borrowing_limit <= self.membership_tier.borrowing_limit:
-            raise ValueError("Can only upgrade to a higher tier")
+            raise InvalidTierUpgradeException(
+                self.membership_tier.value, new_tier.value
+            )
         self.membership_tier = new_tier

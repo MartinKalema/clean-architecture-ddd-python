@@ -10,6 +10,12 @@ from .domain_event import DomainEvent
 from .value_objects import EmailAddress
 from .interfaces import Logger, EventDispatcher, EmailService, TemplateRenderer
 from .email_template import EmailTemplate
+from .exceptions import (
+    DomainException,
+    ValidationException,
+    InvalidEmailException,
+    EmptyValueException,
+)
 
 __all__ = [
     "AggregateRoot",
@@ -20,4 +26,8 @@ __all__ = [
     "EmailService",
     "TemplateRenderer",
     "EmailTemplate",
+    "DomainException",
+    "ValidationException",
+    "InvalidEmailException",
+    "EmptyValueException",
 ]

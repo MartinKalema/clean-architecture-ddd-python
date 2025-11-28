@@ -8,7 +8,11 @@ from typing import Optional
 from src.domain.shared_kernel import AggregateRoot
 from src.domain.catalog.value_objects import BookId, Title, Author
 from src.domain.catalog.events import BookBorrowed, BookReturned
-from src.domain.catalog.exceptions import BookAlreadyBorrowedException, BookNotBorrowedException
+from src.domain.catalog.exceptions import (
+    BookAlreadyBorrowedException,
+    BookNotBorrowedException,
+    BorrowerEmailRequiredException,
+)
 
 
 @dataclass
@@ -27,7 +31,7 @@ class Book(AggregateRoot):
             raise BookAlreadyBorrowedException(self.id.value)
 
         if not borrower_email or not borrower_email.strip():
-            raise ValueError("Borrower email is required")
+            raise BorrowerEmailRequiredException()
 
         self.is_borrowed = True
         self.borrowed_at = datetime.now()

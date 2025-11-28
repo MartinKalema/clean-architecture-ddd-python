@@ -90,7 +90,7 @@ class JsonLogger(Logger):
     def _log(self, level: int, message: str, exception: Optional[Exception] = None) -> None:
         """Internal method to log with extra context."""
         extra = {"extra": self._extra} if self._extra else {}
-        self.logger.log(level, message, exc_info=exception, extra=extra)
+        self.logger.log(level, message, exc_info=exception, extra=extra, stacklevel=3)
 
     def info(self, message: str) -> None:
         self._log(logging.INFO, message)
