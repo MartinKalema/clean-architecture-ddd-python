@@ -1,9 +1,16 @@
-import click
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING
+
+import click
 from dependency_injector.wiring import inject, Provide
+
 from src.container import Container
-from src.application.use_cases.borrow_book import BorrowBook
 from src.application.dto.book_dto import BorrowBookInputDto
+
+if TYPE_CHECKING:
+    from src.application.use_cases.borrow_book import BorrowBook
 
 
 @click.command()

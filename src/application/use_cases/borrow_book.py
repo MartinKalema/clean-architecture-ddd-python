@@ -1,6 +1,14 @@
-from src.domain.catalog import UnitOfWork, BookNotFoundException
-from src.domain.shared_kernel import Logger
-from src.application.dto.book_dto import BorrowBookInputDto, BorrowBookOutputDto
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from src.domain.catalog import BookNotFoundException
+from src.application.dto.book_dto import BorrowBookOutputDto
+
+if TYPE_CHECKING:
+    from src.domain.catalog import UnitOfWork
+    from src.domain.shared_kernel import Logger
+    from src.application.dto.book_dto import BorrowBookInputDto
 
 
 class BorrowBook:

@@ -1,5 +1,12 @@
-from src.infrastructure.external.sendgrid_client import SendGridClient
-from src.domain.shared_kernel import EmailService, Logger
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from src.domain.shared_kernel import EmailService
+
+if TYPE_CHECKING:
+    from src.infrastructure.external.sendgrid_client import SendGridClient
+    from src.domain.shared_kernel import Logger
 
 
 class SendGridEmailService(EmailService):

@@ -1,7 +1,11 @@
-import json
+from __future__ import annotations
 
-from src.infrastructure.external.rabbitmq_client import RabbitMQClient
-from src.domain.shared_kernel import DomainEvent, Logger
+import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.infrastructure.external.rabbitmq_client import RabbitMQClient
+    from src.domain.shared_kernel import DomainEvent, Logger
 
 
 class RabbitMQEventDispatcher:

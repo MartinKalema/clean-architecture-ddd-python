@@ -1,10 +1,14 @@
-from typing import Dict, Optional
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from __future__ import annotations
 
-from src.domain.catalog import Book
-from src.domain.shared_kernel import EventDispatcher
+from typing import TYPE_CHECKING, Dict, Optional
+
 from src.infrastructure.adapters.repositories.sql_book_repository import SQLBookRepository
 from src.infrastructure.adapters.outbox import OutboxRepository
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+    from src.domain.catalog import Book
+    from src.domain.shared_kernel import EventDispatcher
 
 
 class SqlAlchemyUnitOfWork:

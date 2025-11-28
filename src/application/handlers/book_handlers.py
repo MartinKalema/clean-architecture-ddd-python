@@ -4,11 +4,16 @@ Event handlers for book-related domain events.
 These handlers are invoked by the event consumer when events
 are received from the message broker.
 """
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 from src.domain.catalog import BookBorrowed
-from src.domain.shared_kernel import EmailService, TemplateRenderer, Logger, EmailTemplate
+from src.domain.shared_kernel import EmailTemplate
+
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import EmailService, TemplateRenderer, Logger
 
 
 class BookHandlers:
