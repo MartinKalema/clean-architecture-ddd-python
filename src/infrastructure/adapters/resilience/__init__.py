@@ -9,12 +9,14 @@ Provides:
 """
 from .circuit_breaker import (
     CircuitBreaker,
-    CircuitBreakerOpenException,
     CircuitState,
     CircuitBreakerMetrics,
     CircuitBreakerRegistry,
     circuit_breaker_registry,
 )
+
+# Re-export from canonical location for convenience
+from src.infrastructure.exceptions import CircuitBreakerOpenException
 
 __all__ = [
     "CircuitBreaker",

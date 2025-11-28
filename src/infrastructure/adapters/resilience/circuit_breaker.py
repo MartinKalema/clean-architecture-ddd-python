@@ -28,13 +28,14 @@ Usage:
 """
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
-from typing import Any, Callable, Optional, TypeVar, ParamSpec
+from typing import Any, Callable, Optional
 import logging
 
 from src.domain.shared_kernel import Logger
+from src.infrastructure.exceptions import CircuitBreakerOpenException
 
 
 class CircuitState(Enum):
@@ -42,17 +43,6 @@ class CircuitState(Enum):
     CLOSED = "closed"      # Normal operation
     OPEN = "open"          # Failing fast
     HALF_OPEN = "half_open"  # Testing recovery
-
-
-class CircuitBreakerOpenException(Exception):
-    """Raised when circuit breaker is open and rejecting requests."""
-    def __init__(self, name: str, time_remaining: float):
-        self.name = name
-        self.time_remaining = time_remaining
-        super().__init__(
-            f"Circuit breaker '{name}' is OPEN. "
-            f"Retry in {time_remaining:.1f} seconds."
-        )
 
 
 @dataclass

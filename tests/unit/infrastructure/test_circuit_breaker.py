@@ -15,13 +15,13 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock
 
-from src.infrastructure.adapters.resilience.circuit_breaker import (
+from src.infrastructure.adapters.resilience import (
     CircuitBreaker,
-    CircuitBreakerOpenException,
     CircuitBreakerMetrics,
     CircuitBreakerRegistry,
     CircuitState,
 )
+from src.infrastructure.exceptions import CircuitBreakerOpenException
 
 
 class TestCircuitBreakerMetrics:
