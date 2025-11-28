@@ -10,6 +10,12 @@ from typing import Optional
 
 from src.domain.shared_kernel import AggregateRoot
 from src.domain.lending.value_objects import LoanId, DueDate, LoanStatus
+from src.domain.lending.exceptions import (
+    LoanAlreadyReturnedException,
+    LoanNotActiveException,
+    LoanNotOverdueException,
+    CannotExtendOverdueLoanException,
+)
 from src.domain.lending.events.lending_events import (
     BookBorrowed,
     BookReturned,
@@ -78,7 +84,7 @@ class Loan(AggregateRoot):
     def return_book(self) -> None:
         """Mark the loan as returned."""
         if self.status == LoanStatus.RETURNED:
-            raise ValueError("Loan is already returned")
+            raise LoanAlreadyReturnedException(self.id.value)
 
         self.status = LoanStatus.RETURNED
         self.returned_at = datetime.now()
@@ -96,9 +102,9 @@ class Loan(AggregateRoot):
     def mark_overdue(self) -> None:
         """Mark the loan as overdue (called by a scheduled job)."""
         if self.status != LoanStatus.ACTIVE:
-            raise ValueError("Only active loans can be marked overdue")
+            raise LoanNotActiveException(self.id.value, "mark as overdue")
         if not self.due_date.is_overdue:
-            raise ValueError("Loan is not past due date")
+            raise LoanNotOverdueException(self.id.value)
 
         self.status = LoanStatus.OVERDUE
 
@@ -117,9 +123,9 @@ class Loan(AggregateRoot):
     def extend(self, days: int) -> None:
         """Extend the loan by a number of days."""
         if self.status != LoanStatus.ACTIVE:
-            raise ValueError("Can only extend active loans")
+            raise LoanNotActiveException(self.id.value, "extend")
         if self.due_date.is_overdue:
-            raise ValueError("Cannot extend overdue loans")
+            raise CannotExtendOverdueLoanException(self.id.value)
 
         old_due_date = self.due_date
         self.due_date = self.due_date.extend(days)

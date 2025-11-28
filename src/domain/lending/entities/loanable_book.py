@@ -18,6 +18,7 @@ from typing import Optional
 
 from src.domain.shared_kernel import AggregateRoot
 from src.domain.lending.value_objects import LoanId
+from src.domain.lending.exceptions import BookNotAvailableException, BookNotCheckedOutException
 
 
 @dataclass
@@ -38,13 +39,13 @@ class LoanableBook(AggregateRoot):
     def checkout(self, loan_id: LoanId) -> None:
         """Mark the book as checked out."""
         if not self.is_available:
-            raise ValueError(f"Book {self.catalog_book_id} is not available")
+            raise BookNotAvailableException(self.catalog_book_id)
         self.is_available = False
         self.current_loan_id = loan_id.value
 
     def return_book(self) -> None:
         """Mark the book as returned and available."""
         if self.is_available:
-            raise ValueError(f"Book {self.catalog_book_id} is not checked out")
+            raise BookNotCheckedOutException(self.catalog_book_id)
         self.is_available = True
         self.current_loan_id = None

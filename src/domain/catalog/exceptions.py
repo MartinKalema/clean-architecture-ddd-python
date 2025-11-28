@@ -1,38 +1,39 @@
 """
 Exceptions for the Catalog bounded context.
 """
+from src.domain.shared_kernel.exceptions import DomainException
 
 
-class DomainException(Exception):
-    """Base class for all domain exceptions."""
+class CatalogException(DomainException):
+    """Base class for catalog domain exceptions."""
     pass
 
 
-class ValidationException(DomainException):
-    """Raised when validation fails."""
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
-class BookNotFoundException(DomainException):
+class BookNotFoundException(CatalogException):
     """Raised when a book is not found in the catalog."""
     def __init__(self, book_id: str):
-        super().__init__(f"Book with id {book_id} not found.")
+        super().__init__(f"Book with id {book_id} not found")
 
 
-class BookAlreadyBorrowedException(DomainException):
+class BookAlreadyBorrowedException(CatalogException):
     """Raised when attempting to borrow an already borrowed book."""
     def __init__(self, book_id: str):
-        super().__init__(f"Book with id {book_id} is already borrowed.")
+        super().__init__(f"Book with id {book_id} is already borrowed")
 
 
-class BookNotBorrowedException(DomainException):
+class BookNotBorrowedException(CatalogException):
     """Raised when attempting to return a book that is not borrowed."""
     def __init__(self, book_id: str):
-        super().__init__(f"Book with id {book_id} is not borrowed.")
+        super().__init__(f"Book with id {book_id} is not borrowed")
 
 
-class ConcurrentModificationException(DomainException):
+class BorrowerEmailRequiredException(CatalogException):
+    """Raised when borrower email is not provided."""
+    def __init__(self):
+        super().__init__("Borrower email is required")
+
+
+class ConcurrentModificationException(CatalogException):
     """
     Raised when optimistic locking fails due to concurrent modification.
 
