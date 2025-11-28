@@ -1,21 +1,17 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, List
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from dependency_injector.wiring import inject, Provide
 
 from src.presentation.api.models.book_models import BookCreate, BookResponse, BorrowRequest
 from src.container import Container
+from src.application.use_cases.add_book import AddBook
+from src.application.use_cases.list_books import ListBooks
+from src.application.use_cases.borrow_book import BorrowBook
+from src.application.use_cases.return_book import ReturnBook
+from src.application.use_cases.get_book import GetBook
 from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto, ReturnBookInputDto, GetBookInputDto
 from src.domain.catalog import DomainException
-
-if TYPE_CHECKING:
-    from src.application.use_cases.add_book import AddBook
-    from src.application.use_cases.list_books import ListBooks
-    from src.application.use_cases.borrow_book import BorrowBook
-    from src.application.use_cases.return_book import ReturnBook
-    from src.application.use_cases.get_book import GetBook
 
 router = APIRouter()
 
