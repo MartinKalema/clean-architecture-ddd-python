@@ -48,7 +48,7 @@ class AddBookHandler:
         """Execute the command to add a new book."""
         async with self.uow:
             book = Book(
-                id=BookId.generate(),
+                id=BookId.next_id(),
                 title=Title(command.title),
                 author=Author(command.author)
             )

@@ -14,13 +14,6 @@ from dependency_injector import containers, providers
 from src.infrastructure.configurations.settings import load_config
 from src.infrastructure.external.database import Database
 
-# Legacy use cases (kept for backward compatibility)
-from src.application.use_cases.add_book import AddBook
-from src.application.use_cases.list_books import ListBooks
-from src.application.use_cases.borrow_book import BorrowBook
-from src.application.use_cases.return_book import ReturnBook
-from src.application.use_cases.get_book import GetBook
-
 # CQRS Command Handlers
 from src.application.commands import (
     AddBookHandler,
@@ -161,7 +154,7 @@ class Container(containers.DeclarativeContainer):
         event_dispatcher=event_dispatcher
     )
 
-    # Query Repository (Read Side - CQRS)
+    # Query Repository (Read Side)
     book_query_repository = providers.Singleton(
         SQLBookQueryRepository,
         session_factory=session_factory
@@ -200,39 +193,5 @@ class Container(containers.DeclarativeContainer):
     get_book_handler = providers.Factory(
         GetBookHandler,
         query_repository=book_query_repository,
-        logger=logger
-    )
-
-    # ============================================================
-    # Legacy Use Cases (backward compatibility)
-    # These can be deprecated once all consumers use CQRS handlers
-    # ============================================================
-    add_book_use_case = providers.Factory(
-        AddBook,
-        uow=uow,
-        logger=logger
-    )
-
-    list_books_use_case = providers.Factory(
-        ListBooks,
-        uow=uow,
-        logger=logger
-    )
-
-    borrow_book_use_case = providers.Factory(
-        BorrowBook,
-        uow=uow,
-        logger=logger
-    )
-
-    return_book_use_case = providers.Factory(
-        ReturnBook,
-        uow=uow,
-        logger=logger
-    )
-
-    get_book_use_case = providers.Factory(
-        GetBook,
-        uow=uow,
         logger=logger
     )

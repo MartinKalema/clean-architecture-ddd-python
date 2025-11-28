@@ -108,7 +108,6 @@ class SQLBookQueryRepository:
             title=row.title,
             author=row.author,
             is_borrowed=row.is_borrowed,
-            borrower_email=row.borrower_email,
             borrowed_at=row.borrowed_at,
             return_due_date=row.return_due_date,
         )
