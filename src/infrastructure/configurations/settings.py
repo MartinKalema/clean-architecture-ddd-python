@@ -62,10 +62,10 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
                 "DATABASE_URL",
                 yaml_config.get("database", {}).get("url", "sqlite:///./books.db")
             ),
-            "pool_size": int(_get_env("DB_POOL_SIZE", 20)),
-            "max_overflow": int(_get_env("DB_MAX_OVERFLOW", 30)),
-            "pool_timeout": int(_get_env("DB_POOL_TIMEOUT", 30)),
-            "pool_recycle": int(_get_env("DB_POOL_RECYCLE", 1800)),
+            "pool_size": int(_get_env("DB_POOL_SIZE", yaml_config.get("database", {}).get("pool_size", 20))),
+            "max_overflow": int(_get_env("DB_MAX_OVERFLOW", yaml_config.get("database", {}).get("max_overflow", 30))),
+            "pool_timeout": int(_get_env("DB_POOL_TIMEOUT", yaml_config.get("database", {}).get("pool_timeout", 30))),
+            "pool_recycle": int(_get_env("DB_POOL_RECYCLE", yaml_config.get("database", {}).get("pool_recycle", 1800))),
         },
         "rabbitmq": {
             "url": _get_env(
