@@ -32,18 +32,33 @@ services:
     ports:
       - "6432:6432"
     environment:
+      # PostgreSQL backend
       POSTGRESQL_HOST: postgres
       POSTGRESQL_PORT: 5432
       POSTGRESQL_USERNAME: library
       POSTGRESQL_PASSWORD: library_secret
       POSTGRESQL_DATABASE: library_db
+      # PgBouncer settings
       PGBOUNCER_PORT: 6432
       PGBOUNCER_DATABASE: library_db
+      PGBOUNCER_AUTH_TYPE: scram-sha-256
+      # Pool mode: transaction is best for web apps (connection released after each transaction)
       PGBOUNCER_POOL_MODE: transaction
+      # Client-side limits (how many app connections PgBouncer accepts)
       PGBOUNCER_MAX_CLIENT_CONN: 10000
+      # Server-side limits (actual PostgreSQL connections)
+      # This is the KEY setting - limits backend connections to PostgreSQL
+      PGBOUNCER_MAX_DB_CONNECTIONS: 200
       PGBOUNCER_DEFAULT_POOL_SIZE: 100
       PGBOUNCER_MIN_POOL_SIZE: 25
       PGBOUNCER_RESERVE_POOL_SIZE: 50
+      # Connection lifecycle
+      PGBOUNCER_SERVER_IDLE_TIMEOUT: 600
+      PGBOUNCER_SERVER_LIFETIME: 3600
+      PGBOUNCER_SERVER_RESET_QUERY: DISCARD ALL
+      # Query timeout
+      PGBOUNCER_QUERY_TIMEOUT: 120
+      PGBOUNCER_QUERY_WAIT_TIMEOUT: 60
     depends_on:
       postgres:
         condition: service_healthy
