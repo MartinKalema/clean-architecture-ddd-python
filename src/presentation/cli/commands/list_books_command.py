@@ -7,20 +7,29 @@ import click
 from dependency_injector.wiring import inject, Provide
 
 from src.container import Container
+from src.application.queries import ListBooksQuery
 
 if TYPE_CHECKING:
-    from src.application.use_cases.list_books import ListBooks
+    from src.application.queries import ListBooksHandler
+
 
 @click.command()
+@click.option("--available", is_flag=True, help="Show only available books")
+@click.option("--borrowed", is_flag=True, help="Show only borrowed books")
 @inject
 def list(
-    use_case: ListBooks = Provide[Container.list_books_use_case]
+    available: bool,
+    borrowed: bool,
+    handler: ListBooksHandler = Provide[Container.list_books_handler]
 ):
-    books = asyncio.run(use_case.execute())
+    """List all books in the catalog."""
+    query = ListBooksQuery(only_available=available, only_borrowed=borrowed)
+    books = asyncio.run(handler.handle(query))
+
     if not books:
         click.echo("No books found.")
         return
-    
+
     for book in books:
         status = "Borrowed" if book.is_borrowed else "Available"
         click.echo(f"[{status}] {book.title} by {book.author} (ID: {book.id})")

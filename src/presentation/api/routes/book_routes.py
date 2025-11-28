@@ -1,74 +1,51 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from dependency_injector.wiring import inject, Provide
 
 from src.presentation.api.models.book_models import BookCreate, BookResponse, BorrowRequest
 from src.container import Container
-from src.application.use_cases.add_book import AddBook
-from src.application.use_cases.list_books import ListBooks
-from src.application.use_cases.borrow_book import BorrowBook
-from src.application.use_cases.return_book import ReturnBook
-from src.application.use_cases.get_book import GetBook
-from src.application.dto.book_dto import AddBookInputDto, BorrowBookInputDto, ReturnBookInputDto, GetBookInputDto
+from src.application.commands import (
+    AddBookCommand,
+    AddBookHandler,
+    BorrowBookCommand,
+    BorrowBookHandler,
+    ReturnBookCommand,
+    ReturnBookHandler,
+)
+from src.application.queries import (
+    ListBooksQuery,
+    ListBooksHandler,
+    GetBookQuery,
+    GetBookHandler,
+)
 from src.domain.catalog import DomainException
 
 router = APIRouter()
 
 
+# ============================================================
+# Command Endpoints (Write Operations)
+# ============================================================
+
 @router.post("/books", response_model=BookResponse)
 @inject
 async def create_book(
     book: BookCreate,
-    use_case: AddBook = Depends(Provide[Container.add_book_use_case])
+    handler: AddBookHandler = Depends(Provide[Container.add_book_handler])
 ):
+    """Create a new book (Command)."""
     try:
-        input_dto = AddBookInputDto(title=book.title, author=book.author)
-        output_dto = await use_case.execute(input_dto)
+        command = AddBookCommand(title=book.title, author=book.author)
+        result = await handler.handle(command)
         return BookResponse(
-            id=output_dto.id,
-            title=output_dto.title,
-            author=output_dto.author,
-            is_borrowed=output_dto.is_borrowed
+            id=result.id,
+            title=result.title,
+            author=result.author,
+            is_borrowed=result.is_borrowed
         )
     except DomainException as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/books", response_model=List[BookResponse])
-@inject
-async def list_books(
-    use_case: ListBooks = Depends(Provide[Container.list_books_use_case])
-):
-    output_dtos = await use_case.execute()
-    return [
-        BookResponse(
-            id=dto.id,
-            title=dto.title,
-            author=dto.author,
-            is_borrowed=dto.is_borrowed
-        )
-        for dto in output_dtos
-    ]
-
-
-@router.get("/books/{book_id}", response_model=BookResponse)
-@inject
-async def get_book(
-    book_id: str,
-    use_case: GetBook = Depends(Provide[Container.get_book_use_case])
-):
-    try:
-        input_dto = GetBookInputDto(book_id=book_id)
-        output_dto = await use_case.execute(input_dto)
-        return BookResponse(
-            id=output_dto.id,
-            title=output_dto.title,
-            author=output_dto.author,
-            is_borrowed=output_dto.is_borrowed
-        )
-    except DomainException as e:
-        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/books/{book_id}/borrow", response_model=BookResponse)
@@ -76,32 +53,96 @@ async def get_book(
 async def borrow_book(
     book_id: str,
     borrow_request: BorrowRequest,
-    use_case: BorrowBook = Depends(Provide[Container.borrow_book_use_case])
+    handler: BorrowBookHandler = Depends(Provide[Container.borrow_book_handler])
 ):
-    input_dto = BorrowBookInputDto(
-        book_id=book_id,
-        borrower_email=borrow_request.borrower_email
-    )
-    output_dto = await use_case.execute(input_dto)
-    return BookResponse(
-        id=output_dto.id,
-        title=output_dto.title,
-        author=output_dto.author,
-        is_borrowed=output_dto.is_borrowed
-    )
+    """Borrow a book (Command)."""
+    try:
+        command = BorrowBookCommand(
+            book_id=book_id,
+            borrower_email=borrow_request.borrower_email
+        )
+        result = await handler.handle(command)
+        return BookResponse(
+            id=result.id,
+            title=result.title,
+            author=result.author,
+            is_borrowed=result.is_borrowed
+        )
+    except DomainException as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.post("/books/{book_id}/return", response_model=BookResponse)
 @inject
 async def return_book(
     book_id: str,
-    use_case: ReturnBook = Depends(Provide[Container.return_book_use_case])
+    handler: ReturnBookHandler = Depends(Provide[Container.return_book_handler])
 ):
-    input_dto = ReturnBookInputDto(book_id=book_id)
-    output_dto = await use_case.execute(input_dto)
-    return BookResponse(
-        id=output_dto.id,
-        title=output_dto.title,
-        author=output_dto.author,
-        is_borrowed=output_dto.is_borrowed
+    """Return a borrowed book (Command)."""
+    try:
+        command = ReturnBookCommand(book_id=book_id)
+        result = await handler.handle(command)
+        return BookResponse(
+            id=result.id,
+            title=result.title,
+            author=result.author,
+            is_borrowed=result.is_borrowed
+        )
+    except DomainException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============================================================
+# Query Endpoints (Read Operations)
+# ============================================================
+
+@router.get("/books", response_model=List[BookResponse])
+@inject
+async def list_books(
+    only_available: bool = Query(False, description="Filter to only available books"),
+    only_borrowed: bool = Query(False, description="Filter to only borrowed books"),
+    author: Optional[str] = Query(None, description="Filter by author name (partial match)"),
+    title: Optional[str] = Query(None, description="Filter by title (partial match)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    handler: ListBooksHandler = Depends(Provide[Container.list_books_handler])
+):
+    """List books with optional filtering (Query)."""
+    query = ListBooksQuery(
+        only_available=only_available,
+        only_borrowed=only_borrowed,
+        author_contains=author,
+        title_contains=title,
+        limit=limit,
+        offset=offset,
     )
+    results = await handler.handle(query)
+    return [
+        BookResponse(
+            id=book.id,
+            title=book.title,
+            author=book.author,
+            is_borrowed=book.is_borrowed
+        )
+        for book in results
+    ]
+
+
+@router.get("/books/{book_id}", response_model=BookResponse)
+@inject
+async def get_book(
+    book_id: str,
+    handler: GetBookHandler = Depends(Provide[Container.get_book_handler])
+):
+    """Get a single book by ID (Query)."""
+    try:
+        query = GetBookQuery(book_id=book_id)
+        result = await handler.handle(query)
+        return BookResponse(
+            id=result.id,
+            title=result.title,
+            author=result.author,
+            is_borrowed=result.is_borrowed
+        )
+    except DomainException as e:
+        raise HTTPException(status_code=404, detail=str(e))
