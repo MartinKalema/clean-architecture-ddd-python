@@ -12,21 +12,23 @@ class CircuitBreakerFactory:
     """
     Factory for creating and registering circuit breaker instances.
 
+    Callable factory - returns CircuitBreaker instance, not CircuitBreakerFactory.
+
     Handles:
     - Circuit breaker instantiation with configuration
     - Automatic registration with the global registry
 
     Usage in container:
         rabbitmq_cb = providers.Singleton(
-            CircuitBreakerFactory.create,
+            CircuitBreakerFactory,
             name="rabbitmq",
             failure_threshold=config.circuit_breakers.rabbitmq.failure_threshold,
             ...
         )
     """
 
-    @staticmethod
-    def create(
+    def __new__(
+        cls,
         name: str,
         failure_threshold: int,
         success_threshold: int,
