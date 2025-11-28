@@ -5,14 +5,17 @@ The circuit breaker prevents cascading failures when RabbitMQ is unavailable,
 allowing the system to fail fast and potentially use fallback mechanisms
 (like the transactional outbox pattern).
 """
-import json
+from __future__ import annotations
 
-from src.infrastructure.external.rabbitmq_client import RabbitMQClient
-from src.domain.shared_kernel import DomainEvent, Logger
-from src.infrastructure.adapters.resilience import (
-    CircuitBreaker,
-    CircuitBreakerOpenException,
-)
+import json
+from typing import TYPE_CHECKING
+
+from src.infrastructure.adapters.resilience import CircuitBreakerOpenException
+
+if TYPE_CHECKING:
+    from src.infrastructure.external.rabbitmq_client import RabbitMQClient
+    from src.domain.shared_kernel import DomainEvent, Logger
+    from src.infrastructure.adapters.resilience import CircuitBreaker
 
 
 class RabbitMQEventDispatcher:

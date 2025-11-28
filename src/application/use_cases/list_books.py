@@ -1,7 +1,12 @@
-from typing import List
-from src.domain.catalog import UnitOfWork
-from src.domain.shared_kernel import Logger
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List
+
 from src.application.dto.book_dto import BookOutputDto
+
+if TYPE_CHECKING:
+    from src.domain.catalog import UnitOfWork
+    from src.domain.shared_kernel import Logger
 
 
 class ListBooks:

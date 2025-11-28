@@ -5,12 +5,17 @@ The circuit breaker prevents cascading failures when SendGrid is unavailable,
 allowing the system to queue emails for later delivery or use fallback
 notification mechanisms.
 """
-from src.infrastructure.external.sendgrid_client import SendGridClient
-from src.domain.shared_kernel import EmailService, Logger
-from src.infrastructure.adapters.resilience import (
-    CircuitBreaker,
-    CircuitBreakerOpenException,
-)
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from src.domain.shared_kernel import EmailService
+from src.infrastructure.adapters.resilience import CircuitBreakerOpenException
+
+if TYPE_CHECKING:
+    from src.infrastructure.external.sendgrid_client import SendGridClient
+    from src.domain.shared_kernel import Logger
+    from src.infrastructure.adapters.resilience import CircuitBreaker
 
 
 class SendGridEmailService(EmailService):

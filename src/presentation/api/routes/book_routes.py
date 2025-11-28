@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
 from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException
 from dependency_injector.wiring import inject, Provide
 
 from src.presentation.api.models.book_models import BookCreate, BookResponse, BorrowRequest

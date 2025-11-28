@@ -1,6 +1,14 @@
-from src.domain.catalog import UnitOfWork, Book, BookId, Title, Author
-from src.domain.shared_kernel import Logger
-from src.application.dto.book_dto import AddBookInputDto, AddBookOutputDto
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from src.domain.catalog import Book, BookId, Title, Author
+from src.application.dto.book_dto import AddBookOutputDto
+
+if TYPE_CHECKING:
+    from src.domain.catalog import UnitOfWork
+    from src.domain.shared_kernel import Logger
+    from src.application.dto.book_dto import AddBookInputDto
 
 
 class AddBook:

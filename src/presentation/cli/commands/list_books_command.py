@@ -1,8 +1,15 @@
-import click
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING
+
+import click
 from dependency_injector.wiring import inject, Provide
+
 from src.container import Container
-from src.application.use_cases.list_books import ListBooks
+
+if TYPE_CHECKING:
+    from src.application.use_cases.list_books import ListBooks
 
 @click.command()
 @inject
