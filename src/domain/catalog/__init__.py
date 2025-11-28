@@ -6,7 +6,7 @@ Manages the library's book catalog including borrowing behavior.
 from .entities import Book
 from .value_objects import BookId, Title, Author, ISBN
 from .events import BookAddedToCatalog, BookRemovedFromCatalog, BookBorrowed, BookReturned
-from .interfaces import BookRepository, UnitOfWork
+from .interfaces import BookRepository, BookQueryRepository, UnitOfWork
 from src.domain.shared_kernel.exceptions import DomainException, ValidationException
 from .exceptions import (
     CatalogException,
@@ -32,6 +32,7 @@ __all__ = [
     "BookReturned",
     # Interfaces
     "BookRepository",
+    "BookQueryRepository",
     "UnitOfWork",
     # Exceptions
     "DomainException",

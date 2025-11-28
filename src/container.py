@@ -4,22 +4,41 @@ Dependency Injection Container.
 This is the composition root - the only place where dependencies are wired together.
 The container should ONLY contain wiring logic, not creation/business logic.
 All factory logic belongs in the infrastructure layer.
+
+CQRS Architecture:
+- Commands: Write operations (AddBook, BorrowBook, ReturnBook)
+- Queries: Read operations (ListBooks, GetBook)
 """
 from dependency_injector import containers, providers
 
 from src.infrastructure.configurations.settings import load_config
 from src.infrastructure.external.database import Database
 
+# Legacy use cases (kept for backward compatibility)
 from src.application.use_cases.add_book import AddBook
 from src.application.use_cases.list_books import ListBooks
 from src.application.use_cases.borrow_book import BorrowBook
 from src.application.use_cases.return_book import ReturnBook
 from src.application.use_cases.get_book import GetBook
 
+# CQRS Command Handlers
+from src.application.commands import (
+    AddBookHandler,
+    BorrowBookHandler,
+    ReturnBookHandler,
+)
+
+# CQRS Query Handlers
+from src.application.queries import (
+    ListBooksHandler,
+    GetBookHandler,
+)
+
 from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import RabbitMQEventDispatcher
 from src.infrastructure.adapters.email.sendgrid_email_service import SendGridEmailService
 from src.application.handlers.book_handlers import BookHandlers
 from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
+from src.infrastructure.adapters.repositories.sql_book_query_repository import SQLBookQueryRepository
 
 from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
@@ -33,8 +52,9 @@ class Container(containers.DeclarativeContainer):
     """
     Application dependency injection container.
 
-    Wires all dependencies together. No business logic should be here -
-    only provider declarations that connect components.
+    Wires all dependencies together following CQRS pattern:
+    - Command handlers for write operations
+    - Query handlers for read operations
     """
 
     wiring_config = containers.WiringConfiguration(modules=[
@@ -126,7 +146,7 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # Handlers
+    # Event Handlers
     book_handlers = providers.Singleton(
         BookHandlers,
         email_service=email_service,
@@ -134,14 +154,59 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # Unit of Work
+    # Unit of Work (Write Side)
     uow = providers.Factory(
         SqlAlchemyUnitOfWork,
         session_factory=session_factory,
         event_dispatcher=event_dispatcher
     )
 
-    # Use Cases
+    # Query Repository (Read Side - CQRS)
+    book_query_repository = providers.Singleton(
+        SQLBookQueryRepository,
+        session_factory=session_factory
+    )
+
+    # ============================================================
+    # CQRS Command Handlers (Write Side)
+    # ============================================================
+    add_book_handler = providers.Factory(
+        AddBookHandler,
+        uow=uow,
+        logger=logger
+    )
+
+    borrow_book_handler = providers.Factory(
+        BorrowBookHandler,
+        uow=uow,
+        logger=logger
+    )
+
+    return_book_handler = providers.Factory(
+        ReturnBookHandler,
+        uow=uow,
+        logger=logger
+    )
+
+    # ============================================================
+    # CQRS Query Handlers (Read Side)
+    # ============================================================
+    list_books_handler = providers.Factory(
+        ListBooksHandler,
+        query_repository=book_query_repository,
+        logger=logger
+    )
+
+    get_book_handler = providers.Factory(
+        GetBookHandler,
+        query_repository=book_query_repository,
+        logger=logger
+    )
+
+    # ============================================================
+    # Legacy Use Cases (backward compatibility)
+    # These can be deprecated once all consumers use CQRS handlers
+    # ============================================================
     add_book_use_case = providers.Factory(
         AddBook,
         uow=uow,
