@@ -15,12 +15,13 @@ class LoggerFactory:
     """
     Factory for creating logger instances based on configuration.
 
+    Callable factory - returns Logger instance, not LoggerFactory.
+
     Usage in container:
-        logger = providers.Singleton(LoggerFactory.create, config=config)
+        logger = providers.Singleton(LoggerFactory, config=config)
     """
 
-    @staticmethod
-    def create(config: Dict[str, Any]) -> Logger:
+    def __new__(cls, config: Dict[str, Any]) -> Logger:
         """
         Create a logger instance based on configuration.
 

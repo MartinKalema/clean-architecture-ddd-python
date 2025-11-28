@@ -50,7 +50,7 @@ class Container(containers.DeclarativeContainer):
 
     # Logger - created via factory based on config
     logger = providers.Singleton(
-        LoggerFactory.create,
+        LoggerFactory,
         config=config
     )
 
@@ -84,7 +84,7 @@ class Container(containers.DeclarativeContainer):
 
     # Circuit Breakers - created via factory, configured per service
     rabbitmq_circuit_breaker = providers.Singleton(
-        CircuitBreakerFactory.create,
+        CircuitBreakerFactory,
         name="rabbitmq",
         failure_threshold=config.circuit_breakers.rabbitmq.failure_threshold,
         success_threshold=config.circuit_breakers.rabbitmq.success_threshold,
@@ -93,7 +93,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     sendgrid_circuit_breaker = providers.Singleton(
-        CircuitBreakerFactory.create,
+        CircuitBreakerFactory,
         name="sendgrid",
         failure_threshold=config.circuit_breakers.sendgrid.failure_threshold,
         success_threshold=config.circuit_breakers.sendgrid.success_threshold,
