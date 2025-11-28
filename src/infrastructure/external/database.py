@@ -41,6 +41,9 @@ class Database:
                 "pool_timeout": pool_timeout,
                 "pool_recycle": pool_recycle,
             })
+            # Disable statement cache for PgBouncer compatibility
+            if "postgresql" in self.db_url:
+                engine_kwargs["connect_args"] = {"statement_cache_size": 0}
 
         self.engine = create_async_engine(self.db_url, **engine_kwargs)
         self.session_factory = async_sessionmaker(
@@ -55,10 +58,8 @@ class Database:
         """Convert database URL to use async driver."""
         if url.startswith("sqlite://"):
             return url.replace("sqlite://", "sqlite+aiosqlite://")
-        elif url.startswith("postgresql://"):
-            return url.replace("postgresql://", "postgresql+asyncpg://")
-        elif url.startswith("postgres://"):
-            return url.replace("postgres://", "postgresql+asyncpg://")
+        elif url.startswith("postgresql://") or url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+asyncpg://").replace("postgresql://", "postgresql+asyncpg://")
         return url
 
     async def init_models(self):
