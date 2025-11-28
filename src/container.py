@@ -95,22 +95,22 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # Circuit Breakers - configured per external service
+    # Circuit Breakers - configured per external service via settings
     rabbitmq_circuit_breaker = providers.Singleton(
         create_circuit_breaker,
         name="rabbitmq",
-        failure_threshold=5,
-        success_threshold=2,
-        timeout=30.0,
+        failure_threshold=config.circuit_breakers.rabbitmq.failure_threshold,
+        success_threshold=config.circuit_breakers.rabbitmq.success_threshold,
+        timeout=config.circuit_breakers.rabbitmq.timeout,
         logger=logger,
     )
 
     sendgrid_circuit_breaker = providers.Singleton(
         create_circuit_breaker,
         name="sendgrid",
-        failure_threshold=3,
-        success_threshold=2,
-        timeout=60.0,
+        failure_threshold=config.circuit_breakers.sendgrid.failure_threshold,
+        success_threshold=config.circuit_breakers.sendgrid.success_threshold,
+        timeout=config.circuit_breakers.sendgrid.timeout,
         logger=logger,
     )
 

@@ -16,3 +16,14 @@ templates:
   dir: "src/infrastructure/templates"
   map:
     book_borrowed: "email/book_borrowed.html"
+
+# Circuit breaker configuration per external service
+circuit_breakers:
+  rabbitmq:
+    failure_threshold: 5      # Open after N consecutive failures
+    success_threshold: 2      # Close after N successes in half-open
+    timeout: 30.0             # Seconds before testing recovery
+  sendgrid:
+    failure_threshold: 3      # Email is critical, fail faster
+    success_threshold: 2
+    timeout: 60.0             # Email services are slower to recover
