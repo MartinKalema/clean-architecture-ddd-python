@@ -19,6 +19,14 @@ Environment Variables:
     LOG_FORMAT: Logging format (json or standard)
     LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
     ENVIRONMENT: Environment name (development, staging, production)
+
+    Circuit Breaker Configuration (per service):
+    CB_RABBITMQ_FAILURE_THRESHOLD: Failures before opening (default: 5)
+    CB_RABBITMQ_SUCCESS_THRESHOLD: Successes to close (default: 2)
+    CB_RABBITMQ_TIMEOUT: Seconds before retry (default: 30)
+    CB_SENDGRID_FAILURE_THRESHOLD: Failures before opening (default: 3)
+    CB_SENDGRID_SUCCESS_THRESHOLD: Successes to close (default: 2)
+    CB_SENDGRID_TIMEOUT: Seconds before retry (default: 60)
 """
 import os
 import yaml
@@ -99,6 +107,36 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
             "map": yaml_config.get("templates", {}).get("map", {
                 "book_borrowed": "email/book_borrowed.html"
             }),
+        },
+        "circuit_breakers": {
+            "rabbitmq": {
+                "failure_threshold": int(_get_env(
+                    "CB_RABBITMQ_FAILURE_THRESHOLD",
+                    yaml_config.get("circuit_breakers", {}).get("rabbitmq", {}).get("failure_threshold", 5)
+                )),
+                "success_threshold": int(_get_env(
+                    "CB_RABBITMQ_SUCCESS_THRESHOLD",
+                    yaml_config.get("circuit_breakers", {}).get("rabbitmq", {}).get("success_threshold", 2)
+                )),
+                "timeout": float(_get_env(
+                    "CB_RABBITMQ_TIMEOUT",
+                    yaml_config.get("circuit_breakers", {}).get("rabbitmq", {}).get("timeout", 30.0)
+                )),
+            },
+            "sendgrid": {
+                "failure_threshold": int(_get_env(
+                    "CB_SENDGRID_FAILURE_THRESHOLD",
+                    yaml_config.get("circuit_breakers", {}).get("sendgrid", {}).get("failure_threshold", 3)
+                )),
+                "success_threshold": int(_get_env(
+                    "CB_SENDGRID_SUCCESS_THRESHOLD",
+                    yaml_config.get("circuit_breakers", {}).get("sendgrid", {}).get("success_threshold", 2)
+                )),
+                "timeout": float(_get_env(
+                    "CB_SENDGRID_TIMEOUT",
+                    yaml_config.get("circuit_breakers", {}).get("sendgrid", {}).get("timeout", 60.0)
+                )),
+            },
         },
     }
 

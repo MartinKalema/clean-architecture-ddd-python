@@ -29,3 +29,14 @@ class TemplateRenderingException(InfrastructureException):
 class ConfigurationException(InfrastructureException):
     """Raised when a configuration error occurs."""
     pass
+
+
+class CircuitBreakerOpenException(InfrastructureException):
+    """Raised when circuit breaker is open and rejecting requests."""
+    def __init__(self, name: str, time_remaining: float):
+        self.name = name
+        self.time_remaining = time_remaining
+        super().__init__(
+            f"Circuit breaker '{name}' is OPEN. "
+            f"Retry in {time_remaining:.1f} seconds."
+        )
