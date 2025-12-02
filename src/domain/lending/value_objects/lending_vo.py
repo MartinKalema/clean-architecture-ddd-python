@@ -59,7 +59,7 @@ class DueDate:
 class LoanStatus(Enum):
     """Status of a loan throughout its lifecycle."""
 
-    ACTIVE = "active"  # Book is currently borrowed
-    RETURNED = "returned"  # Book has been returned
-    OVERDUE = "overdue"  # Book is past due date
-    LOST = "lost"  # Book reported lost
+    ACTIVE = "active"
+    RETURNED = "returned"
+    OVERDUE = "overdue"
+    LOST = "lost"

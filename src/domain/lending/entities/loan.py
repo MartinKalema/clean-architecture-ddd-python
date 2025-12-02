@@ -35,10 +35,10 @@ class Loan(AggregateRoot):
     - A loan can only be extended if it's active and not overdue
     """
 
-    patron_id: str  # Reference to Patron context
-    patron_email: str  # Denormalized for notifications
-    catalog_book_id: str  # Reference to Catalog context
-    book_title: str  # Denormalized for display
+    patron_id: str
+    patron_email: str
+    catalog_book_id: str
+    book_title: str
     due_date: DueDate
     id: LoanId = field(default_factory=LoanId.next_id)
     status: LoanStatus = LoanStatus.ACTIVE

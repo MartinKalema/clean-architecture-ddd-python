@@ -34,8 +34,8 @@ class LoanableBook(AggregateRoot):
     that the Catalog context doesn't know about.
     """
 
-    catalog_book_id: str  # Reference to Catalog context (not a value object here)
-    title: str  # Denormalized for display (could be fetched via ACL)
+    catalog_book_id: str
+    title: str
     is_available: bool = True
     current_loan_id: Optional[str] = None
 

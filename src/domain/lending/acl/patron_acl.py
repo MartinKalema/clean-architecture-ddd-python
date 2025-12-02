@@ -21,10 +21,10 @@ class BorrowerInfo:
     patron_id: str
     email: str
     name: str
-    can_borrow: bool  # Has borrowing privileges
-    borrowing_limit: int  # Max books they can borrow
-    loan_duration_days: int  # How long they can keep books
-    current_loan_count: int  # How many books they currently have
+    can_borrow: bool
+    borrowing_limit: int
+    loan_duration_days: int
+    current_loan_count: int
 
 
 class PatronACL(Protocol):
