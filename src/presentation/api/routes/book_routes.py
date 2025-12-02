@@ -5,7 +5,7 @@ from dependency_injector.wiring import inject, Provide
 
 from src.presentation.api.models.book_models import BookCreate, BookResponse, BorrowRequest
 from src.container import Container
-from src.application.commands import (
+from src.application.command_handlers import (
     AddBookCommand,
     AddBookHandler,
     BorrowBookCommand,
@@ -13,7 +13,7 @@ from src.application.commands import (
     ReturnBookCommand,
     ReturnBookHandler,
 )
-from src.application.queries import (
+from src.application.query_handlers import (
     ListBooksQuery,
     ListBooksHandler,
     GetBookQuery,

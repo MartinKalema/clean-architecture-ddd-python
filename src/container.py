@@ -15,14 +15,14 @@ from src.infrastructure.configurations.settings import load_config
 from src.infrastructure.external.database import Database
 
 # CQRS Command Handlers
-from src.application.commands import (
+from src.application.command_handlers import (
     AddBookHandler,
     BorrowBookHandler,
     ReturnBookHandler,
 )
 
 # CQRS Query Handlers
-from src.application.queries import (
+from src.application.query_handlers import (
     ListBooksHandler,
     GetBookHandler,
 )

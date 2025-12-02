@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from unittest.mock import MagicMock
 
 from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
-from src.application.commands import (
+from src.application.command_handlers import (
     AddBookCommand,
     AddBookHandler,
     BorrowBookCommand,
