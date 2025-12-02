@@ -79,8 +79,6 @@ class SendGridEmailService(EmailService):
             EmailServiceException: If send fails
         """
         try:
-            # Execute with circuit breaker protection
-            # Note: SendGrid client is synchronous, but circuit breaker handles it
             await self._circuit_breaker.execute(
                 self._do_send_email,
                 to_email=to_email,
@@ -92,7 +90,6 @@ class SendGridEmailService(EmailService):
             )
 
         except CircuitBreakerOpenException as e:
-            # Circuit is open - fail fast
             self.logger.warning(
                 f"Circuit breaker OPEN for SendGrid. Email to {to_email} not sent. "
                 f"Retry in {e.time_remaining:.1f}s. Consider queueing for later."

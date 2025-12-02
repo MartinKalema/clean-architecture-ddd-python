@@ -51,22 +51,18 @@ class SqlAlchemyUnitOfWork:
         if not self._session:
             return
 
-        # Collect events before commit
         events = self._collect_events()
 
-        # Store events in outbox (same transaction as aggregate changes)
         if self.use_outbox and self._outbox and events:
             await self._outbox.add_many(events)
 
         await self._session.commit()
 
-        # If not using outbox, dispatch events directly (legacy behavior)
         if not self.use_outbox and self.event_dispatcher:
             for event in events:
                 try:
                     await self.event_dispatcher.dispatch(event)
                 except Exception:
-                    # Log but don't fail the commit - events are lost in this mode
                     pass
 
     async def rollback(self):

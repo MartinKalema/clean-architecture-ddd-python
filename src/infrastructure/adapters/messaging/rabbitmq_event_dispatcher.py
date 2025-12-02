@@ -79,7 +79,6 @@ class RabbitMQEventDispatcher:
         event_name = event.__class__.__name__
 
         try:
-            # Execute with circuit breaker protection
             await self._circuit_breaker.execute(
                 self._do_publish,
                 routing_key=event_name,
@@ -88,7 +87,6 @@ class RabbitMQEventDispatcher:
             self.logger.info(f"Dispatched event: {event_name}")
 
         except CircuitBreakerOpenException as e:
-            # Circuit is open - fail fast
             self.logger.warning(
                 f"Circuit breaker OPEN for RabbitMQ. Event {event_name} not dispatched. "
                 f"Retry in {e.time_remaining:.1f}s. Use outbox pattern for guaranteed delivery."
@@ -100,7 +98,6 @@ class RabbitMQEventDispatcher:
                 EventDispatcherException,
             )
             self.logger.error(f"Failed to dispatch event {event_name}", exception=e)
-            # Mark connection as potentially stale
             self._connected = False
             raise EventDispatcherException(
                 f"Failed to dispatch event {event_name}: {str(e)}",

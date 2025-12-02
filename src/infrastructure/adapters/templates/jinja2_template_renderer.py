@@ -16,7 +16,6 @@ class Jinja2TemplateRenderer:
 
     def render(self, template: Any, context: Dict[str, Any]) -> str:
         if isinstance(template, EmailTemplate):
-            # Look up file path from config map using enum value
             template_name = self.template_map.get(template.value)
             if not template_name:
                 self.logger.error(f"No template mapped for {template.value}")

@@ -8,7 +8,6 @@ Provides:
 - (Future) Bulkhead: Isolate failures
 - (Future) Rate Limiter: Prevent overload
 """
-# Re-export from canonical location for convenience
 from src.infrastructure.exceptions import CircuitBreakerOpenException
 
 from .circuit_breaker import (

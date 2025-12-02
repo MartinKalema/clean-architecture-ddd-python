@@ -40,9 +40,9 @@ from src.infrastructure.exceptions import CircuitBreakerOpenException
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing fast
-    HALF_OPEN = "half_open"  # Testing recovery
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
 
 
 @dataclass
@@ -51,7 +51,7 @@ class CircuitBreakerMetrics:
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0
-    rejected_requests: int = 0  # Requests rejected due to open circuit
+    rejected_requests: int = 0
     last_failure_time: Optional[float] = None
     last_success_time: Optional[float] = None
     state_changes: int = 0
@@ -126,14 +126,12 @@ class CircuitBreaker:
         self.fallback = fallback
         self._logger = logger or logging.getLogger(__name__)
 
-        # State
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._success_count = 0
         self._last_failure_time: Optional[float] = None
         self._lock = asyncio.Lock()
 
-        # Metrics
         self.metrics = CircuitBreakerMetrics()
 
     @property
@@ -189,12 +187,10 @@ class CircuitBreaker:
                 self._failure_count = 0
                 self._success_count = 0
         elif self._state == CircuitState.CLOSED:
-            # Reset failure count on success
             self._failure_count = 0
 
     async def _handle_failure(self, exception: Exception) -> None:
         """Handle a failed call."""
-        # Don't count excluded exceptions
         if isinstance(exception, self.excluded_exceptions):
             return
 
@@ -203,7 +199,6 @@ class CircuitBreaker:
         self._failure_count += 1
 
         if self._state == CircuitState.HALF_OPEN:
-            # Any failure in half-open reopens the circuit
             await self._transition_to(CircuitState.OPEN)
             self._success_count = 0
         elif self._state == CircuitState.CLOSED:
@@ -222,7 +217,6 @@ class CircuitBreaker:
                 return True
             return False
 
-        # HALF_OPEN: allow limited requests
         return True
 
     async def execute(
@@ -301,7 +295,7 @@ class CircuitBreaker:
                 await self._handle_success()
             elif exc_val is not None:
                 await self._handle_failure(exc_val)
-        return False  # Don't suppress exceptions
+        return False
 
     def reset(self) -> None:
         """Manually reset the circuit breaker to closed state."""

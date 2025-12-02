@@ -24,7 +24,6 @@ class DomainEvent:
         correlation_id: Optional ID to correlate related events
     """
 
-    # Use kw_only=True so child classes can have required positional fields
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()), kw_only=True)
     occurred_at: datetime = field(default_factory=datetime.now, kw_only=True)
     correlation_id: Optional[str] = field(default=None, kw_only=True)

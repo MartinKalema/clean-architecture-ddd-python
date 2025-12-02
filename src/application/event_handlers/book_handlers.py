@@ -32,14 +32,12 @@ class BookHandlers:
             event: Either a BookBorrowed domain event or a dict payload from the consumer
         """
         try:
-            # Handle both domain event and dict payload
             if isinstance(event, dict):
                 title = event.get("title")
                 borrower_email = event.get("borrower_email")
                 borrowed_at = event.get("borrowed_at")
                 return_due_date = event.get("return_due_date")
 
-                # Parse date strings if needed
                 if isinstance(borrowed_at, str):
                     borrowed_at = datetime.fromisoformat(borrowed_at.replace("Z", "+00:00"))
                 if isinstance(return_due_date, str):
@@ -52,7 +50,6 @@ class BookHandlers:
 
             self.logger.info(f"Handling BookBorrowed event for book: {title}")
 
-            # Render email content using template
             email_content = self.template_renderer.render(
                 EmailTemplate.BOOK_BORROWED,
                 context={
@@ -90,7 +87,6 @@ class BookHandlers:
                 book_id = getattr(event, "book_id", None)
 
             self.logger.info(f"Handling BookReturned event for book: {book_id}")
-            # Could send notification, update statistics, etc.
 
         except Exception as e:
             self.logger.error("Error handling BookReturned event", exception=e)

@@ -26,23 +26,19 @@ class Database:
         """
         self.db_url = self._to_async_url(db_url)
 
-        # Build engine kwargs based on database type
         engine_kwargs: Dict[str, Any] = {
-            "pool_pre_ping": True,  # Verify connections before use
+            "pool_pre_ping": True,
         }
 
         if "sqlite" in self.db_url:
-            # SQLite doesn't support connection pooling the same way
             engine_kwargs["connect_args"] = {"check_same_thread": False}
         else:
-            # PostgreSQL connection pool settings
             engine_kwargs.update({
                 "pool_size": pool_size,
                 "max_overflow": max_overflow,
                 "pool_timeout": pool_timeout,
                 "pool_recycle": pool_recycle,
             })
-            # Disable statement cache for PgBouncer compatibility
             if "postgresql" in self.db_url:
                 engine_kwargs["connect_args"] = {"statement_cache_size": 0}
 
@@ -52,7 +48,7 @@ class Database:
             autoflush=False,
             bind=self.engine,
             class_=AsyncSession,
-            expire_on_commit=False,  # Prevent lazy loading issues after commit
+            expire_on_commit=False,
         )
 
     def _to_async_url(self, url: str) -> str:

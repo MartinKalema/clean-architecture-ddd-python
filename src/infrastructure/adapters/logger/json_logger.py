@@ -30,11 +30,9 @@ class JsonFormatter(logging.Formatter):
             "service": self.service_name,
         }
 
-        # Add extra fields if present
         if hasattr(record, "extra"):
             log_entry.update(record.extra)
 
-        # Add exception info if present
         if record.exc_info:
             log_entry["exception"] = {
                 "type": record.exc_info[0].__name__ if record.exc_info[0] else None,
@@ -42,7 +40,6 @@ class JsonFormatter(logging.Formatter):
                 "stacktrace": traceback.format_exception(*record.exc_info) if record.exc_info[0] else None
             }
 
-        # Add source location
         log_entry["source"] = {
             "file": record.pathname,
             "line": record.lineno,

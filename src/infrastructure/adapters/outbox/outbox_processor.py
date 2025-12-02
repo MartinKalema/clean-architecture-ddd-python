@@ -43,7 +43,6 @@ class OutboxProcessor:
             try:
                 processed = await self._process_batch()
                 if processed == 0:
-                    # No messages to process, wait before polling again
                     await asyncio.sleep(self.poll_interval)
             except Exception as e:
                 self.logger.error("Error processing outbox batch", exception=e)

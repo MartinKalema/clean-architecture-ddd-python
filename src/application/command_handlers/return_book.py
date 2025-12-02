@@ -47,7 +47,6 @@ class ReturnBookHandler:
                 self.logger.warning(f"Attempted to return non-existent book: {command.book_id}")
                 raise BookNotFoundException(command.book_id)
 
-            # Domain logic - emits BookReturned event
             book.return_book()
 
             await self.uow.books.update(book)

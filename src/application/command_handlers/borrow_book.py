@@ -50,7 +50,6 @@ class BorrowBookHandler:
                 self.logger.warning(f"Attempted to borrow non-existent book: {command.book_id}")
                 raise BookNotFoundException(command.book_id)
 
-            # Domain logic - emits BookBorrowed event
             book.borrow(command.borrower_email)
 
             await self.uow.books.update(book)
