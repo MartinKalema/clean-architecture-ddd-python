@@ -29,7 +29,7 @@ from src.application.queries import (
 
 from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import RabbitMQEventDispatcher
 from src.infrastructure.adapters.email.sendgrid_email_service import SendGridEmailService
-from src.application.handlers.book_handlers import BookHandlers
+from src.application.event_handlers.book_handlers import BookHandlers
 from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 from src.infrastructure.adapters.repositories.sql_book_query_repository import SQLBookQueryRepository
 

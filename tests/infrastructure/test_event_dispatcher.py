@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import RabbitMQEventDispatcher
 from src.infrastructure.adapters.email.sendgrid_email_service import SendGridEmailService
 from src.infrastructure.adapters.resilience import CircuitBreaker
-from src.application.handlers.book_handlers import BookHandlers
+from src.application.event_handlers.book_handlers import BookHandlers
 from src.domain.catalog import BookBorrowed
 from src.domain.shared_kernel import EmailTemplate
 
