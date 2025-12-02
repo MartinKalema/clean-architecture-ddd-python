@@ -14,9 +14,11 @@ class RabbitMQClient:
     async def connect(self, exchange_name: str):
         if not self.connection:
             try:
-                self.connection = await aio_pika.connect_robust(self.amqp_url)
-                self.channel = await self.connection.channel()
-                self.exchange = await self.channel.declare_exchange(
+                connection = await aio_pika.connect_robust(self.amqp_url)
+                self.connection = connection
+                channel = await connection.channel()
+                self.channel = channel
+                self.exchange = await channel.declare_exchange(
                     exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
                 )
                 self.logger.info(f"Connected to RabbitMQ exchange: {exchange_name}")

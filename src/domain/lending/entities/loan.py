@@ -8,20 +8,20 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from src.domain.shared_kernel import AggregateRoot
-from src.domain.lending.value_objects import LoanId, DueDate, LoanStatus
+from src.domain.lending.events.lending_events import (
+    BookBorrowed,
+    BookOverdue,
+    BookReturned,
+    LoanExtended,
+)
 from src.domain.lending.exceptions import (
+    CannotExtendOverdueLoanException,
     LoanAlreadyReturnedException,
     LoanNotActiveException,
     LoanNotOverdueException,
-    CannotExtendOverdueLoanException,
 )
-from src.domain.lending.events.lending_events import (
-    BookBorrowed,
-    BookReturned,
-    BookOverdue,
-    LoanExtended,
-)
+from src.domain.lending.value_objects import DueDate, LoanId, LoanStatus
+from src.domain.shared_kernel import AggregateRoot
 
 
 @dataclass

@@ -1,5 +1,6 @@
 import pytest
-from src.domain.catalog import BookId, Title, Author, ValidationException
+
+from src.domain.catalog import Author, BookId, Title, ValidationException
 
 
 def test_book_id_creation():

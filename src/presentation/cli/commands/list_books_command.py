@@ -4,10 +4,10 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import click
-from dependency_injector.wiring import inject, Provide
+from dependency_injector.wiring import Provide, inject
 
-from src.container import Container
 from src.application.query_handlers import ListBooksQuery
+from src.container import Container
 
 if TYPE_CHECKING:
     from src.application.query_handlers import ListBooksHandler

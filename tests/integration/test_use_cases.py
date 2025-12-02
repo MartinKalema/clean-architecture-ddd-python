@@ -1,11 +1,11 @@
 """
 Integration tests for CQRS Command Handlers.
 """
-import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker
 from unittest.mock import MagicMock
 
-from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
+import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
 from src.application.command_handlers import (
     AddBookCommand,
     AddBookHandler,
@@ -13,6 +13,9 @@ from src.application.command_handlers import (
     BorrowBookHandler,
 )
 from src.domain.catalog import BookAlreadyBorrowedException
+from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import (
+    SqlAlchemyUnitOfWork,
+)
 
 
 @pytest.mark.asyncio

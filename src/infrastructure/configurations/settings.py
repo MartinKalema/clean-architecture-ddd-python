@@ -29,8 +29,9 @@ Environment Variables:
     CB_SENDGRID_TIMEOUT: Seconds before retry (default: 60)
 """
 import os
-import yaml
-from typing import Dict, Any
+from typing import Any, Dict
+
+import yaml  # type: ignore[import-untyped]
 
 
 def _get_env(key: str, default: Any = None) -> Any:

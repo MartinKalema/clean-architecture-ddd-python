@@ -1,6 +1,7 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from typing import Any, Dict
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
 
 
 class Database:
@@ -26,7 +27,7 @@ class Database:
         self.db_url = self._to_async_url(db_url)
 
         # Build engine kwargs based on database type
-        engine_kwargs = {
+        engine_kwargs: Dict[str, Any] = {
             "pool_pre_ping": True,  # Verify connections before use
         }
 

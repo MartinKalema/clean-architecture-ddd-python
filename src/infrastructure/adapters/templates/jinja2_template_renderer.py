@@ -1,7 +1,8 @@
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from typing import Dict, Any
+from typing import Any, Dict
 
-from src.domain.shared_kernel import TemplateRenderer, Logger, EmailTemplate
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from src.domain.shared_kernel import EmailTemplate, Logger
 
 
 class Jinja2TemplateRenderer:
@@ -27,6 +28,8 @@ class Jinja2TemplateRenderer:
             jinja_template = self.env.get_template(template_name)
             return jinja_template.render(**context)
         except Exception as e:
-            from src.infrastructure.exceptions.infrastructure_exceptions import TemplateRenderingException
+            from src.infrastructure.exceptions.infrastructure_exceptions import (
+                TemplateRenderingException,
+            )
             self.logger.error(f"Failed to render template {template_name}", exception=e)
             raise TemplateRenderingException(f"Failed to render template {template_name}: {str(e)}", original_exception=e)

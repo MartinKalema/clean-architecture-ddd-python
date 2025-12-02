@@ -12,18 +12,18 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from src.domain.shared_kernel import AggregateRoot, EmailAddress
-from src.domain.patron.value_objects import PatronId, PatronName, MembershipTier
-from src.domain.patron.exceptions import (
-    PatronAlreadySuspendedException,
-    PatronNotSuspendedException,
-    InvalidTierUpgradeException,
-)
 from src.domain.patron.events.patron_events import (
     PatronRegistered,
-    PatronSuspended,
     PatronReinstated,
+    PatronSuspended,
 )
+from src.domain.patron.exceptions import (
+    InvalidTierUpgradeException,
+    PatronAlreadySuspendedException,
+    PatronNotSuspendedException,
+)
+from src.domain.patron.value_objects import MembershipTier, PatronId, PatronName
+from src.domain.shared_kernel import AggregateRoot, EmailAddress
 
 
 @dataclass

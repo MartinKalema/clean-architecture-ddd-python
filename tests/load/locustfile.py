@@ -19,10 +19,16 @@ Usage:
     locust -f tests/load/locustfile.py --exclude-tags admin  # Exclude admin ops
 """
 import math
+
 from locust import LoadTestShape
 
 # Import all user scenarios - Locust auto-discovers HttpUser subclasses
-from tests.load.scenarios import BrowserUser, BorrowerUser, LibrarianUser, StressTestUser
+from tests.load.scenarios import (
+    BorrowerUser,
+    BrowserUser,
+    LibrarianUser,
+    StressTestUser,
+)
 
 # Re-export for Locust discovery
 __all__ = ["BrowserUser", "BorrowerUser", "LibrarianUser", "StressTestUser"]

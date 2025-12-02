@@ -4,9 +4,8 @@ RabbitMQ Event Consumer
 Consumes domain events from RabbitMQ and dispatches them to handlers.
 This runs as a separate worker process.
 """
-import asyncio
 import json
-from typing import Dict, Callable, Awaitable, Any
+from typing import Awaitable, Callable, Dict
 
 import aio_pika
 from aio_pika import IncomingMessage
@@ -54,21 +53,23 @@ class EventConsumer:
         self._running = True
 
         try:
-            self._connection = await aio_pika.connect_robust(self.amqp_url)
-            self._channel = await self._connection.channel()
+            connection = await aio_pika.connect_robust(self.amqp_url)
+            self._connection = connection
+            channel = await connection.channel()
+            self._channel = channel
 
             # Set QoS for fair dispatch
-            await self._channel.set_qos(prefetch_count=10)
+            await channel.set_qos(prefetch_count=10)
 
             # Declare exchange
-            exchange = await self._channel.declare_exchange(
+            exchange = await channel.declare_exchange(
                 self.exchange_name,
                 aio_pika.ExchangeType.TOPIC,
                 durable=True
             )
 
             # Declare and bind queue
-            queue = await self._channel.declare_queue(
+            queue = await channel.declare_queue(
                 self.queue_name,
                 durable=True
             )
@@ -117,8 +118,8 @@ class EventConsumer:
                     self.logger.warning(f"No handler registered for event: {event_type}")
 
             except json.JSONDecodeError as e:
-                self.logger.error(f"Failed to decode message", exception=e)
+                self.logger.error("Failed to decode message", exception=e)
             except Exception as e:
-                self.logger.error(f"Error processing message", exception=e)
+                self.logger.error("Error processing message", exception=e)
                 # Message will be nacked and requeued
                 raise

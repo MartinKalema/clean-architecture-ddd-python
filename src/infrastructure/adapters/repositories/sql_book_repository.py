@@ -1,12 +1,18 @@
 from typing import Dict, List, Optional
-from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
 
-from src.domain.catalog import Book, BookId, Title, Author, ConcurrentModificationException
-from src.infrastructure.external.database import Base
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, select, update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.domain.catalog import (
+    Author,
+    Book,
+    BookId,
+    ConcurrentModificationException,
+    Title,
+)
 from src.infrastructure.exceptions import DatabaseException
+from src.infrastructure.external.database import Base
 
 
 class BookModel(Base):
@@ -52,7 +58,7 @@ class BookModel(Base):
 class SQLBookRepository:
     """Repository implementation with optimistic locking support."""
 
-    def __init__(self, session: AsyncSession, identity_map: Dict[str, Book] = None):
+    def __init__(self, session: AsyncSession, identity_map: Optional[Dict[str, Book]] = None):
         self.session = session
         self.identity_map = identity_map if identity_map is not None else {}
 

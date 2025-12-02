@@ -13,7 +13,7 @@ from src.domain.catalog import BookBorrowed
 from src.domain.shared_kernel import EmailTemplate
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import EmailService, TemplateRenderer, Logger
+    from src.domain.shared_kernel import EmailService, Logger, TemplateRenderer
 
 
 class BookHandlers:
@@ -62,15 +62,18 @@ class BookHandlers:
                 }
             )
 
-            await self.email_service.send_email(
-                to_email=borrower_email,
-                subject=f"Book Borrowed: {title}",
-                content=email_content
-            )
-            self.logger.info(f"Sent borrowed notification email to {borrower_email}")
+            if borrower_email:
+                await self.email_service.send_email(
+                    to_email=borrower_email,
+                    subject=f"Book Borrowed: {title}",
+                    content=email_content
+                )
+                self.logger.info(f"Sent borrowed notification email to {borrower_email}")
+            else:
+                self.logger.warning("No borrower email provided, skipping notification")
 
         except Exception as e:
-            self.logger.error(f"Error handling BookBorrowed event", exception=e)
+            self.logger.error("Error handling BookBorrowed event", exception=e)
             raise
 
     async def handle_book_returned(self, event: Union[dict, object]):
@@ -84,11 +87,11 @@ class BookHandlers:
             if isinstance(event, dict):
                 book_id = event.get("book_id")
             else:
-                book_id = event.book_id
+                book_id = getattr(event, "book_id", None)
 
             self.logger.info(f"Handling BookReturned event for book: {book_id}")
             # Could send notification, update statistics, etc.
 
         except Exception as e:
-            self.logger.error(f"Error handling BookReturned event", exception=e)
+            self.logger.error("Error handling BookReturned event", exception=e)
             raise

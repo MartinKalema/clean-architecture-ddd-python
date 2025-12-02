@@ -13,12 +13,15 @@ We don't care about:
 This separation is the essence of Bounded Contexts - each context has its
 own model optimized for its specific needs.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
-from src.domain.shared_kernel import AggregateRoot
+from src.domain.lending.exceptions import (
+    BookNotAvailableException,
+    BookNotCheckedOutException,
+)
 from src.domain.lending.value_objects import LoanId
-from src.domain.lending.exceptions import BookNotAvailableException, BookNotCheckedOutException
+from src.domain.shared_kernel import AggregateRoot
 
 
 @dataclass

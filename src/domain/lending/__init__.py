@@ -31,8 +31,8 @@ or Patron change their models, only the ACL needs to be updated.
 """
 from .entities.loan import Loan
 from .entities.loanable_book import LoanableBook
-from .value_objects.lending_vo import LoanId, DueDate, LoanStatus
-from .events.lending_events import BookBorrowed, BookReturned, BookOverdue
+from .events.lending_events import BookBorrowed, BookOverdue, BookReturned
+from .value_objects.lending_vo import DueDate, LoanId, LoanStatus
 
 __all__ = [
     "Loan",

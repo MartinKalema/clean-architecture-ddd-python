@@ -8,12 +8,12 @@ Provides common functionality for all user types:
 - Custom metrics
 """
 import uuid
-import time
 from typing import Optional
+
 from locust import HttpUser, events
 from locust.runners import MasterRunner, WorkerRunner
 
-from .config import TEST_DATA_PREFIX, DEFAULT_SLA
+from .config import DEFAULT_SLA, TEST_DATA_PREFIX
 
 
 class BaseBookUser(HttpUser):

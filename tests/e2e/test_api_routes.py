@@ -1,6 +1,7 @@
 import pytest
 from httpx import AsyncClient
 
+
 @pytest.mark.asyncio
 async def test_api_add_and_list_books(client: AsyncClient):
     # 1. Add a book

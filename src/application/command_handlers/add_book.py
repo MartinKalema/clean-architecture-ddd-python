@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from src.domain.catalog import Book, BookId, Title, Author
+from src.domain.catalog import Author, Book, BookId, Title
 
 if TYPE_CHECKING:
     from src.domain.catalog import UnitOfWork

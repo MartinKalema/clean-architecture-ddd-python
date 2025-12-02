@@ -5,6 +5,7 @@ Encapsulates the creation and registration logic, keeping the container
 free of side effects and creation logic.
 """
 from src.domain.shared_kernel import Logger
+
 from .circuit_breaker import CircuitBreaker, circuit_breaker_registry
 
 
@@ -27,7 +28,7 @@ class CircuitBreakerFactory:
         )
     """
 
-    def __new__(
+    def __new__(  # type: ignore[misc]
         cls,
         name: str,
         failure_threshold: int,

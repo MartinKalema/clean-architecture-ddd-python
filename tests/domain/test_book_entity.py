@@ -1,5 +1,13 @@
 import pytest
-from src.domain.catalog import Book, BookId, Title, Author, BookBorrowed, BookAlreadyBorrowedException
+
+from src.domain.catalog import (
+    Author,
+    Book,
+    BookAlreadyBorrowedException,
+    BookBorrowed,
+    BookId,
+    Title,
+)
 
 
 def test_book_creation():

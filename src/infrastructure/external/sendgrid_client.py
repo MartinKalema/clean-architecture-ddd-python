@@ -1,5 +1,7 @@
+from typing import Optional
+
 import sendgrid
-from sendgrid.helpers.mail import Mail, Email, To, Content, Cc
+from sendgrid.helpers.mail import Cc, Content, Email, Mail, To
 
 from src.domain.shared_kernel import Logger
 
@@ -9,7 +11,7 @@ class SendGridClient:
         self.sg = sendgrid.SendGridAPIClient(api_key=api_key)
         self.logger = logger
 
-    def send(self, from_email: str, to_email: str, subject: str, content_str: str, cc_email: str = None):
+    def send(self, from_email: str, to_email: str, subject: str, content_str: str, cc_email: Optional[str] = None):
         message = Mail(
             from_email=Email(from_email),
             to_emails=To(to_email),

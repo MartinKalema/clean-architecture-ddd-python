@@ -27,12 +27,12 @@ Usage:
         await rabbitmq.publish(event)
 """
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
 from typing import Any, Callable, Optional
-import logging
 
 from src.domain.shared_kernel import Logger
 from src.infrastructure.exceptions import CircuitBreakerOpenException

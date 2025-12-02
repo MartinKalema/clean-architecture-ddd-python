@@ -1,17 +1,17 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from src.infrastructure.external.database import Base
-from src.domain.catalog import (
-    DomainException,
-    BookNotFoundException,
-    BookAlreadyBorrowedException,
-    ConcurrentModificationException,
-)
-from src.presentation.api.routes import book_routes, health_routes
 from src.container import Container
+from src.domain.catalog import (
+    BookAlreadyBorrowedException,
+    BookNotFoundException,
+    ConcurrentModificationException,
+    DomainException,
+)
 from src.infrastructure.exceptions import InfrastructureException
+from src.presentation.api.routes import book_routes, health_routes
 
 
 @asynccontextmanager

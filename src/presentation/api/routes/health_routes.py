@@ -6,16 +6,17 @@ Provides:
 - /health/ready - Readiness check with dependency verification
 - /health/circuits - Circuit breaker status for all external services
 """
-from fastapi import APIRouter, Depends, HTTPException
-from dependency_injector.wiring import inject, Provide
-from pydantic import BaseModel
-from typing import Dict, Optional, Any
 from datetime import datetime
+from typing import Any, Dict, Optional
+
+from dependency_injector.wiring import Provide, inject
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from src.container import Container
-from src.infrastructure.external.database import Database
 from src.infrastructure.adapters.resilience import circuit_breaker_registry
+from src.infrastructure.external.database import Database
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
@@ -77,7 +78,7 @@ async def readiness(
     Returns 200 if all critical dependencies are healthy, 503 otherwise.
     Used by orchestrators to know when the app can receive traffic.
     """
-    checks = {}
+    checks: Dict[str, Dict[str, Any]] = {}
     all_healthy = True
 
     # Check database

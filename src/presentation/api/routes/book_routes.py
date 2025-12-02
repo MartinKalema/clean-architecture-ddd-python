@@ -1,10 +1,8 @@
 from typing import List, Optional
 
+from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Query
-from dependency_injector.wiring import inject, Provide
 
-from src.presentation.api.models.book_models import BookCreate, BookResponse, BorrowRequest
-from src.container import Container
 from src.application.command_handlers import (
     AddBookCommand,
     AddBookHandler,
@@ -14,12 +12,18 @@ from src.application.command_handlers import (
     ReturnBookHandler,
 )
 from src.application.query_handlers import (
-    ListBooksQuery,
-    ListBooksHandler,
-    GetBookQuery,
     GetBookHandler,
+    GetBookQuery,
+    ListBooksHandler,
+    ListBooksQuery,
 )
+from src.container import Container
 from src.domain.catalog import DomainException
+from src.presentation.api.models.book_models import (
+    BookCreate,
+    BookResponse,
+    BorrowRequest,
+)
 
 router = APIRouter()
 

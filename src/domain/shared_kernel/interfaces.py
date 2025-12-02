@@ -3,7 +3,7 @@ Shared interfaces used across all bounded contexts.
 
 These are infrastructure ports that any context might need.
 """
-from typing import Protocol, Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol
 
 if TYPE_CHECKING:
     from .domain_event import DomainEvent
@@ -13,7 +13,7 @@ class Logger(Protocol):
     def info(self, message: str) -> None:
         ...
 
-    def error(self, message: str, exception: Exception = None) -> None:
+    def error(self, message: str, exception: Optional[Exception] = None) -> None:
         ...
 
     def warning(self, message: str) -> None:

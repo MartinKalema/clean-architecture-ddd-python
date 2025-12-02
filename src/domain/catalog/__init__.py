@@ -3,19 +3,25 @@ Catalog Bounded Context
 
 Manages the library's book catalog including borrowing behavior.
 """
-from .entities import Book
-from .value_objects import BookId, Title, Author, ISBN
-from .events import BookAddedToCatalog, BookRemovedFromCatalog, BookBorrowed, BookReturned
-from .interfaces import BookRepository, BookQueryRepository, UnitOfWork
 from src.domain.shared_kernel.exceptions import DomainException, ValidationException
+
+from .entities import Book
+from .events import (
+    BookAddedToCatalog,
+    BookBorrowed,
+    BookRemovedFromCatalog,
+    BookReturned,
+)
 from .exceptions import (
-    CatalogException,
-    BookNotFoundException,
     BookAlreadyBorrowedException,
     BookNotBorrowedException,
+    BookNotFoundException,
     BorrowerEmailRequiredException,
+    CatalogException,
     ConcurrentModificationException,
 )
+from .interfaces import BookQueryRepository, BookRepository, UnitOfWork
+from .value_objects import ISBN, Author, BookId, Title
 
 __all__ = [
     # Entities

@@ -9,7 +9,7 @@ import logging
 import sys
 import traceback
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from src.domain.shared_kernel import Logger
 
@@ -22,7 +22,7 @@ class JsonFormatter(logging.Formatter):
         self.service_name = service_name
 
     def format(self, record: logging.LogRecord) -> str:
-        log_entry = {
+        log_entry: Dict[str, Any] = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "level": record.levelname,
             "logger": record.name,
@@ -95,7 +95,7 @@ class JsonLogger(Logger):
     def info(self, message: str) -> None:
         self._log(logging.INFO, message)
 
-    def error(self, message: str, exception: Exception = None) -> None:
+    def error(self, message: str, exception: Optional[Exception] = None) -> None:
         self._log(logging.ERROR, message, exception)
 
     def warning(self, message: str) -> None:

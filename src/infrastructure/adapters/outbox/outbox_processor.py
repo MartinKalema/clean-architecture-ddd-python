@@ -5,12 +5,11 @@ This should be run as a separate process or background task to ensure
 events are reliably published to the message broker.
 """
 import asyncio
-from typing import Optional
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.domain.shared_kernel import Logger, EventDispatcher
-from src.infrastructure.adapters.outbox import OutboxRepository, OutboxMessage
+from src.domain.shared_kernel import EventDispatcher, Logger
+from src.infrastructure.adapters.outbox import OutboxMessage, OutboxRepository
 
 
 class OutboxProcessor:
@@ -47,7 +46,7 @@ class OutboxProcessor:
                     # No messages to process, wait before polling again
                     await asyncio.sleep(self.poll_interval)
             except Exception as e:
-                self.logger.error(f"Error processing outbox batch", exception=e)
+                self.logger.error("Error processing outbox batch", exception=e)
                 await asyncio.sleep(self.poll_interval)
 
     async def stop(self) -> None:
@@ -96,7 +95,7 @@ class OutboxProcessor:
                 return cls.__name__
 
         # The dispatcher expects the event class name, which we have
-        await self.event_dispatcher.dispatch_raw(
+        await self.event_dispatcher.dispatch_raw(  # type: ignore[attr-defined]
             event_type=event_data["event_type"],
             payload=event_data["payload"]
         )

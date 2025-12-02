@@ -4,9 +4,10 @@ Get Book Query - CQRS Query Side.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from src.domain.catalog import BookNotFoundException
+
 from .list_books import BookReadModel
 
 if TYPE_CHECKING:

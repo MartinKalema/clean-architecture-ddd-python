@@ -7,15 +7,15 @@ coordination between all teams that use it.
 """
 from .aggregate_root import AggregateRoot
 from .domain_event import DomainEvent
-from .value_objects import EmailAddress
-from .interfaces import Logger, EventDispatcher, EmailService, TemplateRenderer
 from .email_template import EmailTemplate
 from .exceptions import (
     DomainException,
-    ValidationException,
-    InvalidEmailException,
     EmptyValueException,
+    InvalidEmailException,
+    ValidationException,
 )
+from .interfaces import EmailService, EventDispatcher, Logger, TemplateRenderer
+from .value_objects import EmailAddress
 
 __all__ = [
     "AggregateRoot",

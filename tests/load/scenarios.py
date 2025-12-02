@@ -8,7 +8,8 @@ Models different user personas based on actual usage patterns:
 """
 import random
 import uuid
-from locust import task, between, tag
+
+from locust import between, tag, task
 
 from .base import BaseBookUser
 

@@ -4,8 +4,8 @@ Shared value objects used across multiple bounded contexts.
 These are part of the Shared Kernel - any changes require coordination
 between all bounded contexts that use them.
 """
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from src.domain.shared_kernel.exceptions import InvalidEmailException
 
