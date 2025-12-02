@@ -1,6 +1,6 @@
 # Clean Architecture & DDD in Python
 
-A production-grade implementation of **Clean Architecture** and **Domain-Driven Design (DDD)** principles in Python. This project demonstrates enterprise patterns for building scalable, maintainable, and resilient backend applications.
+A production-grade implementation of **Clean Architecture**, **Domain-Driven Design (DDD)**, and **CQRS** principles in Python. This project demonstrates enterprise patterns for building scalable, maintainable, and resilient backend applications.
 
 ## Architecture Overview
 
@@ -9,10 +9,10 @@ The project follows strict layered architecture with dependency inversion:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Presentation Layer                        │
-│                  (FastAPI, CLI, Controllers)                 │
+│              (FastAPI, CLI, Background Workers)              │
 ├─────────────────────────────────────────────────────────────┤
 │                    Application Layer                         │
-│               (Use Cases, DTOs, Event Handlers)              │
+│      (Command Handlers, Query Handlers, Event Handlers)      │
 ├─────────────────────────────────────────────────────────────┤
 │                      Domain Layer                            │
 │        (Entities, Value Objects, Domain Events, Interfaces)  │
@@ -26,35 +26,44 @@ The project follows strict layered architecture with dependency inversion:
 
 1. **Domain Layer** (`src/domain/`)
    - Enterprise business rules
-   - Entities (`Book`), Value Objects (`BookId`, `Title`, `Author`)
+   - Entities (`Book`, `Loan`, `Patron`)
+   - Value Objects (`BookId`, `Title`, `Author`, `EmailAddress`)
    - Domain Events (`BookBorrowed`, `BookReturned`)
    - Repository interfaces (contracts)
+   - Bounded Contexts with Anti-Corruption Layers
    - **Pure Python** - no external dependencies
 
 2. **Application Layer** (`src/application/`)
-   - Application business rules
-   - Use Cases (`AddBook`, `ListBooks`, `BorrowBook`, `ReturnBook`, `GetBook`)
+   - CQRS handlers separated by responsibility:
+     - **Command Handlers**: Write operations (`AddBook`, `BorrowBook`, `ReturnBook`)
+     - **Query Handlers**: Read operations (`ListBooks`, `GetBook`)
+     - **Event Handlers**: Async reactions to domain events
    - DTOs for input/output
-   - Event handlers for async processing
 
 3. **Infrastructure Layer** (`src/infrastructure/`)
    - Repository implementations (SQLAlchemy)
    - External service adapters (RabbitMQ, SendGrid)
    - Resilience patterns (Circuit Breaker)
+   - Transactional Outbox for reliable event delivery
    - Configuration management
 
 4. **Presentation Layer** (`src/presentation/`)
    - FastAPI REST endpoints
    - CLI commands (Click)
+   - Background workers (Outbox processor, Event consumer)
    - Request/response models
 
 ## Key Features
 
 ### Core Patterns
+- **CQRS**: Command Query Responsibility Segregation
+  - Commands (write) and Queries (read) handled separately
+  - Optimized read models for query performance
 - **Async-First**: Built with `asyncio`, async SQLAlchemy, and `aio-pika`
 - **Dependency Injection**: `dependency-injector` for IoC container
 - **Unit of Work**: Transactional consistency across aggregates
 - **Repository Pattern**: Abstract data access behind interfaces
+- **Domain-Driven Design**: Bounded Contexts, Aggregates, Value Objects, Domain Events
 
 ### Resilience Patterns
 - **Circuit Breaker**: Prevents cascading failures to external services (RabbitMQ, SendGrid)
@@ -81,36 +90,58 @@ The project follows strict layered architecture with dependency inversion:
 
 ```
 src/
-├── domain/
-│   ├── catalog/          # Book aggregate
-│   ├── lending/          # Loan aggregate
-│   ├── patron/           # Patron aggregate
-│   └── shared_kernel/    # Cross-cutting domain concerns
-├── application/
-│   ├── use_cases/        # Application services
-│   ├── handlers/         # Event handlers
-│   └── dto/              # Data transfer objects
-├── infrastructure/
+├── domain/                      # Domain Layer (Pure Python)
+│   ├── catalog/                 # Catalog Bounded Context
+│   │   ├── entities/            # Book aggregate
+│   │   ├── value_objects/       # BookId, Title, Author, ISBN
+│   │   ├── events/              # BookBorrowed, BookReturned
+│   │   └── interfaces/          # Repository contracts
+│   ├── lending/                 # Lending Bounded Context
+│   │   ├── entities/            # Loan aggregate
+│   │   ├── acl/                 # Anti-Corruption Layer
+│   │   └── ...
+│   ├── patron/                  # Patron Bounded Context
+│   │   ├── entities/            # Patron aggregate
+│   │   └── ...
+│   └── shared_kernel/           # Cross-context concerns
+│       ├── aggregate_root.py    # Base class for aggregates
+│       ├── domain_event.py      # Base class for events
+│       └── interfaces.py        # Logger, EmailService protocols
+├── application/                 # Application Layer (CQRS)
+│   ├── command_handlers/        # Write operations (sync)
+│   │   ├── add_book.py
+│   │   ├── borrow_book.py
+│   │   └── return_book.py
+│   ├── query_handlers/          # Read operations (sync)
+│   │   ├── list_books.py
+│   │   └── get_book.py
+│   └── event_handlers/          # Async reactions to events
+│       └── book_handlers.py
+├── infrastructure/              # Infrastructure Layer
 │   ├── adapters/
-│   │   ├── repositories/ # SQLAlchemy implementations
-│   │   ├── messaging/    # RabbitMQ dispatcher
-│   │   ├── email/        # SendGrid service
-│   │   ├── resilience/   # Circuit breaker
-│   │   └── outbox/       # Transactional outbox
-│   ├── configurations/   # YAML settings
-│   └── external/         # External clients
-├── presentation/
-│   ├── api/              # FastAPI routes
-│   └── cli/              # Click commands
-└── container.py          # DI container
+│   │   ├── repositories/        # SQLAlchemy implementations
+│   │   ├── messaging/           # RabbitMQ dispatcher
+│   │   ├── email/               # SendGrid service
+│   │   ├── resilience/          # Circuit breaker
+│   │   ├── outbox/              # Transactional outbox
+│   │   └── logger/              # Logging implementations
+│   ├── configurations/          # YAML settings
+│   └── external/                # External service clients
+├── presentation/                # Presentation Layer
+│   ├── api/                     # FastAPI routes
+│   │   ├── routes/              # Endpoint handlers
+│   │   └── models/              # Request/response schemas
+│   ├── cli/                     # Click commands
+│   └── workers/                 # Background processors
+└── container.py                 # Dependency Injection container
 
 tests/
-├── domain/               # Entity & value object tests
-├── unit/                 # Isolated unit tests
-├── infrastructure/       # Adapter tests (circuit breaker, etc.)
-├── integration/          # Repository & use case tests
-├── e2e/                  # API & CLI tests
-└── load/                 # Locust performance tests
+├── domain/                      # Entity & value object tests
+├── unit/                        # Isolated unit tests
+├── infrastructure/              # Adapter tests
+├── integration/                 # Repository & handler tests
+├── e2e/                         # API & CLI tests
+└── load/                        # Locust performance tests
 ```
 
 ## Getting Started
