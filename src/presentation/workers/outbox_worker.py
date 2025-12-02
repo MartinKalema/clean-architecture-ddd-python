@@ -15,7 +15,6 @@ import signal
 import sys
 from pathlib import Path
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.container import Container
@@ -24,15 +23,12 @@ from src.infrastructure.adapters.outbox.outbox_processor import OutboxProcessor
 
 async def main():
     """Main entry point for the outbox worker."""
-    # Initialize container
     container = Container()
 
-    # Get dependencies
     logger = container.logger()
     database = container.database()
     event_dispatcher = container.event_dispatcher()
 
-    # Create processor
     processor = OutboxProcessor(
         session_factory=database.session_factory,
         event_dispatcher=event_dispatcher,
@@ -41,7 +37,6 @@ async def main():
         batch_size=100
     )
 
-    # Handle shutdown signals
     loop = asyncio.get_event_loop()
 
     def shutdown():
@@ -51,7 +46,6 @@ async def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, shutdown)
 
-    # Start processor
     logger.info("Starting outbox worker...")
     try:
         await processor.start()

@@ -11,15 +11,12 @@ CQRS Architecture:
 """
 from dependency_injector import containers, providers
 
-# CQRS Command Handlers
 from src.application.command_handlers import (
     AddBookHandler,
     BorrowBookHandler,
     ReturnBookHandler,
 )
 from src.application.event_handlers.book_handlers import BookHandlers
-
-# CQRS Query Handlers
 from src.application.query_handlers import (
     GetBookHandler,
     ListBooksHandler,
@@ -67,13 +64,11 @@ class Container(containers.DeclarativeContainer):
     config = providers.Configuration()
     config.from_dict(load_config())
 
-    # Logger - created via factory based on config
     logger = providers.Singleton(
         LoggerFactory,
         config=config
     )
 
-    # Database
     database = providers.Singleton(
         Database,
         db_url=config.database.url,
@@ -88,7 +83,6 @@ class Container(containers.DeclarativeContainer):
         db=database
     )
 
-    # External Clients
     rabbitmq_client = providers.Singleton(
         RabbitMQClient,
         amqp_url=config.rabbitmq.url,
@@ -101,7 +95,6 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # Circuit Breakers - created via factory, configured per service
     rabbitmq_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,
         name="rabbitmq",
@@ -120,7 +113,6 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
-    # Adapters
     event_dispatcher = providers.Singleton(
         RabbitMQEventDispatcher,
         client=rabbitmq_client,
@@ -145,7 +137,6 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # Event Handlers
     book_handlers = providers.Singleton(
         BookHandlers,
         email_service=email_service,
@@ -153,22 +144,17 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # Unit of Work (Write Side)
     uow = providers.Factory(
         SqlAlchemyUnitOfWork,
         session_factory=session_factory,
         event_dispatcher=event_dispatcher
     )
 
-    # Query Repository (Read Side)
     book_query_repository = providers.Singleton(
         SQLBookQueryRepository,
         session_factory=session_factory
     )
 
-    # ============================================================
-    # CQRS Command Handlers (Write Side)
-    # ============================================================
     add_book_handler = providers.Factory(
         AddBookHandler,
         uow=uow,
@@ -187,9 +173,6 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    # ============================================================
-    # CQRS Query Handlers (Read Side)
-    # ============================================================
     list_books_handler = providers.Factory(
         ListBooksHandler,
         query_repository=book_query_repository,

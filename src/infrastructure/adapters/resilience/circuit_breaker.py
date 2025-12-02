@@ -22,7 +22,6 @@ Usage:
     async def publish_event(event):
         await rabbitmq.publish(event)
 
-    # Or manually:
     async with circuit_breaker:
         await rabbitmq.publish(event)
 """
@@ -319,7 +318,6 @@ class CircuitBreaker:
         }
 
 
-# Registry for managing multiple circuit breakers
 class CircuitBreakerRegistry:
     """
     Registry for managing multiple circuit breakers.
@@ -361,5 +359,4 @@ class CircuitBreakerRegistry:
             breaker.reset()
 
 
-# Global registry instance
 circuit_breaker_registry = CircuitBreakerRegistry()

@@ -84,7 +84,6 @@ class OutboxProcessor:
         """Dispatch a single outbox message to the event dispatcher."""
         event_data = message.to_event_dict()
 
-        # Create a simple event-like object for the dispatcher
         class OutboxEvent:
             def __init__(self, event_type: str, payload: dict):
                 self.event_type = event_type
@@ -93,7 +92,6 @@ class OutboxProcessor:
             def __class_getattr__(cls, name):
                 return cls.__name__
 
-        # The dispatcher expects the event class name, which we have
         await self.event_dispatcher.dispatch_raw(  # type: ignore[attr-defined]
             event_type=event_data["event_type"],
             payload=event_data["payload"]
