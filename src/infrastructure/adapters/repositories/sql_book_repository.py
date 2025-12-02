@@ -37,7 +37,6 @@ class BookModel(Base):
             borrowed_at=self.borrowed_at,
             return_due_date=self.return_due_date
         )
-        # Set the internal version from DB
         book._version = self.version
         return book
 
