@@ -24,23 +24,18 @@ from .interfaces import BookQueryRepository, BookRepository, UnitOfWork
 from .value_objects import ISBN, Author, BookId, Title
 
 __all__ = [
-    # Entities
     "Book",
-    # Value Objects
     "BookId",
     "Title",
     "Author",
     "ISBN",
-    # Events
     "BookAddedToCatalog",
     "BookRemovedFromCatalog",
     "BookBorrowed",
     "BookReturned",
-    # Interfaces
     "BookRepository",
     "BookQueryRepository",
     "UnitOfWork",
-    # Exceptions
     "DomainException",
     "ValidationException",
     "CatalogException",

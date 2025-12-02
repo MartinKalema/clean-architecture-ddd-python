@@ -67,10 +67,8 @@ class SQLBookRepository:
             db_book = BookModel.from_entity(book)
             self.session.add(db_book)
 
-            # Track entity for events using entity ID as key
             self.identity_map[book.id.value] = book
 
-            # Return the same entity instance to preserve identity
             return book
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error adding book: {str(e)}", original_exception=e)
@@ -81,7 +79,6 @@ class SQLBookRepository:
             db_books = result.scalars().all()
             entities = []
             for db_book in db_books:
-                # Check identity map first to return tracked instance
                 if db_book.id in self.identity_map:
                     entities.append(self.identity_map[db_book.id])
                 else:
@@ -94,7 +91,6 @@ class SQLBookRepository:
 
     async def get_by_id(self, book_id: str) -> Optional[Book]:
         try:
-            # Check identity map first to return tracked instance
             if book_id in self.identity_map:
                 return self.identity_map[book_id]
 
@@ -102,7 +98,6 @@ class SQLBookRepository:
             db_book = result.scalars().first()
             if db_book:
                 entity = db_book.to_entity()
-                # Track entity in identity map for event collection
                 self.identity_map[entity.id.value] = entity
                 return entity
             return None
@@ -120,7 +115,6 @@ class SQLBookRepository:
             expected_version = book.version
             new_version = expected_version + 1
 
-            # Update only if version matches (optimistic locking)
             result = await self.session.execute(
                 update(BookModel)
                 .where(BookModel.id == book.id.value)
@@ -134,8 +128,6 @@ class SQLBookRepository:
             )
 
             if result.rowcount == 0:
-                # Either the book doesn't exist or version mismatch
-                # Check if book exists
                 check_result = await self.session.execute(
                     select(BookModel).filter(BookModel.id == book.id.value)
                 )
@@ -144,10 +136,8 @@ class SQLBookRepository:
                 else:
                     raise ConcurrentModificationException("Book", book.id.value)
 
-            # Update the entity's version
             book._version = new_version
 
-            # Track entity for events (may already be tracked from get_by_id)
             self.identity_map[book.id.value] = book
 
         except ConcurrentModificationException:

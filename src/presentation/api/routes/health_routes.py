@@ -81,7 +81,6 @@ async def readiness(
     checks: Dict[str, Dict[str, Any]] = {}
     all_healthy = True
 
-    # Check database
     try:
         async with database.session_factory() as session:
             await session.execute(text("SELECT 1"))
@@ -90,7 +89,6 @@ async def readiness(
         checks["database"] = {"status": "unhealthy", "error": str(e)}
         all_healthy = False
 
-    # Check circuit breakers (informational - doesn't affect overall health)
     unhealthy_circuits = circuit_breaker_registry.get_unhealthy()
     if unhealthy_circuits:
         checks["circuit_breakers"] = {

@@ -28,10 +28,6 @@ from src.presentation.api.models.book_models import (
 router = APIRouter()
 
 
-# ============================================================
-# Command Endpoints (Write Operations)
-# ============================================================
-
 @router.post("/books", response_model=BookResponse)
 @inject
 async def create_book(
@@ -95,10 +91,6 @@ async def return_book(
     except DomainException as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-# ============================================================
-# Query Endpoints (Read Operations)
-# ============================================================
 
 @router.get("/books", response_model=List[BookResponse])
 @inject

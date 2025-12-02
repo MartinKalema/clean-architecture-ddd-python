@@ -16,11 +16,9 @@ from src.presentation.api.routes import book_routes, health_routes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize database
     db = container.database()
     await db.init_models()
     yield
-    # Shutdown: Dispose engine
     await db.engine.dispose()
 
 

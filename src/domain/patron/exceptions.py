@@ -30,7 +30,6 @@ class InvalidTierUpgradeException(PatronException):
         )
 
 
-# Value object exceptions
 class InvalidPatronIdException(PatronException):
     """Raised when a patron ID is invalid."""
     def __init__(self):

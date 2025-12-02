@@ -58,30 +58,25 @@ class EventConsumer:
             channel = await connection.channel()
             self._channel = channel
 
-            # Set QoS for fair dispatch
             await channel.set_qos(prefetch_count=10)
 
-            # Declare exchange
             exchange = await channel.declare_exchange(
                 self.exchange_name,
                 aio_pika.ExchangeType.TOPIC,
                 durable=True
             )
 
-            # Declare and bind queue
             queue = await channel.declare_queue(
                 self.queue_name,
                 durable=True
             )
 
-            # Bind queue to all registered event types
             for event_type in self.handlers.keys():
                 await queue.bind(exchange, routing_key=event_type)
                 self.logger.info(f"Bound queue to routing key: {event_type}")
 
             self.logger.info(f"Event consumer started, listening on queue: {self.queue_name}")
 
-            # Start consuming
             async with queue.iterator() as queue_iter:
                 async for message in queue_iter:
                     if not self._running:
@@ -121,5 +116,4 @@ class EventConsumer:
                 self.logger.error("Failed to decode message", exception=e)
             except Exception as e:
                 self.logger.error("Error processing message", exception=e)
-                # Message will be nacked and requeued
                 raise

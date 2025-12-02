@@ -63,7 +63,6 @@ class SQLBookQueryRepository:
         async with self._session_factory() as session:
             stmt = select(BookModel)
 
-            # Apply filters
             if only_available:
                 stmt = stmt.where(BookModel.is_borrowed.is_(False))
             if only_borrowed:
@@ -73,10 +72,8 @@ class SQLBookQueryRepository:
             if title_contains:
                 stmt = stmt.where(BookModel.title.ilike(f"%{title_contains}%"))
 
-            # Apply pagination
             stmt = stmt.offset(offset).limit(limit)
 
-            # Order by title for consistent results
             stmt = stmt.order_by(BookModel.title)
 
             result = await session.execute(stmt)

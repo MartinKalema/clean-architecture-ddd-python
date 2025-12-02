@@ -56,14 +56,12 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
     This allows for secure secret management in production while
     maintaining easy development setup with YAML defaults.
     """
-    # Load YAML defaults
     yaml_config = _load_yaml_config(config_path)
 
-    # Build config with env var overrides
     config = {
         "environment": _get_env("ENVIRONMENT", "development"),
         "logging": {
-            "format": _get_env("LOG_FORMAT", "json"),  # json or standard
+            "format": _get_env("LOG_FORMAT", "json"),
             "level": _get_env("LOG_LEVEL", "INFO"),
         },
         "database": {

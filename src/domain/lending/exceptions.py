@@ -9,7 +9,6 @@ class LendingException(DomainException):
     pass
 
 
-# Loan exceptions
 class LoanAlreadyReturnedException(LendingException):
     """Raised when attempting to return an already returned loan."""
     def __init__(self, loan_id: str):
@@ -34,7 +33,6 @@ class CannotExtendOverdueLoanException(LendingException):
         super().__init__(f"Cannot extend loan {loan_id}: loan is overdue")
 
 
-# LoanableBook exceptions
 class BookNotAvailableException(LendingException):
     """Raised when attempting to check out an unavailable book."""
     def __init__(self, book_id: str):
@@ -47,7 +45,6 @@ class BookNotCheckedOutException(LendingException):
         super().__init__(f"Book {book_id} is not checked out")
 
 
-# Value object exceptions
 class InvalidLoanIdException(LendingException):
     """Raised when a loan ID is invalid."""
     def __init__(self):
