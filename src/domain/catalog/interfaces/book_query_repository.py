@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from src.application.queries import BookReadModel
+    from src.application.query_handlers import BookReadModel
 
 
 @runtime_checkable

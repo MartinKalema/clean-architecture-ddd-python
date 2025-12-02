@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.application.queries import BookReadModel
+from src.application.query_handlers import BookReadModel
 from src.infrastructure.adapters.repositories.sql_book_repository import BookModel
 
 if TYPE_CHECKING:

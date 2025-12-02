@@ -7,10 +7,10 @@ import click
 from dependency_injector.wiring import inject, Provide
 
 from src.container import Container
-from src.application.queries import ListBooksQuery
+from src.application.query_handlers import ListBooksQuery
 
 if TYPE_CHECKING:
-    from src.application.queries import ListBooksHandler
+    from src.application.query_handlers import ListBooksHandler
 
 
 @click.command()
