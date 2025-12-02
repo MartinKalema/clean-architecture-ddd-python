@@ -1,6 +1,11 @@
 import pytest
 from click.testing import CliRunner
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from src.container import Container
+from src.infrastructure.external.database import Base
 from src.presentation.cli.main import cli
+
 # Note: Testing CLI with real DB/Async in this setup is complex because CliRunner is synchronous
 # and our commands use asyncio.run(). 
 # Also, dependency injection wiring might conflict if not handled carefully.
@@ -15,9 +20,6 @@ from src.presentation.cli.main import cli
 # Let's try a basic smoke test that the commands run. 
 # Ideally, we would override the Container.session_factory before invoking the CLI.
 
-from src.container import Container
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from src.infrastructure.external.database import Base
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

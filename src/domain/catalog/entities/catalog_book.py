@@ -5,14 +5,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from src.domain.shared_kernel import AggregateRoot
-from src.domain.catalog.value_objects import BookId, Title, Author
 from src.domain.catalog.events import BookBorrowed, BookReturned
 from src.domain.catalog.exceptions import (
     BookAlreadyBorrowedException,
     BookNotBorrowedException,
     BorrowerEmailRequiredException,
 )
+from src.domain.catalog.value_objects import Author, BookId, Title
+from src.domain.shared_kernel import AggregateRoot
 
 
 @dataclass

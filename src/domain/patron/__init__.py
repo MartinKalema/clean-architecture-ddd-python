@@ -23,8 +23,8 @@ Context Relationships:
 - Relationship Type: Customer-Supplier (Lending is the customer)
 """
 from .entities.patron import Patron
-from .value_objects.patron_info import PatronId, MembershipTier
 from .events.patron_events import PatronRegistered
+from .value_objects.patron_info import MembershipTier, PatronId
 
 __all__ = [
     "Patron",

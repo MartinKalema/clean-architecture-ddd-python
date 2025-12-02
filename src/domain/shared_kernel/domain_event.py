@@ -7,10 +7,10 @@ care about. They are used to:
 2. Communicate between bounded contexts (integration events)
 3. Maintain eventual consistency across the system
 """
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
-import uuid
 
 
 @dataclass(frozen=True)

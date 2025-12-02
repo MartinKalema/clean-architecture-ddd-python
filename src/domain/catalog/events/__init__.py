@@ -1,3 +1,8 @@
-from .catalog_events import BookAddedToCatalog, BookRemovedFromCatalog, BookBorrowed, BookReturned
+from .catalog_events import (
+    BookAddedToCatalog,
+    BookBorrowed,
+    BookRemovedFromCatalog,
+    BookReturned,
+)
 
 __all__ = ["BookAddedToCatalog", "BookRemovedFromCatalog", "BookBorrowed", "BookReturned"]

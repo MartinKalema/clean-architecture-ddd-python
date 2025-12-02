@@ -11,7 +11,7 @@ Key responsibilities:
 - Provides optimistic locking via version field
 """
 from dataclasses import dataclass, field
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from .domain_event import DomainEvent

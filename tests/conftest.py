@@ -1,13 +1,13 @@
-import pytest
+from typing import AsyncGenerator
+
 import pytest_asyncio
-import asyncio
-from typing import AsyncGenerator, Generator
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from dependency_injector import providers
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from src.container import Container
 from src.infrastructure.external.database import Database
 from src.presentation.api.main import app
-from src.container import Container
-from dependency_injector import providers
 
 # Use in-memory SQLite for tests
 TEST_DATABASE_URL = "sqlite:///:memory:"

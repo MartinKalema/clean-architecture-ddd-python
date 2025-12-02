@@ -13,9 +13,9 @@ from src.domain.shared_kernel import EmailService
 from src.infrastructure.adapters.resilience import CircuitBreakerOpenException
 
 if TYPE_CHECKING:
-    from src.infrastructure.external.sendgrid_client import SendGridClient
     from src.domain.shared_kernel import Logger
     from src.infrastructure.adapters.resilience import CircuitBreaker
+    from src.infrastructure.external.sendgrid_client import SendGridClient
 
 
 class SendGridEmailService(EmailService):
@@ -100,7 +100,9 @@ class SendGridEmailService(EmailService):
             raise
 
         except Exception as e:
-            from src.infrastructure.exceptions.infrastructure_exceptions import EmailServiceException
+            from src.infrastructure.exceptions.infrastructure_exceptions import (
+                EmailServiceException,
+            )
             self.logger.error(f"Failed to send email to {to_email}", exception=e)
             raise EmailServiceException(
                 f"Failed to send email to {to_email}: {str(e)}",

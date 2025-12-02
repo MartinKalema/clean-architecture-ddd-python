@@ -1,8 +1,10 @@
 import click
+
 from src.container import Container
 from src.presentation.cli.commands.add_book_command import add
-from src.presentation.cli.commands.list_books_command import list
 from src.presentation.cli.commands.borrow_book_command import borrow
+from src.presentation.cli.commands.list_books_command import list
+
 
 @click.group()
 def cli():

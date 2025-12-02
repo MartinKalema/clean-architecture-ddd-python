@@ -10,10 +10,9 @@ Tests cover:
 - Registry functionality
 - Decorator and context manager usage
 """
-import pytest
 import asyncio
-import time
-from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.infrastructure.adapters.resilience import (
     CircuitBreaker,

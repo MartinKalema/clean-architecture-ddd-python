@@ -10,9 +10,9 @@ This guarantees at-least-once delivery even if the message broker is down.
 import json
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
-from sqlalchemy import Column, String, Text, DateTime, Boolean, Integer, select, update
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.shared_kernel import DomainEvent
@@ -72,7 +72,7 @@ class OutboxRepository:
         """Get unprocessed messages for publishing."""
         result = await self.session.execute(
             select(OutboxMessage)
-            .where(OutboxMessage.is_processed == False)
+            .where(OutboxMessage.is_processed.is_(False))
             .where(OutboxMessage.retry_count < 5)
             .order_by(OutboxMessage.created_at)
             .limit(limit)

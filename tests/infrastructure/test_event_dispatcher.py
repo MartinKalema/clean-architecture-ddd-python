@@ -1,13 +1,18 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 
-from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import RabbitMQEventDispatcher
-from src.infrastructure.adapters.email.sendgrid_email_service import SendGridEmailService
-from src.infrastructure.adapters.resilience import CircuitBreaker
+import pytest
+
 from src.application.event_handlers.book_handlers import BookHandlers
 from src.domain.catalog import BookBorrowed
 from src.domain.shared_kernel import EmailTemplate
+from src.infrastructure.adapters.email.sendgrid_email_service import (
+    SendGridEmailService,
+)
+from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import (
+    RabbitMQEventDispatcher,
+)
+from src.infrastructure.adapters.resilience import CircuitBreaker
 
 
 @pytest.mark.asyncio

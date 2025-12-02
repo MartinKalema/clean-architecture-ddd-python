@@ -1,10 +1,10 @@
 """
 Value Objects for the Lending bounded context.
 """
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-import uuid
 
 from src.domain.lending.exceptions import InvalidLoanIdException
 

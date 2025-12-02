@@ -1,11 +1,14 @@
 """
 Value Objects for the Patron bounded context.
 """
+import uuid
 from dataclasses import dataclass
 from enum import Enum
-import uuid
 
-from src.domain.patron.exceptions import InvalidPatronIdException, InvalidPatronNameException
+from src.domain.patron.exceptions import (
+    InvalidPatronIdException,
+    InvalidPatronNameException,
+)
 
 
 @dataclass(frozen=True)

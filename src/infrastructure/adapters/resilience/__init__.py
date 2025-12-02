@@ -8,17 +8,17 @@ Provides:
 - (Future) Bulkhead: Isolate failures
 - (Future) Rate Limiter: Prevent overload
 """
+# Re-export from canonical location for convenience
+from src.infrastructure.exceptions import CircuitBreakerOpenException
+
 from .circuit_breaker import (
     CircuitBreaker,
-    CircuitState,
     CircuitBreakerMetrics,
     CircuitBreakerRegistry,
+    CircuitState,
     circuit_breaker_registry,
 )
 from .circuit_breaker_factory import CircuitBreakerFactory
-
-# Re-export from canonical location for convenience
-from src.infrastructure.exceptions import CircuitBreakerOpenException
 
 __all__ = [
     "CircuitBreaker",

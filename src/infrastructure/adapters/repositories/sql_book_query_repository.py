@@ -14,14 +14,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.application.query_handlers import BookReadModel
 from src.infrastructure.adapters.repositories.sql_book_repository import BookModel
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
+    pass
 
 
 class SQLBookQueryRepository:
@@ -65,9 +65,9 @@ class SQLBookQueryRepository:
 
             # Apply filters
             if only_available:
-                stmt = stmt.where(BookModel.is_borrowed == False)
+                stmt = stmt.where(BookModel.is_borrowed.is_(False))
             if only_borrowed:
-                stmt = stmt.where(BookModel.is_borrowed == True)
+                stmt = stmt.where(BookModel.is_borrowed.is_(True))
             if author_contains:
                 stmt = stmt.where(BookModel.author.ilike(f"%{author_contains}%"))
             if title_contains:
@@ -94,9 +94,9 @@ class SQLBookQueryRepository:
             stmt = select(func.count(BookModel.id))
 
             if only_available:
-                stmt = stmt.where(BookModel.is_borrowed == False)
+                stmt = stmt.where(BookModel.is_borrowed.is_(False))
             if only_borrowed:
-                stmt = stmt.where(BookModel.is_borrowed == True)
+                stmt = stmt.where(BookModel.is_borrowed.is_(True))
 
             result = await session.execute(stmt)
             return result.scalar_one()

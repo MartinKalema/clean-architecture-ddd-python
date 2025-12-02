@@ -1,8 +1,10 @@
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.infrastructure.adapters.repositories.sql_book_repository import SQLBookRepository
-from src.domain.catalog import Book, BookId, Title, Author
+from src.domain.catalog import Author, Book, BookId, Title
+from src.infrastructure.adapters.repositories.sql_book_repository import (
+    SQLBookRepository,
+)
 
 
 @pytest.mark.asyncio

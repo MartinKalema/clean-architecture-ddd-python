@@ -1,8 +1,8 @@
 """
 Value Objects for the Catalog bounded context.
 """
-from dataclasses import dataclass
 import uuid
+from dataclasses import dataclass
 
 from src.domain.shared_kernel.exceptions import ValidationException
 

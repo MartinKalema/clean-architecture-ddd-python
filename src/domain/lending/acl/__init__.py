@@ -25,8 +25,8 @@ Example flow:
 5. ACL fetches from Catalog context and translates to Lending's BookReference
 6. Use case creates a Loan using the translated data
 """
-from .catalog_acl import CatalogACL, BookReference
-from .patron_acl import PatronACL, BorrowerInfo
+from .catalog_acl import BookReference, CatalogACL
+from .patron_acl import BorrowerInfo, PatronACL
 
 __all__ = [
     "CatalogACL",

@@ -1,5 +1,6 @@
 import logging
 import sys
+from typing import Optional
 
 from src.domain.shared_kernel import Logger
 
@@ -20,7 +21,7 @@ class StandardLogger(Logger):
     def info(self, message: str) -> None:
         self.logger.info(message)
 
-    def error(self, message: str, exception: Exception = None) -> None:
+    def error(self, message: str, exception: Optional[Exception] = None) -> None:
         if exception:
             self.logger.error(f"{message}: {str(exception)}", exc_info=True)
         else:

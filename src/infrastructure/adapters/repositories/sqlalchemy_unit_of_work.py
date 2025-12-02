@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from src.infrastructure.adapters.repositories.sql_book_repository import SQLBookRepository
 from src.infrastructure.adapters.outbox import OutboxRepository
+from src.infrastructure.adapters.repositories.sql_book_repository import (
+    SQLBookRepository,
+)
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from src.domain.catalog import Book
     from src.domain.shared_kernel import EventDispatcher
 
@@ -70,8 +73,8 @@ class SqlAlchemyUnitOfWork:
         if self._session:
             await self._session.rollback()
 
-    def _collect_events(self) -> list:
-        events = []
+    def _collect_events(self) -> List[Any]:
+        events: List[Any] = []
         if not hasattr(self, 'identity_map'):
             return events
 

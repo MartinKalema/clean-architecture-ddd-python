@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 from src.infrastructure.adapters.resilience import CircuitBreakerOpenException
 
 if TYPE_CHECKING:
-    from src.infrastructure.external.rabbitmq_client import RabbitMQClient
     from src.domain.shared_kernel import DomainEvent, Logger
     from src.infrastructure.adapters.resilience import CircuitBreaker
+    from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 
 
 class RabbitMQEventDispatcher:
@@ -96,7 +96,9 @@ class RabbitMQEventDispatcher:
             raise
 
         except Exception as e:
-            from src.infrastructure.exceptions.infrastructure_exceptions import EventDispatcherException
+            from src.infrastructure.exceptions.infrastructure_exceptions import (
+                EventDispatcherException,
+            )
             self.logger.error(f"Failed to dispatch event {event_name}", exception=e)
             # Mark connection as potentially stale
             self._connected = False
@@ -135,7 +137,9 @@ class RabbitMQEventDispatcher:
             raise
 
         except Exception as e:
-            from src.infrastructure.exceptions.infrastructure_exceptions import EventDispatcherException
+            from src.infrastructure.exceptions.infrastructure_exceptions import (
+                EventDispatcherException,
+            )
             self.logger.error(f"Failed to dispatch outbox event {event_type}", exception=e)
             self._connected = False
             raise EventDispatcherException(
