@@ -10,8 +10,12 @@ Environment Variables:
     DB_MAX_OVERFLOW: Max overflow connections (default: 30)
     DB_POOL_TIMEOUT: Pool timeout in seconds (default: 30)
     DB_POOL_RECYCLE: Recycle connections after N seconds (default: 1800)
+    MESSAGE_BROKER: Message broker to use (rabbitmq or kafka, default: rabbitmq)
     RABBITMQ_URL: RabbitMQ connection URL
     RABBITMQ_EXCHANGE: RabbitMQ exchange name
+    KAFKA_BOOTSTRAP_SERVERS: Kafka bootstrap servers
+    KAFKA_TOPIC_PREFIX: Kafka topic prefix for domain events
+    KAFKA_CONSUMER_GROUP: Kafka consumer group ID
     SENDGRID_API_KEY: SendGrid API key
     SENDGRID_FROM_EMAIL: Sender email address
     SENDGRID_ADMIN_EMAIL: Admin email for CC
@@ -24,6 +28,9 @@ Environment Variables:
     CB_RABBITMQ_FAILURE_THRESHOLD: Failures before opening (default: 5)
     CB_RABBITMQ_SUCCESS_THRESHOLD: Successes to close (default: 2)
     CB_RABBITMQ_TIMEOUT: Seconds before retry (default: 30)
+    CB_KAFKA_FAILURE_THRESHOLD: Failures before opening (default: 5)
+    CB_KAFKA_SUCCESS_THRESHOLD: Successes to close (default: 2)
+    CB_KAFKA_TIMEOUT: Seconds before retry (default: 30)
     CB_SENDGRID_FAILURE_THRESHOLD: Failures before opening (default: 3)
     CB_SENDGRID_SUCCESS_THRESHOLD: Successes to close (default: 2)
     CB_SENDGRID_TIMEOUT: Seconds before retry (default: 60)
@@ -74,6 +81,10 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
             "pool_timeout": int(_get_env("DB_POOL_TIMEOUT", yaml_config.get("database", {}).get("pool_timeout", 30))),
             "pool_recycle": int(_get_env("DB_POOL_RECYCLE", yaml_config.get("database", {}).get("pool_recycle", 1800))),
         },
+        "message_broker": _get_env(
+            "MESSAGE_BROKER",
+            yaml_config.get("message_broker", "rabbitmq")
+        ),
         "rabbitmq": {
             "url": _get_env(
                 "RABBITMQ_URL",
@@ -82,6 +93,20 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
             "exchange_name": _get_env(
                 "RABBITMQ_EXCHANGE",
                 yaml_config.get("rabbitmq", {}).get("exchange_name", "domain_events")
+            ),
+        },
+        "kafka": {
+            "bootstrap_servers": _get_env(
+                "KAFKA_BOOTSTRAP_SERVERS",
+                yaml_config.get("kafka", {}).get("bootstrap_servers", "localhost:9092")
+            ),
+            "topic_prefix": _get_env(
+                "KAFKA_TOPIC_PREFIX",
+                yaml_config.get("kafka", {}).get("topic_prefix", "domain_events")
+            ),
+            "consumer_group": _get_env(
+                "KAFKA_CONSUMER_GROUP",
+                yaml_config.get("kafka", {}).get("consumer_group", "library-service")
             ),
         },
         "sendgrid": {
@@ -120,6 +145,20 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
                 "timeout": float(_get_env(
                     "CB_RABBITMQ_TIMEOUT",
                     yaml_config.get("circuit_breakers", {}).get("rabbitmq", {}).get("timeout", 30.0)
+                )),
+            },
+            "kafka": {
+                "failure_threshold": int(_get_env(
+                    "CB_KAFKA_FAILURE_THRESHOLD",
+                    yaml_config.get("circuit_breakers", {}).get("kafka", {}).get("failure_threshold", 5)
+                )),
+                "success_threshold": int(_get_env(
+                    "CB_KAFKA_SUCCESS_THRESHOLD",
+                    yaml_config.get("circuit_breakers", {}).get("kafka", {}).get("success_threshold", 2)
+                )),
+                "timeout": float(_get_env(
+                    "CB_KAFKA_TIMEOUT",
+                    yaml_config.get("circuit_breakers", {}).get("kafka", {}).get("timeout", 30.0)
                 )),
             },
             "sendgrid": {

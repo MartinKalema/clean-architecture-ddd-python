@@ -21,6 +21,7 @@ dependencies = [
     "greenlet",
     "locust",
     "aio_pika",
+    "aiokafka",
     "sendgrid",
     "jinja2",
     "alembic"

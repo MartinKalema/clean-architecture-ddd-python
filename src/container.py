@@ -8,38 +8,34 @@ All factory logic belongs in the infrastructure layer.
 CQRS Architecture:
 - Commands: Write operations (AddBook, BorrowBook, ReturnBook)
 - Queries: Read operations (ListBooks, GetBook)
+
+Message Broker:
+- Supports both RabbitMQ and Kafka via MESSAGE_BROKER config
 """
 from dependency_injector import containers, providers
 
-from src.application.command_handlers import (
-    AddBookHandler,
-    BorrowBookHandler,
-    ReturnBookHandler,
-)
+from src.application.command_handlers import (AddBookHandler,
+                                              BorrowBookHandler,
+                                              ReturnBookHandler)
 from src.application.event_handlers.book_handlers import BookHandlers
-from src.application.query_handlers import (
-    GetBookHandler,
-    ListBooksHandler,
-)
-from src.infrastructure.adapters.email.sendgrid_email_service import (
-    SendGridEmailService,
-)
+from src.application.query_handlers import GetBookHandler, ListBooksHandler
+from src.infrastructure.adapters.email.sendgrid_email_service import \
+    SendGridEmailService
 from src.infrastructure.adapters.logger import LoggerFactory
-from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import (
-    RabbitMQEventDispatcher,
-)
-from src.infrastructure.adapters.repositories.sql_book_query_repository import (
-    SQLBookQueryRepository,
-)
-from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import (
-    SqlAlchemyUnitOfWork,
-)
+from src.infrastructure.adapters.messaging.kafka_event_dispatcher import \
+    KafkaEventDispatcher
+from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import \
+    RabbitMQEventDispatcher
+from src.infrastructure.adapters.repositories.sql_book_query_repository import \
+    SQLBookQueryRepository
+from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import \
+    SqlAlchemyUnitOfWork
 from src.infrastructure.adapters.resilience import CircuitBreakerFactory
-from src.infrastructure.adapters.templates.jinja2_template_renderer import (
-    Jinja2TemplateRenderer,
-)
+from src.infrastructure.adapters.templates.jinja2_template_renderer import \
+    Jinja2TemplateRenderer
 from src.infrastructure.configurations.settings import load_config
 from src.infrastructure.external.database import Database
+from src.infrastructure.external.kafka_client import KafkaClient
 from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
 
@@ -89,6 +85,12 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
+    kafka_client = providers.Singleton(
+        KafkaClient,
+        bootstrap_servers=config.kafka.bootstrap_servers,
+        logger=logger
+    )
+
     sendgrid_client = providers.Singleton(
         SendGridClient,
         api_key=config.sendgrid.api_key,
@@ -104,6 +106,15 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
+    kafka_circuit_breaker = providers.Singleton(
+        CircuitBreakerFactory,
+        name="kafka",
+        failure_threshold=config.circuit_breakers.kafka.failure_threshold,
+        success_threshold=config.circuit_breakers.kafka.success_threshold,
+        timeout=config.circuit_breakers.kafka.timeout,
+        logger=logger,
+    )
+
     sendgrid_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,
         name="sendgrid",
@@ -113,12 +124,26 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
-    event_dispatcher = providers.Singleton(
+    rabbitmq_event_dispatcher = providers.Singleton(
         RabbitMQEventDispatcher,
         client=rabbitmq_client,
         exchange_name=config.rabbitmq.exchange_name,
         logger=logger,
         circuit_breaker=rabbitmq_circuit_breaker,
+    )
+
+    kafka_event_dispatcher = providers.Singleton(
+        KafkaEventDispatcher,
+        client=kafka_client,
+        topic_prefix=config.kafka.topic_prefix,
+        logger=logger,
+        circuit_breaker=kafka_circuit_breaker,
+    )
+
+    event_dispatcher = providers.Selector(
+        config.message_broker,
+        rabbitmq=rabbitmq_event_dispatcher,
+        kafka=kafka_event_dispatcher,
     )
 
     email_service = providers.Singleton(
