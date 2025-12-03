@@ -7,6 +7,11 @@ rabbitmq:
   url: "amqp://guest:guest@localhost:5672/"
   exchange_name: "domain_events"
 
+kafka:
+  bootstrap_servers: "localhost:9092"
+  topic_prefix: "domain_events"
+  consumer_group: "library-service"
+
 sendgrid:
   api_key: "SG.placeholder"
   from_email: "admin@library.com"
@@ -17,13 +22,16 @@ templates:
   map:
     book_borrowed: "email/book_borrowed.html"
 
-# Circuit breaker configuration per external service
 circuit_breakers:
   rabbitmq:
-    failure_threshold: 5      # Open after N consecutive failures
-    success_threshold: 2      # Close after N successes in half-open
-    timeout: 30.0             # Seconds before testing recovery
-  sendgrid:
-    failure_threshold: 3      # Email is critical, fail faster
+    failure_threshold: 5
     success_threshold: 2
-    timeout: 60.0             # Email services are slower to recover
+    timeout: 30.0
+  kafka:
+    failure_threshold: 5
+    success_threshold: 2
+    timeout: 30.0
+  sendgrid:
+    failure_threshold: 3
+    success_threshold: 2
+    timeout: 60.0

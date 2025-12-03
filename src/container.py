@@ -9,8 +9,9 @@ CQRS Architecture:
 - Commands: Write operations (AddBook, BorrowBook, ReturnBook)
 - Queries: Read operations (ListBooks, GetBook)
 
-Message Broker:
-- Supports both RabbitMQ and Kafka via MESSAGE_BROKER config
+Message Brokers:
+- RabbitMQ: Task queues, job processing
+- Kafka: Event streaming, domain events (used by default for domain events)
 """
 from dependency_injector import containers, providers
 
@@ -140,12 +141,6 @@ class Container(containers.DeclarativeContainer):
         circuit_breaker=kafka_circuit_breaker,
     )
 
-    event_dispatcher = providers.Selector(
-        config.message_broker,
-        rabbitmq=rabbitmq_event_dispatcher,
-        kafka=kafka_event_dispatcher,
-    )
-
     email_service = providers.Singleton(
         SendGridEmailService,
         client=sendgrid_client,
@@ -172,7 +167,7 @@ class Container(containers.DeclarativeContainer):
     uow = providers.Factory(
         SqlAlchemyUnitOfWork,
         session_factory=session_factory,
-        event_dispatcher=event_dispatcher
+        event_dispatcher=kafka_event_dispatcher
     )
 
     book_query_repository = providers.Singleton(

@@ -10,7 +10,6 @@ Environment Variables:
     DB_MAX_OVERFLOW: Max overflow connections (default: 30)
     DB_POOL_TIMEOUT: Pool timeout in seconds (default: 30)
     DB_POOL_RECYCLE: Recycle connections after N seconds (default: 1800)
-    MESSAGE_BROKER: Message broker to use (rabbitmq or kafka, default: rabbitmq)
     RABBITMQ_URL: RabbitMQ connection URL
     RABBITMQ_EXCHANGE: RabbitMQ exchange name
     KAFKA_BOOTSTRAP_SERVERS: Kafka bootstrap servers
@@ -81,10 +80,6 @@ def load_config(config_path: str = "src/infrastructure/configurations/settings.y
             "pool_timeout": int(_get_env("DB_POOL_TIMEOUT", yaml_config.get("database", {}).get("pool_timeout", 30))),
             "pool_recycle": int(_get_env("DB_POOL_RECYCLE", yaml_config.get("database", {}).get("pool_recycle", 1800))),
         },
-        "message_broker": _get_env(
-            "MESSAGE_BROKER",
-            yaml_config.get("message_broker", "rabbitmq")
-        ),
         "rabbitmq": {
             "url": _get_env(
                 "RABBITMQ_URL",
