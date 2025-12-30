@@ -1,3 +1,3 @@
-from .lending_events import BookBorrowed, BookOverdue, BookReturned, LoanExtended
+from .lending_events import BookOverdue, LoanCompleted, LoanCreated, LoanExtended
 
-__all__ = ["BookBorrowed", "BookReturned", "BookOverdue", "LoanExtended"]
+__all__ = ["LoanCreated", "LoanCompleted", "BookOverdue", "LoanExtended"]

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from src.domain.catalog.events import BookBorrowed, BookReturned
+from src.domain.catalog.events import CatalogBookBorrowed, CatalogBookReturned
 from src.domain.catalog.exceptions import (
     BookAlreadyBorrowedException,
     BookNotBorrowedException,
@@ -25,7 +25,7 @@ class Book(AggregateRoot):
     borrowed_at: Optional[datetime] = None
     return_due_date: Optional[datetime] = None
 
-    def borrow(self, borrower_email: str):
+    def borrow(self, borrower_email: str, borrowed_at: datetime):
         """Borrow the book."""
         if self.is_borrowed:
             raise BookAlreadyBorrowedException(self.id.value)
@@ -34,10 +34,10 @@ class Book(AggregateRoot):
             raise BorrowerEmailRequiredException()
 
         self.is_borrowed = True
-        self.borrowed_at = datetime.now()
+        self.borrowed_at = borrowed_at
         self.return_due_date = self.borrowed_at + timedelta(days=14)
 
-        self.add_event(BookBorrowed(
+        self.add_event(CatalogBookBorrowed(
             book_id=self.id.value,
             title=self.title.value,
             borrowed_at=self.borrowed_at,
@@ -50,4 +50,4 @@ class Book(AggregateRoot):
         if not self.is_borrowed:
             raise BookNotBorrowedException(self.id.value)
         self.is_borrowed = False
-        self.add_event(BookReturned(book_id=self.id.value))
+        self.add_event(CatalogBookReturned(book_id=self.id.value))

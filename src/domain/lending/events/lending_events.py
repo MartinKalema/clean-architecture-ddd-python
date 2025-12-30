@@ -11,9 +11,9 @@ from src.domain.shared_kernel import DomainEvent
 
 
 @dataclass(frozen=True)
-class BookBorrowed(DomainEvent):
+class LoanCreated(DomainEvent):
     """
-    Published when a book is borrowed.
+    Published when a loan is created.
 
     This is an integration event that Notification context subscribes to
     in order to send confirmation emails.
@@ -29,8 +29,8 @@ class BookBorrowed(DomainEvent):
 
 
 @dataclass(frozen=True)
-class BookReturned(DomainEvent):
-    """Published when a book is returned."""
+class LoanCompleted(DomainEvent):
+    """Published when a loan is completed (book returned)."""
 
     loan_id: str
     patron_id: str

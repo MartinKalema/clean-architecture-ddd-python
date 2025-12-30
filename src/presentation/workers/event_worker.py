@@ -34,8 +34,8 @@ async def main():
         logger=logger
     )
 
-    consumer.register_handler("BookBorrowed", book_handlers.handle_book_borrowed)
-    consumer.register_handler("BookReturned", book_handlers.handle_book_returned)
+    consumer.register_handler("CatalogBookBorrowed", book_handlers.handle_book_borrowed)
+    consumer.register_handler("CatalogBookReturned", book_handlers.handle_book_returned)
 
     loop = asyncio.get_event_loop()
 

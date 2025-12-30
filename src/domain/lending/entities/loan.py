@@ -9,9 +9,9 @@ from datetime import datetime
 from typing import Optional
 
 from src.domain.lending.events.lending_events import (
-    BookBorrowed,
     BookOverdue,
-    BookReturned,
+    LoanCompleted,
+    LoanCreated,
     LoanExtended,
 )
 from src.domain.lending.exceptions import (
@@ -40,9 +40,9 @@ class Loan(AggregateRoot):
     catalog_book_id: str
     book_title: str
     due_date: DueDate
+    borrowed_at: datetime
     id: LoanId = field(default_factory=LoanId.next_id)
     status: LoanStatus = LoanStatus.ACTIVE
-    borrowed_at: datetime = field(default_factory=datetime.now)
     returned_at: Optional[datetime] = None
 
     @classmethod
@@ -53,9 +53,9 @@ class Loan(AggregateRoot):
         catalog_book_id: str,
         book_title: str,
         loan_duration_days: int,
+        borrowed_at: datetime,
     ) -> "Loan":
         """Factory method to create a new loan."""
-        borrowed_at = datetime.now()
         due_date = DueDate.from_loan_duration(borrowed_at, loan_duration_days)
 
         loan = cls(
@@ -68,7 +68,7 @@ class Loan(AggregateRoot):
         )
 
         loan.add_event(
-            BookBorrowed(
+            LoanCreated(
                 loan_id=loan.id.value,
                 patron_id=patron_id,
                 patron_email=patron_email,
@@ -81,29 +81,29 @@ class Loan(AggregateRoot):
 
         return loan
 
-    def return_book(self) -> None:
+    def return_book(self, returned_at: datetime) -> None:
         """Mark the loan as returned."""
         if self.status == LoanStatus.RETURNED:
             raise LoanAlreadyReturnedException(self.id.value)
 
         self.status = LoanStatus.RETURNED
-        self.returned_at = datetime.now()
+        self.returned_at = returned_at
 
         self.add_event(
-            BookReturned(
+            LoanCompleted(
                 loan_id=self.id.value,
                 patron_id=self.patron_id,
                 book_id=self.catalog_book_id,
                 returned_at=self.returned_at,
-                was_overdue=self.due_date.is_overdue,
+                was_overdue=self.due_date.is_overdue_as_of(returned_at),
             )
         )
 
-    def mark_overdue(self) -> None:
+    def mark_overdue(self, current_time: datetime) -> None:
         """Mark the loan as overdue (called by a scheduled job)."""
         if self.status != LoanStatus.ACTIVE:
             raise LoanNotActiveException(self.id.value, "mark as overdue")
-        if not self.due_date.is_overdue:
+        if not self.due_date.is_overdue_as_of(current_time):
             raise LoanNotOverdueException(self.id.value)
 
         self.status = LoanStatus.OVERDUE
@@ -116,15 +116,15 @@ class Loan(AggregateRoot):
                 book_id=self.catalog_book_id,
                 book_title=self.book_title,
                 due_date=self.due_date.value,
-                days_overdue=abs(self.due_date.days_until_due),
+                days_overdue=abs(self.due_date.days_until_due_as_of(current_time)),
             )
         )
 
-    def extend(self, days: int) -> None:
+    def extend(self, days: int, current_time: datetime) -> None:
         """Extend the loan by a number of days."""
         if self.status != LoanStatus.ACTIVE:
             raise LoanNotActiveException(self.id.value, "extend")
-        if self.due_date.is_overdue:
+        if self.due_date.is_overdue_as_of(current_time):
             raise CannotExtendOverdueLoanException(self.id.value)
 
         old_due_date = self.due_date
@@ -140,7 +140,6 @@ class Loan(AggregateRoot):
             )
         )
 
-    @property
-    def is_overdue(self) -> bool:
-        """Check if the loan is overdue."""
-        return self.status == LoanStatus.ACTIVE and self.due_date.is_overdue
+    def is_overdue_as_of(self, current_time: datetime) -> bool:
+        """Check if the loan is overdue as of the given time."""
+        return self.status == LoanStatus.ACTIVE and self.due_date.is_overdue_as_of(current_time)

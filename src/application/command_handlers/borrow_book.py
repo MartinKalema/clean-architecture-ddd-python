@@ -50,7 +50,7 @@ class BorrowBookHandler:
                 self.logger.warning(f"Attempted to borrow non-existent book: {command.book_id}")
                 raise BookNotFoundException(command.book_id)
 
-            book.borrow(command.borrower_email)
+            book.borrow(command.borrower_email, datetime.now())
 
             await self.uow.books.update(book)
             await self.uow.commit()

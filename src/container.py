@@ -147,7 +147,8 @@ class Container(containers.DeclarativeContainer):
     uow = providers.Factory(
         SqlAlchemyUnitOfWork,
         session_factory=session_factory,
-        event_dispatcher=event_dispatcher
+        event_dispatcher=event_dispatcher,
+        logger=logger
     )
 
     book_query_repository = providers.Singleton(

@@ -40,15 +40,13 @@ class DueDate:
         """Create a due date from a loan date and duration."""
         return cls(loan_date + timedelta(days=days))
 
-    @property
-    def is_overdue(self) -> bool:
-        """Check if the due date has passed."""
-        return datetime.now() > self.value
+    def is_overdue_as_of(self, current_time: datetime) -> bool:
+        """Check if the due date has passed as of the given time."""
+        return current_time > self.value
 
-    @property
-    def days_until_due(self) -> int:
-        """Days remaining until due (negative if overdue)."""
-        delta = self.value - datetime.now()
+    def days_until_due_as_of(self, current_time: datetime) -> int:
+        """Days remaining until due (negative if overdue) as of the given time."""
+        delta = self.value - current_time
         return delta.days
 
     def extend(self, days: int) -> "DueDate":

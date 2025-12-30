@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.application.event_handlers.book_handlers import BookHandlers
-from src.domain.catalog import BookBorrowed
+from src.domain.catalog import CatalogBookBorrowed
 from src.domain.shared_kernel import EmailTemplate
 from src.infrastructure.adapters.email.sendgrid_email_service import (
     SendGridEmailService,
@@ -28,7 +28,7 @@ async def test_rabbitmq_dispatcher():
         logger=mock_logger,
         circuit_breaker=circuit_breaker,
     )
-    event = BookBorrowed(
+    event = CatalogBookBorrowed(
         book_id="123",
         title="Test Book",
         borrowed_at=datetime.now(),
@@ -70,7 +70,7 @@ async def test_book_handler():
 
     handler = BookHandlers(email_service=mock_email_service, template_renderer=mock_template_renderer, logger=mock_logger)
 
-    event = BookBorrowed(
+    event = CatalogBookBorrowed(
         book_id="123",
         title="Test Book",
         borrowed_at=datetime.now(),

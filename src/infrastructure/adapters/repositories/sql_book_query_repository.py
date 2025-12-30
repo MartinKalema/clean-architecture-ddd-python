@@ -12,16 +12,13 @@ For now, it reads from the same database but with read-optimized queries.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.application.query_handlers import BookReadModel
 from src.infrastructure.adapters.repositories.sql_book_repository import BookModel
-
-if TYPE_CHECKING:
-    pass
 
 
 class SQLBookQueryRepository:

@@ -8,9 +8,9 @@ from src.domain.shared_kernel.exceptions import DomainException, ValidationExcep
 from .entities import Book
 from .events import (
     BookAddedToCatalog,
-    BookBorrowed,
     BookRemovedFromCatalog,
-    BookReturned,
+    CatalogBookBorrowed,
+    CatalogBookReturned,
 )
 from .exceptions import (
     BookAlreadyBorrowedException,
@@ -31,8 +31,8 @@ __all__ = [
     "ISBN",
     "BookAddedToCatalog",
     "BookRemovedFromCatalog",
-    "BookBorrowed",
-    "BookReturned",
+    "CatalogBookBorrowed",
+    "CatalogBookReturned",
     "BookRepository",
     "BookQueryRepository",
     "UnitOfWork",
