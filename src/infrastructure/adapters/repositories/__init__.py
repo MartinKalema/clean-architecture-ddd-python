@@ -1,3 +1,4 @@
-from .sql_book_repository import SQLBookRepository
+from .book_command_repository import BookCommandRepository
+from .book_query_repository import BookQueryRepository
 
-__all__ = ["SQLBookRepository"]
+__all__ = ["BookCommandRepository", "BookQueryRepository"]

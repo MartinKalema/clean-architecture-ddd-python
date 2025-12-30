@@ -27,9 +27,9 @@ class BorrowerInfo:
     current_loan_count: int
 
 
-class PatronACL(Protocol):
+class PatronService(Protocol):
     """
-    Anti-Corruption Layer interface for the Patron context.
+    Service interface for the Patron context.
 
     This protocol defines what Lending needs from Patron.
     """

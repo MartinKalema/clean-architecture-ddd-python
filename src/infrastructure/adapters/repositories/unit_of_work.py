@@ -3,8 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.infrastructure.adapters.outbox import OutboxRepository
-from src.infrastructure.adapters.repositories.sql_book_repository import (
-    SQLBookRepository,
+from src.infrastructure.adapters.repositories.book_command_repository import (
+    BookCommandRepository,
+)
+from src.infrastructure.adapters.repositories.patron_command_repository import (
+    PatronCommandRepository,
 )
 
 if TYPE_CHECKING:
@@ -14,7 +17,7 @@ if TYPE_CHECKING:
     from src.domain.shared_kernel import EventDispatcher
 
 
-class SqlAlchemyUnitOfWork:
+class UnitOfWork:
     """
     Unit of Work pattern implementation with Transactional Outbox.
 
@@ -34,10 +37,11 @@ class SqlAlchemyUnitOfWork:
         self.use_outbox = use_outbox
         self._session: AsyncSession | None = None
 
-    async def __aenter__(self) -> "SqlAlchemyUnitOfWork":
+    async def __aenter__(self) -> "UnitOfWork":
         self._session = self.session_factory()
         self.identity_map: Dict[str, Book] = {}
-        self.books = SQLBookRepository(self._session, self.identity_map)
+        self.books = BookCommandRepository(self._session, self.identity_map)
+        self.patrons = PatronCommandRepository(self._session)
         self._outbox = OutboxRepository(self._session) if self.use_outbox else None
         return self
 

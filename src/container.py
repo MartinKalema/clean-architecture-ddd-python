@@ -28,12 +28,13 @@ from src.infrastructure.adapters.logger import LoggerFactory
 from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import (
     RabbitMQEventDispatcher,
 )
-from src.infrastructure.adapters.repositories.sql_book_query_repository import (
-    SQLBookQueryRepository,
+from src.infrastructure.adapters.repositories.book_query_repository import (
+    BookQueryRepository,
 )
-from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import (
-    SqlAlchemyUnitOfWork,
+from src.infrastructure.adapters.repositories.unit_of_work import (
+    UnitOfWork,
 )
+
 from src.infrastructure.adapters.resilience import CircuitBreakerFactory
 from src.infrastructure.adapters.templates.jinja2_template_renderer import (
     Jinja2TemplateRenderer,
@@ -42,6 +43,11 @@ from src.infrastructure.configurations.settings import load_config
 from src.infrastructure.external.database import Database
 from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
+from src.domain.patron.interfaces.patron_repository import PatronRepository
+from src.infrastructure.adapters.patron.patron_service_adapter import PatronServiceAdapter
+
+from src.infrastructure.adapters.repositories.patron_query_repository import PatronQueryRepository
+
 
 
 class Container(containers.DeclarativeContainer):
@@ -145,13 +151,15 @@ class Container(containers.DeclarativeContainer):
     )
 
     uow = providers.Factory(
-        SqlAlchemyUnitOfWork,
+        UnitOfWork,
         session_factory=session_factory,
         event_dispatcher=event_dispatcher
     )
 
+
+
     book_query_repository = providers.Singleton(
-        SQLBookQueryRepository,
+        BookQueryRepository,
         session_factory=session_factory
     )
 
@@ -161,9 +169,21 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
+    patron_query_repository = providers.Singleton(
+        PatronQueryRepository,
+        session_factory=session_factory
+    )
+    
+    patron_service = providers.Singleton(
+        PatronServiceAdapter,
+        uow=uow,
+        query_repository=patron_query_repository
+    )
+
     borrow_book_handler = providers.Factory(
         BorrowBookHandler,
         uow=uow,
+        patron_service=patron_service, 
         logger=logger
     )
 

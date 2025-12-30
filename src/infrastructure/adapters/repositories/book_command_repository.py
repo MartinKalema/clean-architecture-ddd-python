@@ -54,7 +54,7 @@ class BookModel(Base):
         )
 
 
-class SQLBookRepository:
+class BookCommandRepository:
     """Repository implementation with optimistic locking support."""
 
     def __init__(self, session: AsyncSession, identity_map: Optional[Dict[str, Book]] = None):

@@ -23,7 +23,8 @@ dependencies = [
     "aio_pika",
     "sendgrid",
     "jinja2",
-    "alembic"
+    "alembic",
+    "pydantic-settings"
 ]
 
 [tool.pytest.ini_options]

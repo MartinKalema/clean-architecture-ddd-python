@@ -2,8 +2,8 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.domain.catalog import Author, Book, BookId, Title
-from src.infrastructure.adapters.repositories.sql_book_repository import (
-    SQLBookRepository,
+from src.infrastructure.adapters.repositories.book_command_repository import (
+    BookCommandRepository,
 )
 
 
@@ -13,7 +13,7 @@ async def test_repository_add_and_get(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
 
     async with session_factory() as session:
-        repo = SQLBookRepository(session)
+        repo = BookCommandRepository(session)
 
         book = Book(
             id=BookId.next_id(),
@@ -41,7 +41,7 @@ async def test_repository_update(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
 
     async with session_factory() as session:
-        repo = SQLBookRepository(session)
+        repo = BookCommandRepository(session)
 
         book = Book(
             id=BookId.next_id(),

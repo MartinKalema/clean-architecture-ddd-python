@@ -43,6 +43,7 @@ class Patron(AggregateRoot):
     membership_tier: MembershipTier = MembershipTier.REGULAR
     is_suspended: bool = False
     suspended_reason: Optional[str] = None
+    active_loans: int = 0
     registered_at: datetime = field(default_factory=datetime.now)
 
     @classmethod
@@ -68,11 +69,13 @@ class Patron(AggregateRoot):
         )
         return patron
 
-    def can_borrow(self, current_loans: int) -> bool:
+    def can_borrow(self, current_loans: Optional[int] = None) -> bool:
         """Check if patron can borrow another book."""
         if self.is_suspended:
             return False
-        return current_loans < self.membership_tier.borrowing_limit
+        # Use internal counter if external not provided
+        loans = current_loans if current_loans is not None else self.active_loans
+        return loans < self.membership_tier.borrowing_limit
 
     def suspend(self, reason: str) -> None:
         """Suspend a patron's borrowing privileges."""
@@ -102,3 +105,11 @@ class Patron(AggregateRoot):
                 self.membership_tier.value, new_tier.value
             )
         self.membership_tier = new_tier
+        self.membership_tier = new_tier
+
+    def increment_active_loans(self) -> None:
+        self.active_loans += 1
+
+    def decrement_active_loans(self) -> None:
+        if self.active_loans > 0:
+            self.active_loans -= 1

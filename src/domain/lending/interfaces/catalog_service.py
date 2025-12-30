@@ -23,18 +23,11 @@ class BookReference:
     author: str
 
 
-class CatalogACL(Protocol):
+class CatalogService(Protocol):
     """
-    Anti-Corruption Layer interface for the Catalog context.
+    Service interface for the Catalog context.
 
-    This protocol defines what Lending needs from Catalog. The
-    implementation lives in the infrastructure layer and handles
-    the actual communication with the Catalog context.
-
-    Why a Protocol?
-    - Lending context defines what it NEEDS (this interface)
-    - Infrastructure implements HOW to get it (adapter)
-    - If Catalog changes, only the adapter needs to change
+    This protocol defines what Lending needs from Catalog.
     """
 
     async def get_book_reference(self, catalog_book_id: str) -> Optional[BookReference]:

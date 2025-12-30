@@ -18,13 +18,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.application.query_handlers import BookReadModel
-from src.infrastructure.adapters.repositories.sql_book_repository import BookModel
+from src.infrastructure.adapters.repositories.book_command_repository import BookModel
 
 if TYPE_CHECKING:
     pass
 
 
-class SQLBookQueryRepository:
+class BookQueryRepository:
     """
     SQL implementation of the Book Query Repository.
 

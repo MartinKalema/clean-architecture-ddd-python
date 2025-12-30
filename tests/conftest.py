@@ -1,3 +1,4 @@
+import os
 from typing import AsyncGenerator
 
 import pytest_asyncio
@@ -9,8 +10,12 @@ from src.container import Container
 from src.infrastructure.external.database import Database
 from src.presentation.api.main import app
 
-# Use in-memory SQLite for tests
-TEST_DATABASE_URL = "sqlite:///:memory:"
+
+# Use PostgreSQL for tests (matching docker-compose)
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL", 
+    "postgresql+asyncpg://library:library_secret@localhost:5432/library_db"
+)
 
 @pytest_asyncio.fixture(scope="session")
 async def test_db():
