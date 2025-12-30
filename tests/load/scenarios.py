@@ -3,26 +3,27 @@ Realistic User Scenarios for Load Testing.
 
 Models different user personas based on actual usage patterns:
 - Browser: Casual user just looking around
-- Borrower: Active library patron
-- Librarian: Admin user managing books
+- Borrower: Active library patron using new loan system
+- Librarian: Admin user managing books and patrons
+- PatronManager: Staff managing patron accounts
 """
 import random
 import uuid
 
 from locust import between, tag, task
 
-from .base import BaseBookUser
+from .base import BaseLibraryUser
 
 
-class BrowserUser(BaseBookUser):
+class BrowserUser(BaseLibraryUser):
     """
     Casual browser - mostly reads, rarely interacts.
 
-    Represents 60% of typical library traffic.
+    Represents 50% of typical library traffic.
     """
 
-    weight = 60  # 60% of users
-    wait_time = between(2, 5)  # Slower, casual browsing
+    weight = 50
+    wait_time = between(2, 5)
 
     @task(10)
     @tag("read", "browse")
@@ -34,13 +35,18 @@ class BrowserUser(BaseBookUser):
     @tag("read", "browse")
     def view_random_book(self):
         """View a specific book's details."""
-        # First get the list
         response = self.client.get("/books", name="/books (for browse)")
         if response.status_code == 200:
             books = response.json()
             if books:
                 book = random.choice(books)
                 self.get_book(book["id"])
+
+    @task(3)
+    @tag("read", "browse")
+    def list_patrons(self):
+        """Browse patrons list."""
+        self.client.get("/patrons")
 
     @task(1)
     @tag("read", "health")
@@ -49,23 +55,33 @@ class BrowserUser(BaseBookUser):
         self.client.get("/health")
 
 
-class BorrowerUser(BaseBookUser):
+class BorrowerUser(BaseLibraryUser):
     """
-    Active patron - browses and borrows books.
+    Active patron - creates loans and returns books.
 
     Represents 30% of typical library traffic.
+    Uses the new Loan API instead of book borrow/return.
     """
 
-    weight = 30  # 30% of users
-    wait_time = between(1, 3)  # More engaged
+    weight = 30
+    wait_time = between(1, 3)
 
     def on_start(self):
-        """Setup: ensure we have a book to work with."""
-        # Create a book for this user's session
-        self.create_book(
+        """Setup: create a patron and book for this user's session."""
+        self._patron = self.create_patron(
+            first_name=f"Patron_{uuid.uuid4().hex[:6]}",
+            last_name="LoadTest",
+            email=f"patron_{self._test_run_id}@loadtest.com"
+        )
+        self._book = None
+        book_id = self.create_book(
             title=f"BorrowerBook_{uuid.uuid4().hex[:6]}",
             author="Test Author"
         )
+        if book_id:
+            response = self.client.get(f"/books/{book_id}")
+            if response.status_code == 200:
+                self._book = response.json()
 
     @task(5)
     @tag("read", "browse")
@@ -80,40 +96,59 @@ class BorrowerUser(BaseBookUser):
         if self._my_books:
             self.get_book(random.choice(self._my_books))
 
-    @task(2)
-    @tag("write", "borrow")
-    def borrow_available_book(self):
-        """Borrow a book from the catalog."""
-        response = self.client.get("/books", name="/books (for borrow)")
+    @task(3)
+    @tag("write", "loan")
+    def create_new_loan(self):
+        """Create a loan using the Loan API."""
+        if not self._patron:
+            return
+
+        response = self.client.get("/books", name="/books (for loan)")
         if response.status_code == 200:
             books = response.json()
-            # Find an available book
             available = [b for b in books if not b.get("is_borrowed", False)]
             if available:
                 book = random.choice(available)
-                self.borrow_book(
-                    book["id"],
-                    f"borrower_{self._test_run_id}@loadtest.com"
+                self.create_loan(
+                    patron_id=self._patron["id"],
+                    patron_email=self._patron["email"],
+                    book_id=book["id"],
+                    book_title=book["title"]
                 )
 
+    @task(2)
+    @tag("read", "loan")
+    def view_my_loans(self):
+        """View current loans."""
+        if self._patron:
+            self.list_patron_loans(self._patron["id"])
+
     @task(1)
-    @tag("write", "return")
-    def return_borrowed_book(self):
-        """Return a previously borrowed book."""
-        if self._borrowed_books:
-            book_id = random.choice(self._borrowed_books)
-            self.return_book(book_id)
+    @tag("write", "loan")
+    def extend_active_loan(self):
+        """Extend an active loan."""
+        if self._my_loans:
+            loan_id = random.choice(self._my_loans)
+            self.extend_loan(loan_id)
+
+    @task(1)
+    @tag("write", "loan")
+    def return_active_loan(self):
+        """Return a loan."""
+        if self._my_loans:
+            loan_id = random.choice(self._my_loans)
+            self.return_loan(loan_id)
 
 
-class LibrarianUser(BaseBookUser):
+class LibrarianUser(BaseLibraryUser):
     """
     Librarian/Admin - manages the book catalog.
 
     Represents 10% of typical library traffic.
     """
 
-    weight = 10  # 10% of users
-    wait_time = between(0.5, 2)  # Faster, task-oriented
+    weight = 10
+    wait_time = between(0.5, 2)
 
     @task(3)
     @tag("read", "admin")
@@ -135,7 +170,6 @@ class LibrarianUser(BaseBookUser):
     def check_system_health(self):
         """Monitor system health."""
         self.client.get("/health")
-        self.client.get("/health/live")
         self.client.get("/health/ready")
 
     @task(1)
@@ -145,7 +179,50 @@ class LibrarianUser(BaseBookUser):
         self.client.get("/health/circuits")
 
 
-class StressTestUser(BaseBookUser):
+class PatronManagerUser(BaseLibraryUser):
+    """
+    Staff managing patron accounts.
+
+    Represents 10% of typical library traffic.
+    """
+
+    weight = 10
+    wait_time = between(1, 3)
+
+    @task(5)
+    @tag("read", "patron")
+    def list_all_patrons(self):
+        """View all patrons."""
+        self.client.get("/patrons")
+
+    @task(3)
+    @tag("read", "patron")
+    def view_patron_details(self):
+        """View specific patron."""
+        if self._my_patrons:
+            patron = random.choice(self._my_patrons)
+            self.get_patron(patron["id"])
+
+    @task(2)
+    @tag("write", "patron")
+    def register_new_patron(self):
+        """Register a new patron."""
+        self.create_patron(
+            first_name=f"New_{uuid.uuid4().hex[:6]}",
+            last_name="Patron",
+            email=f"new_{uuid.uuid4().hex[:8]}@loadtest.com"
+        )
+
+    @task(2)
+    @tag("read", "loan")
+    def view_patron_loans(self):
+        """View loans for a patron."""
+        if self._my_patrons:
+            patron = random.choice(self._my_patrons)
+            self.list_patron_loans(patron["id"])
+
+
+class StressTestUser(BaseLibraryUser):
     """
     Aggressive user for stress testing - rapid requests.
 
@@ -153,7 +230,15 @@ class StressTestUser(BaseBookUser):
     """
 
     weight = 0  # Not used in normal tests - enable explicitly
-    wait_time = between(0.1, 0.5)  # Very fast
+    wait_time = between(0.1, 0.5)
+
+    def on_start(self):
+        """Setup for stress testing."""
+        self._patron = self.create_patron(
+            first_name="Stress",
+            last_name="Tester",
+            email=f"stress_{self._test_run_id}@loadtest.com"
+        )
 
     @task(5)
     def rapid_list(self):
@@ -161,17 +246,36 @@ class StressTestUser(BaseBookUser):
         self.client.get("/books")
 
     @task(3)
-    def rapid_create_and_borrow(self):
-        """Rapid create and borrow cycle."""
+    def rapid_create_and_loan(self):
+        """Rapid create book and loan cycle."""
+        if not self._patron:
+            return
+
         book_id = self.create_book(
             title=f"Stress_{uuid.uuid4().hex[:8]}",
             author="StressBot"
         )
         if book_id:
-            self.borrow_book(book_id, "stress@loadtest.com")
+            response = self.client.get(f"/books/{book_id}")
+            if response.status_code == 200:
+                book = response.json()
+                self.create_loan(
+                    patron_id=self._patron["id"],
+                    patron_email=self._patron["email"],
+                    book_id=book_id,
+                    book_title=book["title"]
+                )
 
     @task(2)
     def health_spam(self):
         """Spam health endpoints."""
         self.client.get("/health")
         self.client.get("/health/circuits")
+
+    @task(2)
+    def patron_operations(self):
+        """Rapid patron operations."""
+        self.client.get("/patrons")
+        if self._my_patrons:
+            patron = random.choice(self._my_patrons)
+            self.list_patron_loans(patron["id"])

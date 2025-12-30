@@ -13,16 +13,14 @@ from src.application.command_handlers import (
     BorrowBookHandler,
 )
 from src.domain.catalog import BookAlreadyBorrowedException
-from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import (
-    SqlAlchemyUnitOfWork,
-)
+from src.infrastructure.adapters.catalog import CatalogUnitOfWork
 
 
 @pytest.mark.asyncio
 async def test_add_book_use_case(test_db):
     """Test AddBookHandler creates a book."""
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
-    uow = SqlAlchemyUnitOfWork(session_factory)
+    uow = CatalogUnitOfWork(session_factory)
     mock_logger = MagicMock()
     handler = AddBookHandler(uow, logger=mock_logger)
 
@@ -37,7 +35,7 @@ async def test_add_book_use_case(test_db):
 async def test_borrow_book_use_case(test_db):
     """Test BorrowBookHandler borrows a book."""
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
-    uow = SqlAlchemyUnitOfWork(session_factory)
+    uow = CatalogUnitOfWork(session_factory)
     mock_logger = MagicMock()
     add_handler = AddBookHandler(uow, logger=mock_logger)
     borrow_handler = BorrowBookHandler(uow, logger=mock_logger)
@@ -62,7 +60,7 @@ async def test_borrow_book_use_case(test_db):
 async def test_borrow_book_already_borrowed(test_db):
     """Test BorrowBookHandler raises exception for already borrowed book."""
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
-    uow = SqlAlchemyUnitOfWork(session_factory)
+    uow = CatalogUnitOfWork(session_factory)
     mock_logger = MagicMock()
     add_handler = AddBookHandler(uow, logger=mock_logger)
     borrow_handler = BorrowBookHandler(uow, logger=mock_logger)

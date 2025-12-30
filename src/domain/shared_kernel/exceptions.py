@@ -5,7 +5,6 @@ Shared kernel exceptions used across all bounded contexts.
 
 class DomainException(Exception):
     """Base class for all domain exceptions."""
-    pass
 
 
 class ValidationException(DomainException):

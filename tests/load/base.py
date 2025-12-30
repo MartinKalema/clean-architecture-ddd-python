@@ -16,7 +16,7 @@ from locust.runners import MasterRunner, WorkerRunner
 from .config import DEFAULT_SLA, TEST_DATA_PREFIX
 
 
-class BaseBookUser(HttpUser):
+class BaseLibraryUser(HttpUser):
     """
     Base user class with proper state management.
 
@@ -30,6 +30,8 @@ class BaseBookUser(HttpUser):
         # Per-user state - NOT shared across users
         self._my_books: list[str] = []
         self._borrowed_books: list[str] = []
+        self._my_patrons: list[dict] = []  # {id, email}
+        self._my_loans: list[str] = []
         self._test_run_id = str(uuid.uuid4())[:8]
 
     @property
@@ -118,8 +120,156 @@ class BaseBookUser(HttpUser):
                 response.failure(f"Unexpected: {response.status_code}")
                 return False
 
+    # Patron methods
+    def create_patron(self, first_name: str, last_name: str, email: str) -> Optional[dict]:
+        """
+        Create a patron and track it for cleanup.
+
+        Returns patron dict {id, email} if successful, None otherwise.
+        """
+        response = self.client.post("/patrons", json={
+            "first_name": f"{self.test_prefix}_{first_name}",
+            "last_name": last_name,
+            "email": email,
+        })
+
+        if response.status_code == 201:
+            data = response.json()
+            patron = {"id": data["id"], "email": data["email"]}
+            self._my_patrons.append(patron)
+            return patron
+        return None
+
+    def get_patron(self, patron_id: str) -> bool:
+        """Get patron details."""
+        with self.client.get(
+            f"/patrons/{patron_id}",
+            catch_response=True,
+            name="/patrons/{id}",
+        ) as response:
+            if response.status_code == 200:
+                response.success()
+                return True
+            elif response.status_code == 404:
+                response.failure("Patron not found")
+                return False
+            else:
+                response.failure(f"Unexpected: {response.status_code}")
+                return False
+
+    def list_patrons(self) -> list:
+        """List all patrons."""
+        response = self.client.get("/patrons")
+        if response.status_code == 200:
+            return response.json()
+        return []
+
+    # Loan methods
+    def create_loan(self, patron_id: str, patron_email: str, book_id: str, book_title: str) -> Optional[str]:
+        """
+        Create a loan and track it.
+
+        Returns loan ID if successful, None otherwise.
+        """
+        with self.client.post(
+            "/loans",
+            json={
+                "patron_id": patron_id,
+                "patron_email": patron_email,
+                "catalog_book_id": book_id,
+                "book_title": book_title,
+                "loan_duration_days": 14,
+            },
+            catch_response=True,
+            name="/loans",
+        ) as response:
+            if response.status_code == 201:
+                loan_id = response.json()["id"]
+                self._my_loans.append(loan_id)
+                response.success()
+                return loan_id
+            elif response.status_code == 409:
+                # Book already borrowed - expected in concurrent tests
+                response.success()
+                return None
+            else:
+                response.failure(f"Unexpected: {response.status_code}")
+                return None
+
+    def get_loan(self, loan_id: str) -> bool:
+        """Get loan details."""
+        with self.client.get(
+            f"/loans/{loan_id}",
+            catch_response=True,
+            name="/loans/{id}",
+        ) as response:
+            if response.status_code == 200:
+                response.success()
+                return True
+            elif response.status_code == 404:
+                response.failure("Loan not found")
+                return False
+            else:
+                response.failure(f"Unexpected: {response.status_code}")
+                return False
+
+    def list_patron_loans(self, patron_id: str) -> list:
+        """List loans for a patron."""
+        with self.client.get(
+            f"/loans/patron/{patron_id}",
+            catch_response=True,
+            name="/loans/patron/{id}",
+        ) as response:
+            if response.status_code == 200:
+                response.success()
+                return response.json()
+            else:
+                response.failure(f"Unexpected: {response.status_code}")
+                return []
+
+    def extend_loan(self, loan_id: str, days: int = 7) -> bool:
+        """Extend a loan."""
+        with self.client.post(
+            f"/loans/{loan_id}/extend",
+            json={"days": days},
+            catch_response=True,
+            name="/loans/{id}/extend",
+        ) as response:
+            if response.status_code == 200:
+                response.success()
+                return True
+            elif response.status_code in (400, 404):
+                # Loan not active or not found - expected
+                response.success()
+                return False
+            else:
+                response.failure(f"Unexpected: {response.status_code}")
+                return False
+
+    def return_loan(self, loan_id: str) -> bool:
+        """Return a loan."""
+        with self.client.post(
+            f"/loans/{loan_id}/return",
+            catch_response=True,
+            name="/loans/{id}/return",
+        ) as response:
+            if response.status_code == 200:
+                if loan_id in self._my_loans:
+                    self._my_loans.remove(loan_id)
+                response.success()
+                return True
+            elif response.status_code in (400, 404):
+                # Already returned or not found - expected
+                response.success()
+                return False
+            else:
+                response.failure(f"Unexpected: {response.status_code}")
+                return False
+
     def on_stop(self):
-        """Cleanup when user stops - return borrowed books."""
+        """Cleanup when user stops - return loans and borrowed books."""
+        for loan_id in list(self._my_loans):
+            self.return_loan(loan_id)
         for book_id in list(self._borrowed_books):
             self.return_book(book_id)
 

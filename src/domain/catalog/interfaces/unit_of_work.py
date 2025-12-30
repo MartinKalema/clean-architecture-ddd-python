@@ -3,14 +3,14 @@ Unit of Work interface for the Catalog bounded context.
 """
 from typing import Protocol
 
-from src.domain.catalog.interfaces.catalog_book_repository import BookRepository
+from src.domain.catalog.interfaces.catalog_command_repository import IBookCommandRepository
 
 
-class UnitOfWork(Protocol):
-    """Unit of Work for managing transactions."""
-    books: BookRepository
+class ICatalogUnitOfWork(Protocol):
+    """Unit of Work interface for managing Catalog transactions."""
+    books: IBookCommandRepository
 
-    async def __aenter__(self) -> "UnitOfWork":
+    async def __aenter__(self) -> "ICatalogUnitOfWork":
         ...
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

@@ -11,18 +11,22 @@ from src.domain.catalog import (
     DomainException,
 )
 from src.infrastructure.exceptions import InfrastructureException
-from src.presentation.api.routes import book_routes, health_routes
+from src.presentation.api.routes import book_routes, health_routes, loan_routes, patron_routes
+
+
+container = Container()
+etcd_adapter = container.etcd_adapter()
+etcd_adapter.load()
+container.configurations.from_dict(etcd_adapter.get_all())
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db = container.database()
+    db = container.postgresql()
     await db.init_models()
     yield
     await db.engine.dispose()
 
-
-container = Container()
 
 app = FastAPI(
     title="Library API",
@@ -51,3 +55,5 @@ async def domain_exception_handler(request: Request, exc: DomainException):
 
 app.include_router(health_routes.router)
 app.include_router(book_routes.router)
+app.include_router(loan_routes.router)
+app.include_router(patron_routes.router)

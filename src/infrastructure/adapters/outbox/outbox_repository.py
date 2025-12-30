@@ -16,7 +16,7 @@ from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, select,
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.shared_kernel import DomainEvent
-from src.infrastructure.external.database import Base
+from src.infrastructure.external.postgresql import Base
 
 
 class OutboxMessage(Base):

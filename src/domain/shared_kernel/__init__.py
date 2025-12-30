@@ -14,7 +14,13 @@ from .exceptions import (
     InvalidEmailException,
     ValidationException,
 )
-from .interfaces import EmailService, EventDispatcher, Logger, TemplateRenderer
+from .interfaces import (
+    ConfigurationProvider,
+    EmailService,
+    EventDispatcher,
+    Logger,
+    TemplateRenderer,
+)
 from .value_objects import EmailAddress
 
 __all__ = [
@@ -25,6 +31,7 @@ __all__ = [
     "EventDispatcher",
     "EmailService",
     "TemplateRenderer",
+    "ConfigurationProvider",
     "EmailTemplate",
     "DomainException",
     "ValidationException",

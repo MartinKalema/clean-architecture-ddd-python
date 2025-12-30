@@ -6,7 +6,6 @@ from src.domain.shared_kernel.exceptions import DomainException
 
 class LendingException(DomainException):
     """Base class for lending domain exceptions."""
-    pass
 
 
 class LoanAlreadyReturnedException(LendingException):
@@ -49,3 +48,9 @@ class InvalidLoanIdException(LendingException):
     """Raised when a loan ID is invalid."""
     def __init__(self):
         super().__init__("LoanId cannot be empty")
+
+
+class LoanNotFoundException(LendingException):
+    """Raised when a loan is not found."""
+    def __init__(self, loan_id: str):
+        super().__init__(f"Loan with id {loan_id} not found")

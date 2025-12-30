@@ -32,37 +32,28 @@ services:
     container_name: clean_arch_pgbouncer
     ports:
       - "6432:6432"
-    volumes:
-      - ./src/infrastructure/configurations/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
-      - ./src/infrastructure/configurations/userlist.txt:/etc/pgbouncer/userlist.txt
     environment:
-      # PostgreSQL backend
       POSTGRESQL_HOST: postgres
       POSTGRESQL_PORT: 5432
       POSTGRESQL_USERNAME: library
       POSTGRESQL_PASSWORD: library_secret
       POSTGRESQL_DATABASE: library_db
-      # PgBouncer settings
       PGBOUNCER_PORT: 6432
       PGBOUNCER_DATABASE: library_db
-      PGBOUNCER_AUTH_TYPE: scram-sha-256
-      # Pool mode: transaction is best for web apps (connection released after each transaction)
+      PGBOUNCER_AUTH_TYPE: trust
       PGBOUNCER_POOL_MODE: transaction
-      # Client-side limits (how many app connections PgBouncer accepts)
       PGBOUNCER_MAX_CLIENT_CONN: 10000
-      # Server-side limits (actual PostgreSQL connections)
-      # This is the KEY setting - limits backend connections to PostgreSQL
       PGBOUNCER_MAX_DB_CONNECTIONS: 200
-      PGBOUNCER_DEFAULT_POOL_SIZE: 100
-      PGBOUNCER_MIN_POOL_SIZE: 25
-      PGBOUNCER_RESERVE_POOL_SIZE: 50
-      # Connection lifecycle
+      PGBOUNCER_DEFAULT_POOL_SIZE: 50
+      PGBOUNCER_MIN_POOL_SIZE: 10
+      PGBOUNCER_RESERVE_POOL_SIZE: 25
       PGBOUNCER_SERVER_IDLE_TIMEOUT: 600
       PGBOUNCER_SERVER_LIFETIME: 3600
       PGBOUNCER_SERVER_RESET_QUERY: DISCARD ALL
-      # Query timeout
       PGBOUNCER_QUERY_TIMEOUT: 120
       PGBOUNCER_QUERY_WAIT_TIMEOUT: 60
+      PGBOUNCER_LISTEN_BACKLOG: 4096
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,5 +73,30 @@ services:
       timeout: 5s
       retries: 5
 
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.17
+    container_name: clean_arch_etcd
+    ports:
+      - "2379:2379"   # Client port
+      - "2380:2380"   # Peer port
+    environment:
+      ETCD_NAME: etcd0
+      ETCD_DATA_DIR: /etcd-data
+      ETCD_ADVERTISE_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://0.0.0.0:2380
+      ETCD_INITIAL_CLUSTER: etcd0=http://0.0.0.0:2380
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ETCD_INITIAL_CLUSTER_TOKEN: etcd-cluster-1
+    volumes:
+      - etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+  etcd_data:
