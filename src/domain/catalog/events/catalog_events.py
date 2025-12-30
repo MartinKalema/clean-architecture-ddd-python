@@ -22,8 +22,8 @@ class BookRemovedFromCatalog(DomainEvent):
 
 
 @dataclass(frozen=True)
-class BookBorrowed(DomainEvent):
-    """Published when a book is borrowed."""
+class CatalogBookBorrowed(DomainEvent):
+    """Published when a book is borrowed from the catalog."""
     book_id: str
     title: str
     borrowed_at: datetime
@@ -32,6 +32,6 @@ class BookBorrowed(DomainEvent):
 
 
 @dataclass(frozen=True)
-class BookReturned(DomainEvent):
-    """Published when a book is returned."""
+class CatalogBookReturned(DomainEvent):
+    """Published when a book is returned to the catalog."""
     book_id: str

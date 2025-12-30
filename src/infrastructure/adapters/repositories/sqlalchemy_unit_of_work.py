@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from src.domain.catalog import Book
-    from src.domain.shared_kernel import EventDispatcher
+    from src.domain.shared_kernel import EventDispatcher, Logger
 
 
 class SqlAlchemyUnitOfWork:
@@ -27,11 +27,13 @@ class SqlAlchemyUnitOfWork:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         event_dispatcher: Optional[EventDispatcher] = None,
-        use_outbox: bool = True
+        use_outbox: bool = True,
+        logger: Optional[Logger] = None
     ):
         self.session_factory = session_factory
         self.event_dispatcher = event_dispatcher
         self.use_outbox = use_outbox
+        self.logger = logger
         self._session: AsyncSession | None = None
 
     async def __aenter__(self) -> "SqlAlchemyUnitOfWork":
@@ -62,8 +64,15 @@ class SqlAlchemyUnitOfWork:
             for event in events:
                 try:
                     await self.event_dispatcher.dispatch(event)
-                except Exception:
-                    pass
+                except Exception as e:
+                    event_name = type(event).__name__
+                    if self.logger:
+                        self.logger.error(
+                            f"Failed to dispatch event {event_name}: {e}",
+                            exception=e
+                        )
+                    else:
+                        raise
 
     async def rollback(self):
         if self._session:

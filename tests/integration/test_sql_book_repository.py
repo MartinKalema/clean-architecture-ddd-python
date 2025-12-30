@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -53,7 +55,7 @@ async def test_repository_update(test_db):
         await session.commit()
 
         # Update
-        book.borrow("test@example.com")
+        book.borrow("test@example.com", datetime.now())
         await repo.update(book)
         await session.commit()
 

@@ -19,7 +19,7 @@ class EventConsumer:
 
     Usage:
         consumer = EventConsumer(amqp_url, exchange_name, queue_name, logger)
-        consumer.register_handler("BookBorrowed", book_handlers.handle_book_borrowed)
+        consumer.register_handler("CatalogBookBorrowed", book_handlers.handle_book_borrowed)
         await consumer.start()
     """
 

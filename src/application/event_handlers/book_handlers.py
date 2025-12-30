@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Union
 
-from src.domain.catalog import BookBorrowed
+from src.domain.catalog import CatalogBookBorrowed
 from src.domain.shared_kernel import EmailTemplate
 
 if TYPE_CHECKING:
@@ -24,12 +24,12 @@ class BookHandlers:
         self.template_renderer = template_renderer
         self.logger = logger
 
-    async def handle_book_borrowed(self, event: Union[BookBorrowed, dict]):
+    async def handle_book_borrowed(self, event: Union[CatalogBookBorrowed, dict]):
         """
-        Handle BookBorrowed event - send notification email to borrower.
+        Handle CatalogBookBorrowed event - send notification email to borrower.
 
         Args:
-            event: Either a BookBorrowed domain event or a dict payload from the consumer
+            event: Either a CatalogBookBorrowed domain event or a dict payload from the consumer
         """
         try:
             if isinstance(event, dict):
@@ -48,7 +48,7 @@ class BookHandlers:
                 borrowed_at = event.borrowed_at
                 return_due_date = event.return_due_date
 
-            self.logger.info(f"Handling BookBorrowed event for book: {title}")
+            self.logger.info(f"Handling CatalogBookBorrowed event for book: {title}")
 
             email_content = self.template_renderer.render(
                 EmailTemplate.BOOK_BORROWED,
@@ -70,15 +70,15 @@ class BookHandlers:
                 self.logger.warning("No borrower email provided, skipping notification")
 
         except Exception as e:
-            self.logger.error("Error handling BookBorrowed event", exception=e)
+            self.logger.error("Error handling CatalogBookBorrowed event", exception=e)
             raise
 
     async def handle_book_returned(self, event: Union[dict, object]):
         """
-        Handle BookReturned event.
+        Handle CatalogBookReturned event.
 
         Args:
-            event: Either a BookReturned domain event or a dict payload
+            event: Either a CatalogBookReturned domain event or a dict payload
         """
         try:
             if isinstance(event, dict):
@@ -86,8 +86,8 @@ class BookHandlers:
             else:
                 book_id = getattr(event, "book_id", None)
 
-            self.logger.info(f"Handling BookReturned event for book: {book_id}")
+            self.logger.info(f"Handling CatalogBookReturned event for book: {book_id}")
 
         except Exception as e:
-            self.logger.error("Error handling BookReturned event", exception=e)
+            self.logger.error("Error handling CatalogBookReturned event", exception=e)
             raise
