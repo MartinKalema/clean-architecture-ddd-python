@@ -3,7 +3,6 @@ from typing import Optional
 
 class InfrastructureException(Exception):
     """Base class for all infrastructure exceptions."""
-    pass
 
 
 class DatabaseException(InfrastructureException):
@@ -35,7 +34,6 @@ class TemplateRenderingException(InfrastructureException):
 
 class ConfigurationException(InfrastructureException):
     """Raised when a configuration error occurs."""
-    pass
 
 
 class CircuitBreakerOpenException(InfrastructureException):

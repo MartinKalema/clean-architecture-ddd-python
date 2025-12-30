@@ -3,7 +3,7 @@ from click.testing import CliRunner
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.container import Container
-from src.infrastructure.external.database import Base
+from src.infrastructure.external.postgresql import Base
 from src.presentation.cli.main import cli
 
 # Note: Testing CLI with real DB/Async in this setup is complex because CliRunner is synchronous

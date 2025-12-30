@@ -23,12 +23,31 @@ Context Relationships:
 - Relationship Type: Customer-Supplier (Lending is the customer)
 """
 from .entities.patron import Patron
-from .events.patron_events import PatronRegistered
-from .value_objects.patron_info import MembershipTier, PatronId
+from .events.patron_events import PatronRegistered, PatronReinstated, PatronSuspended
+from .exceptions import (
+    InvalidPatronIdException,
+    InvalidPatronNameException,
+    InvalidTierUpgradeException,
+    PatronAlreadySuspendedException,
+    PatronNotSuspendedException,
+)
+from .interfaces import IPatronCommandRepository, IPatronQueryRepository, IPatronUnitOfWork
+from .value_objects.patron_info import MembershipTier, PatronId, PatronName
 
 __all__ = [
     "Patron",
     "PatronId",
+    "PatronName",
     "MembershipTier",
     "PatronRegistered",
+    "PatronSuspended",
+    "PatronReinstated",
+    "IPatronCommandRepository",
+    "IPatronQueryRepository",
+    "IPatronUnitOfWork",
+    "InvalidPatronIdException",
+    "InvalidPatronNameException",
+    "InvalidTierUpgradeException",
+    "PatronAlreadySuspendedException",
+    "PatronNotSuspendedException",
 ]

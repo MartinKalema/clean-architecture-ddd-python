@@ -6,7 +6,6 @@ from src.domain.shared_kernel.exceptions import DomainException
 
 class PatronException(DomainException):
     """Base class for patron domain exceptions."""
-    pass
 
 
 class PatronAlreadySuspendedException(PatronException):
@@ -40,3 +39,15 @@ class InvalidPatronNameException(PatronException):
     """Raised when a patron name is invalid."""
     def __init__(self, field: str):
         super().__init__(f"{field} cannot be empty")
+
+
+class PatronNotFoundException(PatronException):
+    """Raised when a patron is not found."""
+    def __init__(self, patron_id: str):
+        super().__init__(f"Patron with id {patron_id} not found")
+
+
+class ConcurrentModificationException(PatronException):
+    """Raised when optimistic locking fails."""
+    def __init__(self, patron_id: str):
+        super().__init__(f"Patron {patron_id} was modified by another process")

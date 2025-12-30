@@ -9,6 +9,8 @@ CQRS Architecture:
 - Commands: Write operations (AddBook, BorrowBook, ReturnBook)
 - Queries: Read operations (ListBooks, GetBook)
 """
+import os
+
 from dependency_injector import containers, providers
 
 from src.application.command_handlers import (
@@ -16,30 +18,39 @@ from src.application.command_handlers import (
     BorrowBookHandler,
     ReturnBookHandler,
 )
+from src.application.command_handlers.create_loan import CreateLoanHandler
+from src.application.command_handlers.extend_loan import ExtendLoanHandler
+from src.application.command_handlers.register_patron import RegisterPatronHandler
+from src.application.command_handlers.reinstate_patron import ReinstatePatronHandler
+from src.application.command_handlers.return_loan import ReturnLoanHandler
+from src.application.command_handlers.suspend_patron import SuspendPatronHandler
+from src.application.command_handlers.upgrade_patron_tier import UpgradePatronTierHandler
 from src.application.event_handlers.book_handlers import BookHandlers
 from src.application.query_handlers import (
     GetBookHandler,
     ListBooksHandler,
 )
+from src.application.query_handlers.get_loan import GetLoanHandler
+from src.application.query_handlers.get_patron import GetPatronHandler
+from src.application.query_handlers.list_patron_loans import ListPatronLoansHandler
+from src.application.query_handlers.list_patrons import ListPatronsHandler
 from src.infrastructure.adapters.email.sendgrid_email_service import (
     SendGridEmailService,
 )
+from src.infrastructure.adapters.etcd import EtcdAdapter
 from src.infrastructure.adapters.logger import LoggerFactory
 from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import (
     RabbitMQEventDispatcher,
 )
-from src.infrastructure.adapters.repositories.sql_book_query_repository import (
-    SQLBookQueryRepository,
-)
-from src.infrastructure.adapters.repositories.sqlalchemy_unit_of_work import (
-    SqlAlchemyUnitOfWork,
-)
+from src.infrastructure.adapters.catalog import BookQueryRepository, CatalogUnitOfWork
+from src.infrastructure.adapters.lending import LoanQueryRepository, LoanUnitOfWork
+from src.infrastructure.adapters.patron import PatronQueryRepository, PatronUnitOfWork
 from src.infrastructure.adapters.resilience import CircuitBreakerFactory
 from src.infrastructure.adapters.templates.jinja2_template_renderer import (
     Jinja2TemplateRenderer,
 )
-from src.infrastructure.configurations.settings import load_config
-from src.infrastructure.external.database import Database
+from src.infrastructure.external.postgresql import PostgreSQL
+from src.infrastructure.external.etcd_client import EtcdClient
 from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
 
@@ -56,67 +67,80 @@ class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(modules=[
         "src.presentation.api.routes.book_routes",
         "src.presentation.api.routes.health_routes",
+        "src.presentation.api.routes.loan_routes",
+        "src.presentation.api.routes.patron_routes",
         "src.presentation.cli.commands.add_book_command",
         "src.presentation.cli.commands.list_books_command",
         "src.presentation.cli.commands.borrow_book_command"
     ])
 
-    config = providers.Configuration()
-    config.from_dict(load_config())
+    configurations = providers.Configuration()
+
+    etcd_client = providers.Singleton(
+        EtcdClient,
+        host=os.environ.get("ETCD_HOST", "localhost"),
+        port=int(os.environ.get("ETCD_PORT", "2379")),
+    )
+
+    etcd_adapter = providers.Singleton(
+        EtcdAdapter,
+        client=etcd_client,
+        config_prefix=os.environ.get("ETCD_CONFIG_PREFIX", "/config/"),
+    )
 
     logger = providers.Singleton(
         LoggerFactory,
-        config=config
+        config=configurations
     )
 
-    database = providers.Singleton(
-        Database,
-        db_url=config.database.url,
-        pool_size=config.database.pool_size,
-        max_overflow=config.database.max_overflow,
-        pool_timeout=config.database.pool_timeout,
-        pool_recycle=config.database.pool_recycle,
+    postgresql = providers.Singleton(
+        PostgreSQL,
+        db_url=configurations.database.url,
+        pool_size=configurations.database.pool_size,
+        max_overflow=configurations.database.max_overflow,
+        pool_timeout=configurations.database.pool_timeout,
+        pool_recycle=configurations.database.pool_recycle,
     )
 
     session_factory = providers.Resource(
         lambda db: db.session_factory,
-        db=database
+        db=postgresql
     )
 
     rabbitmq_client = providers.Singleton(
         RabbitMQClient,
-        amqp_url=config.rabbitmq.url,
+        amqp_url=configurations.rabbitmq.url,
         logger=logger
     )
 
     sendgrid_client = providers.Singleton(
         SendGridClient,
-        api_key=config.sendgrid.api_key,
+        api_key=configurations.sendgrid.api_key,
         logger=logger
     )
 
     rabbitmq_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,
-        name="rabbitmq",
-        failure_threshold=config.circuit_breakers.rabbitmq.failure_threshold,
-        success_threshold=config.circuit_breakers.rabbitmq.success_threshold,
-        timeout=config.circuit_breakers.rabbitmq.timeout,
+        name=configurations.circuit_breakers.rabbitmq.name,
+        failure_threshold=configurations.circuit_breakers.rabbitmq.failure_threshold,
+        success_threshold=configurations.circuit_breakers.rabbitmq.success_threshold,
+        timeout=configurations.circuit_breakers.rabbitmq.timeout,
         logger=logger,
     )
 
     sendgrid_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,
-        name="sendgrid",
-        failure_threshold=config.circuit_breakers.sendgrid.failure_threshold,
-        success_threshold=config.circuit_breakers.sendgrid.success_threshold,
-        timeout=config.circuit_breakers.sendgrid.timeout,
+        name=configurations.circuit_breakers.sendgrid.name,
+        failure_threshold=configurations.circuit_breakers.sendgrid.failure_threshold,
+        success_threshold=configurations.circuit_breakers.sendgrid.success_threshold,
+        timeout=configurations.circuit_breakers.sendgrid.timeout,
         logger=logger,
     )
 
     event_dispatcher = providers.Singleton(
         RabbitMQEventDispatcher,
         client=rabbitmq_client,
-        exchange_name=config.rabbitmq.exchange_name,
+        exchange_name=configurations.rabbitmq.exchange_name,
         logger=logger,
         circuit_breaker=rabbitmq_circuit_breaker,
     )
@@ -124,16 +148,16 @@ class Container(containers.DeclarativeContainer):
     email_service = providers.Singleton(
         SendGridEmailService,
         client=sendgrid_client,
-        from_email=config.sendgrid.from_email,
-        admin_email=config.sendgrid.admin_email,
+        from_email=configurations.sendgrid.from_email,
+        admin_email=configurations.sendgrid.admin_email,
         logger=logger,
         circuit_breaker=sendgrid_circuit_breaker,
     )
 
     template_renderer = providers.Singleton(
         Jinja2TemplateRenderer,
-        template_dir=config.templates.dir,
-        template_map=config.templates.map,
+        template_dir=configurations.templates.dir,
+        template_map=configurations.templates.map,
         logger=logger
     )
 
@@ -144,33 +168,33 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    uow = providers.Factory(
-        SqlAlchemyUnitOfWork,
+    catalog_uow = providers.Factory(
+        CatalogUnitOfWork,
         session_factory=session_factory,
         event_dispatcher=event_dispatcher,
         logger=logger
     )
 
     book_query_repository = providers.Singleton(
-        SQLBookQueryRepository,
+        BookQueryRepository,
         session_factory=session_factory
     )
 
     add_book_handler = providers.Factory(
         AddBookHandler,
-        uow=uow,
+        uow=catalog_uow,
         logger=logger
     )
 
     borrow_book_handler = providers.Factory(
         BorrowBookHandler,
-        uow=uow,
+        uow=catalog_uow,
         logger=logger
     )
 
     return_book_handler = providers.Factory(
         ReturnBookHandler,
-        uow=uow,
+        uow=catalog_uow,
         logger=logger
     )
 
@@ -183,5 +207,97 @@ class Container(containers.DeclarativeContainer):
     get_book_handler = providers.Factory(
         GetBookHandler,
         query_repository=book_query_repository,
+        logger=logger
+    )
+
+    # Patron Context
+    patron_uow = providers.Factory(
+        PatronUnitOfWork,
+        session_factory=session_factory,
+        event_dispatcher=event_dispatcher,
+        logger=logger
+    )
+
+    patron_query_repository = providers.Singleton(
+        PatronQueryRepository,
+        session_factory=session_factory
+    )
+
+    register_patron_handler = providers.Factory(
+        RegisterPatronHandler,
+        uow=patron_uow,
+        logger=logger
+    )
+
+    suspend_patron_handler = providers.Factory(
+        SuspendPatronHandler,
+        uow=patron_uow,
+        logger=logger
+    )
+
+    reinstate_patron_handler = providers.Factory(
+        ReinstatePatronHandler,
+        uow=patron_uow,
+        logger=logger
+    )
+
+    upgrade_patron_tier_handler = providers.Factory(
+        UpgradePatronTierHandler,
+        uow=patron_uow,
+        logger=logger
+    )
+
+    get_patron_handler = providers.Factory(
+        GetPatronHandler,
+        query_repository=patron_query_repository,
+        logger=logger
+    )
+
+    list_patrons_handler = providers.Factory(
+        ListPatronsHandler,
+        query_repository=patron_query_repository,
+        logger=logger
+    )
+
+    # Lending Context
+    loan_uow = providers.Factory(
+        LoanUnitOfWork,
+        session_factory=session_factory,
+        event_dispatcher=event_dispatcher,
+        logger=logger
+    )
+
+    loan_query_repository = providers.Singleton(
+        LoanQueryRepository,
+        session_factory=session_factory
+    )
+
+    create_loan_handler = providers.Factory(
+        CreateLoanHandler,
+        uow=loan_uow,
+        logger=logger
+    )
+
+    extend_loan_handler = providers.Factory(
+        ExtendLoanHandler,
+        uow=loan_uow,
+        logger=logger
+    )
+
+    return_loan_handler = providers.Factory(
+        ReturnLoanHandler,
+        uow=loan_uow,
+        logger=logger
+    )
+
+    get_loan_handler = providers.Factory(
+        GetLoanHandler,
+        query_repository=loan_query_repository,
+        logger=logger
+    )
+
+    list_patron_loans_handler = providers.Factory(
+        ListPatronLoansHandler,
+        query_repository=loan_query_repository,
         logger=logger
     )

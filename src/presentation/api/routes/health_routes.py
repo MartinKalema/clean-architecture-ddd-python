@@ -2,7 +2,7 @@
 Health check endpoints for monitoring and orchestration.
 
 Provides:
-- /health - Basic liveness check
+- /health - Liveness check
 - /health/ready - Readiness check with dependency verification
 - /health/circuits - Circuit breaker status for all external services
 """
@@ -16,7 +16,7 @@ from sqlalchemy import text
 
 from src.container import Container
 from src.infrastructure.adapters.resilience import circuit_breaker_registry
-from src.infrastructure.external.database import Database
+from src.infrastructure.external.postgresql import PostgreSQL
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
@@ -39,23 +39,10 @@ class CircuitBreakerStatus(BaseModel):
 @router.get("", response_model=HealthStatus)
 async def liveness():
     """
-    Basic liveness check.
+    Liveness check.
 
     Returns 200 if the application is running.
-    Used by load balancers and orchestrators to verify the app is alive.
-    """
-    return HealthStatus(
-        status="healthy",
-        timestamp=datetime.utcnow().isoformat()
-    )
-
-
-@router.get("/live", response_model=HealthStatus)
-async def liveness_check():
-    """
-    K8s Liveness check.
-    
-    Returns 200 if the application is running.
+    Used by load balancers, K8s, and orchestrators to verify the app is alive.
     """
     return HealthStatus(
         status="healthy",
@@ -66,7 +53,7 @@ async def liveness_check():
 @router.get("/ready", response_model=HealthStatus)
 @inject
 async def readiness(
-    database: Database = Depends(Provide[Container.database])
+    postgresql: PostgreSQL = Depends(Provide[Container.postgresql])
 ):
     """
     Readiness check with dependency verification.
@@ -82,11 +69,11 @@ async def readiness(
     all_healthy = True
 
     try:
-        async with database.session_factory() as session:
+        async with postgresql.session_factory() as session:
             await session.execute(text("SELECT 1"))
-        checks["database"] = {"status": "healthy"}
+        checks["postgresql"] = {"status": "healthy"}
     except Exception as e:
-        checks["database"] = {"status": "unhealthy", "error": str(e)}
+        checks["postgresql"] = {"status": "unhealthy", "error": str(e)}
         all_healthy = False
 
     unhealthy_circuits = circuit_breaker_registry.get_unhealthy()

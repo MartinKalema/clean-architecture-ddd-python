@@ -17,8 +17,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Import your models' Base and all models
-from src.infrastructure.external.database import Base
-from src.infrastructure.adapters.repositories.sql_book_repository import BookModel
+from src.infrastructure.external.postgresql import Base
+from src.infrastructure.adapters.catalog.book_command_repository import BookModel
+from src.infrastructure.adapters.patron.patron_command_repository import PatronModel
+from src.infrastructure.adapters.lending.loan_command_repository import LoanModel
 from src.infrastructure.adapters.outbox.outbox_repository import OutboxMessage
 
 # this is the Alembic Config object

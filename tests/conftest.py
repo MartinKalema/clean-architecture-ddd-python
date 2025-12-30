@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.container import Container
-from src.infrastructure.external.database import Database
+from src.infrastructure.external.postgresql import PostgreSQL
 from src.presentation.api.main import app
 
 # Use in-memory SQLite for tests
@@ -14,7 +14,7 @@ TEST_DATABASE_URL = "sqlite:///:memory:"
 
 @pytest_asyncio.fixture(scope="session")
 async def test_db():
-    db = Database(TEST_DATABASE_URL)
+    db = PostgreSQL(TEST_DATABASE_URL)
     await db.init_models()
     yield db
     await db.engine.dispose()
@@ -34,7 +34,7 @@ async def db_session(test_db) -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def client(test_db) -> AsyncGenerator[AsyncClient, None]:
     container = Container()
-    container.database.override(providers.Object(test_db))
+    container.postgresql.override(providers.Object(test_db))
     
     # Mock external services
     from unittest.mock import AsyncMock
@@ -46,6 +46,6 @@ async def client(test_db) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
         
-    container.database.reset_override()
+    container.postgresql.reset_override()
     container.event_dispatcher.reset_override()
     container.email_service.reset_override()

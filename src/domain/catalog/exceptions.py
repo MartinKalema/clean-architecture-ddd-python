@@ -6,7 +6,6 @@ from src.domain.shared_kernel.exceptions import DomainException
 
 class CatalogException(DomainException):
     """Base class for catalog domain exceptions."""
-    pass
 
 
 class BookNotFoundException(CatalogException):

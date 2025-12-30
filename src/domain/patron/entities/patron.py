@@ -39,23 +39,25 @@ class Patron(AggregateRoot):
 
     name: PatronName
     email: EmailAddress
+    registered_at: datetime
     id: PatronId = field(default_factory=PatronId.next_id)
     membership_tier: MembershipTier = MembershipTier.REGULAR
     is_suspended: bool = False
     suspended_reason: Optional[str] = None
-    registered_at: datetime = field(default_factory=datetime.now)
 
     @classmethod
     def register(
         cls,
         name: PatronName,
         email: EmailAddress,
+        registered_at: datetime,
         membership_tier: MembershipTier = MembershipTier.REGULAR,
     ) -> "Patron":
         """Factory method to register a new patron."""
         patron = cls(
             name=name,
             email=email,
+            registered_at=registered_at,
             membership_tier=membership_tier,
         )
         patron.add_event(

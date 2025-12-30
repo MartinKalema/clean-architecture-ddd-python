@@ -36,3 +36,23 @@ class EmailService(Protocol):
 class TemplateRenderer(Protocol):
     def render(self, template: Any, context: Dict[str, Any]) -> str:
         ...
+
+
+class ConfigurationProvider(Protocol):
+    """Interface for configuration providers (file, etcd, consul, etc.)."""
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a configuration value by key."""
+        ...
+
+    def get_all(self) -> Dict[str, Any]:
+        """Get all configuration values."""
+        ...
+
+    def watch(self, key: str, callback: Any) -> None:
+        """Watch a key for changes and call callback when it changes."""
+        ...
+
+    def close(self) -> None:
+        """Close the provider and release resources."""
+        ...
