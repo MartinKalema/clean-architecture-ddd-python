@@ -9,16 +9,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.domain.shared_kernel import EmailService
 from src.infrastructure.adapters.resilience import CircuitBreakerOpenException
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
     from src.infrastructure.adapters.resilience import CircuitBreaker
     from src.infrastructure.external.sendgrid_client import SendGridClient
 
 
-class SendGridEmailService(EmailService):
+class SendGridEmailService:
     """
     Email service implementation using SendGrid.
 
@@ -33,7 +32,7 @@ class SendGridEmailService(EmailService):
         client: SendGridClient,
         from_email: str,
         admin_email: str,
-        logger: Logger,
+        logger: ILogger,
         circuit_breaker: CircuitBreaker,
     ):
         self.client = client

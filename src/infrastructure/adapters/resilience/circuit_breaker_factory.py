@@ -4,9 +4,14 @@ Circuit Breaker Factory for creating and registering circuit breakers.
 Encapsulates the creation and registration logic, keeping the container
 free of side effects and creation logic.
 """
-from src.domain.shared_kernel import Logger
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from .circuit_breaker import CircuitBreaker, circuit_breaker_registry
+
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class CircuitBreakerFactory:
@@ -34,7 +39,7 @@ class CircuitBreakerFactory:
         failure_threshold: int,
         success_threshold: int,
         timeout: float,
-        logger: Logger,
+        logger: ILogger,
     ) -> CircuitBreaker:
         """
         Create and register a circuit breaker.

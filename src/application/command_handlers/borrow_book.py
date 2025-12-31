@@ -11,7 +11,7 @@ from src.domain.catalog import BookNotFoundException
 
 if TYPE_CHECKING:
     from src.domain.catalog import UnitOfWork
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class BorrowBookHandler:
     Emits BookBorrowed domain event for read model sync.
     """
 
-    def __init__(self, uow: UnitOfWork, logger: Logger):
+    def __init__(self, uow: UnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

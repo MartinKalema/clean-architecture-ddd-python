@@ -15,11 +15,12 @@ from .exceptions import (
     ValidationException,
 )
 from .interfaces import (
-    ConfigurationProvider,
-    EmailService,
-    EventDispatcher,
-    Logger,
-    TemplateRenderer,
+    ICache,
+    IConfigurationProvider,
+    IEmailService,
+    IEventDispatcher,
+    ILogger,
+    ITemplateRenderer,
 )
 from .value_objects import EmailAddress
 
@@ -27,11 +28,12 @@ __all__ = [
     "AggregateRoot",
     "DomainEvent",
     "EmailAddress",
-    "Logger",
-    "EventDispatcher",
-    "EmailService",
-    "TemplateRenderer",
-    "ConfigurationProvider",
+    "ICache",
+    "IConfigurationProvider",
+    "IEmailService",
+    "IEventDispatcher",
+    "ILogger",
+    "ITemplateRenderer",
     "EmailTemplate",
     "DomainException",
     "ValidationException",

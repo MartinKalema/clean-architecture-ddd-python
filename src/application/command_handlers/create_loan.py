@@ -11,7 +11,7 @@ from src.domain.lending import Loan
 from src.domain.lending.exceptions import BookNotAvailableException
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
     from src.infrastructure.adapters.lending import LoanUnitOfWork
 
 
@@ -39,7 +39,7 @@ class CreateLoanResult:
 class CreateLoanHandler:
     """Handles loan creation."""
 
-    def __init__(self, uow: LoanUnitOfWork, logger: Logger):
+    def __init__(self, uow: LoanUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

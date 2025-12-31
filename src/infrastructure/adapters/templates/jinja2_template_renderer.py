@@ -1,12 +1,17 @@
-from typing import Any, Dict
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from src.domain.shared_kernel import EmailTemplate, Logger
+from src.domain.shared_kernel import EmailTemplate
+
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class Jinja2TemplateRenderer:
-    def __init__(self, template_dir: str, template_map: Dict[str, str], logger: Logger):
+    def __init__(self, template_dir: str, template_map: Dict[str, str], logger: ILogger):
         self.env = Environment(
             loader=FileSystemLoader(template_dir),
             autoescape=select_autoescape(['html', 'xml'])

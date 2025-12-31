@@ -9,14 +9,16 @@ class StagesShape(LoadTestShape):
     Multi-stage load pattern: ramp up -> steady -> ramp down.
 
     Mimics realistic traffic patterns with gradual changes.
+    Designed for 10k user load testing.
     """
 
     stages = [
-        {"duration": 60, "users": 50, "spawn_rate": 5},     # Warm up
-        {"duration": 180, "users": 100, "spawn_rate": 10},  # Ramp up
-        {"duration": 300, "users": 100, "spawn_rate": 10},  # Steady state
-        {"duration": 60, "users": 50, "spawn_rate": 5},     # Ramp down
-        {"duration": 30, "users": 10, "spawn_rate": 2},     # Cool down
+        {"duration": 10, "users": 1000, "spawn_rate": 200},    # Quick warm up
+        {"duration": 20, "users": 5000, "spawn_rate": 400},    # Ramp to 5k
+        {"duration": 30, "users": 10000, "spawn_rate": 500},   # Ramp to 10k
+        {"duration": 60, "users": 10000, "spawn_rate": 500},   # Steady at 10k
+        {"duration": 20, "users": 5000, "spawn_rate": 300},    # Ramp down
+        {"duration": 10, "users": 1000, "spawn_rate": 200},    # Cool down
     ]
 
     def tick(self):

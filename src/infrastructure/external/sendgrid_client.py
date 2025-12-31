@@ -1,13 +1,16 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
 
 import sendgrid
 from sendgrid.helpers.mail import Cc, Content, Email, Mail, To
 
-from src.domain.shared_kernel import Logger
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class SendGridClient:
-    def __init__(self, api_key: str, logger: Logger):
+    def __init__(self, api_key: str, logger: ILogger):
         self.sg = sendgrid.SendGridAPIClient(api_key=api_key)
         self.logger = logger
 

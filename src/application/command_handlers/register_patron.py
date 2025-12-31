@@ -12,7 +12,7 @@ from src.domain.patron.value_objects import MembershipTier, PatronName
 from src.domain.shared_kernel import EmailAddress
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
     from src.infrastructure.adapters.patron import PatronUnitOfWork
 
 
@@ -37,7 +37,7 @@ class RegisterPatronResult:
 class RegisterPatronHandler:
     """Handles patron registration."""
 
-    def __init__(self, uow: PatronUnitOfWork, logger: Logger):
+    def __init__(self, uow: PatronUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

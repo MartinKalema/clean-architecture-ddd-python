@@ -25,16 +25,20 @@ Usage:
     async with circuit_breaker:
         await rabbitmq.publish(event)
 """
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from src.domain.shared_kernel import Logger
 from src.infrastructure.exceptions import CircuitBreakerOpenException
+
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class CircuitState(Enum):
@@ -115,7 +119,7 @@ class CircuitBreaker:
         timeout: float = 30.0,
         excluded_exceptions: tuple = (),
         fallback: Optional[Callable] = None,
-        logger: Optional[Logger] = None,
+        logger: Optional[ILogger] = None,
     ):
         self.name = name
         self.failure_threshold = failure_threshold

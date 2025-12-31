@@ -10,7 +10,7 @@ from src.domain.patron.exceptions import PatronNotFoundException
 from src.domain.patron.value_objects import MembershipTier
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
     from src.infrastructure.adapters.patron import PatronUnitOfWork
 
 
@@ -32,7 +32,7 @@ class UpgradePatronTierResult:
 class UpgradePatronTierHandler:
     """Handles patron tier upgrades."""
 
-    def __init__(self, uow: PatronUnitOfWork, logger: Logger):
+    def __init__(self, uow: PatronUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

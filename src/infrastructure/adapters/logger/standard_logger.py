@@ -2,10 +2,7 @@ import logging
 import sys
 from typing import Optional
 
-from src.domain.shared_kernel import Logger
-
-
-class StandardLogger(Logger):
+class StandardLogger:
     def __init__(self, name: str = "clean_architecture"):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)

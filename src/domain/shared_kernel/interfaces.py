@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from .domain_event import DomainEvent
 
 
-class Logger(Protocol):
+class ILogger(Protocol):
     def info(self, message: str) -> None:
         ...
 
@@ -23,36 +23,51 @@ class Logger(Protocol):
         ...
 
 
-class EventDispatcher(Protocol):
+class IEventDispatcher(Protocol):
     async def dispatch(self, event: "DomainEvent") -> None:
         ...
 
 
-class EmailService(Protocol):
+class IEmailService(Protocol):
     async def send_email(self, to_email: str, subject: str, content: str) -> None:
         ...
 
 
-class TemplateRenderer(Protocol):
+class ITemplateRenderer(Protocol):
     def render(self, template: Any, context: Dict[str, Any]) -> str:
         ...
 
 
-class ConfigurationProvider(Protocol):
-    """Interface for configuration providers (file, etcd, consul, etc.)."""
-
+class IConfigurationProvider(Protocol):
     def get(self, key: str, default: Any = None) -> Any:
-        """Get a configuration value by key."""
         ...
 
     def get_all(self) -> Dict[str, Any]:
-        """Get all configuration values."""
         ...
 
     def watch(self, key: str, callback: Any) -> None:
-        """Watch a key for changes and call callback when it changes."""
         ...
 
     def close(self) -> None:
-        """Close the provider and release resources."""
+        ...
+
+
+class ICache(Protocol):
+    def get(self, key: str) -> Optional[Any]:
+        ...
+
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+        ...
+
+    def delete(self, key: str) -> bool:
+        ...
+
+    def invalidate_entity(self, entity_type: str, entity_id: str) -> None:
+        ...
+
+    def invalidate_all(self, entity_type: str) -> None:
+        ...
+
+    @property
+    def is_enabled(self) -> bool:
         ...

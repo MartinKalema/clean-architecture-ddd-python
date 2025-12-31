@@ -25,7 +25,9 @@ dependencies = [
     "jinja2",
     "alembic",
     "etcd3",
-    "protobuf>=3.19.0,<4.0.0"
+    "protobuf>=3.19.0,<4.0.0",
+    "python-dotenv",
+    "redis"
 ]
 
 [tool.pytest.ini_options]

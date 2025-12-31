@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from src.domain.patron.exceptions import PatronNotFoundException
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
     from src.infrastructure.adapters.patron import PatronUnitOfWork
 
 
@@ -31,7 +31,7 @@ class SuspendPatronResult:
 class SuspendPatronHandler:
     """Handles patron suspension."""
 
-    def __init__(self, uow: PatronUnitOfWork, logger: Logger):
+    def __init__(self, uow: PatronUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

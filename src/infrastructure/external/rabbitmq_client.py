@@ -1,10 +1,15 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import aio_pika
 
-from src.domain.shared_kernel import Logger
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class RabbitMQClient:
-    def __init__(self, amqp_url: str, logger: Logger):
+    def __init__(self, amqp_url: str, logger: ILogger):
         self.amqp_url = amqp_url
         self.logger = logger
         self.connection = None
