@@ -8,7 +8,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
+    from src.infrastructure.adapters.cache import CacheAdapter
     from src.infrastructure.adapters.lending import LoanQueryRepository
 
 
@@ -33,14 +34,31 @@ class GetLoanQuery:
 
 
 class GetLoanHandler:
-    """Handles getting a single loan."""
+    """Handles getting a single loan with caching."""
 
-    def __init__(self, query_repository: LoanQueryRepository, logger: Logger):
+    CACHE_PREFIX = "loan"
+
+    def __init__(
+        self,
+        query_repository: LoanQueryRepository,
+        cache: CacheAdapter,
+        logger: ILogger,
+    ):
         self.query_repository = query_repository
+        self.cache = cache
         self.logger = logger
 
     async def handle(self, query: GetLoanQuery) -> Optional[LoanReadModel]:
+        cache_key = self.cache.build_key(self.CACHE_PREFIX, query.loan_id)
+
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            self.logger.debug(f"Cache hit for {cache_key}")
+            return LoanReadModel(**cached)
+
         result = await self.query_repository.find_by_id(query.loan_id)
         if not result:
             return None
+
+        self.cache.set(cache_key, result)
         return LoanReadModel(**result)

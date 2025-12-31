@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from src.domain.lending.exceptions import LoanNotFoundException
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
     from src.infrastructure.adapters.lending import LoanUnitOfWork
 
 
@@ -31,7 +31,7 @@ class ExtendLoanResult:
 class ExtendLoanHandler:
     """Handles loan extensions."""
 
-    def __init__(self, uow: LoanUnitOfWork, logger: Logger):
+    def __init__(self, uow: LoanUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

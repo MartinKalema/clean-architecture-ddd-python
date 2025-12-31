@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from src.infrastructure.adapters.resilience import CircuitBreakerOpenException
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import DomainEvent, Logger
+    from src.domain.shared_kernel import DomainEvent, ILogger
     from src.infrastructure.adapters.resilience import CircuitBreaker
     from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 
@@ -32,7 +32,7 @@ class RabbitMQEventDispatcher:
         self,
         client: RabbitMQClient,
         exchange_name: str,
-        logger: Logger,
+        logger: ILogger,
         circuit_breaker: CircuitBreaker,
     ):
         self.client = client

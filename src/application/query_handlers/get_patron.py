@@ -8,7 +8,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
+    from src.infrastructure.adapters.cache import CacheAdapter
     from src.infrastructure.adapters.patron import PatronQueryRepository
 
 
@@ -33,14 +34,31 @@ class GetPatronQuery:
 
 
 class GetPatronHandler:
-    """Handles getting a single patron."""
+    """Handles getting a single patron with caching."""
 
-    def __init__(self, query_repository: PatronQueryRepository, logger: Logger):
+    CACHE_PREFIX = "patron"
+
+    def __init__(
+        self,
+        query_repository: PatronQueryRepository,
+        cache: CacheAdapter,
+        logger: ILogger,
+    ):
         self.query_repository = query_repository
+        self.cache = cache
         self.logger = logger
 
     async def handle(self, query: GetPatronQuery) -> Optional[PatronReadModel]:
+        cache_key = self.cache.build_key(self.CACHE_PREFIX, query.patron_id)
+
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            self.logger.debug(f"Cache hit for {cache_key}")
+            return PatronReadModel(**cached)
+
         result = await self.query_repository.find_by_id(query.patron_id)
         if not result:
             return None
+
+        self.cache.set(cache_key, result)
         return PatronReadModel(**result)

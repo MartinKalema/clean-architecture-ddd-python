@@ -53,6 +53,8 @@ from src.infrastructure.external.postgresql import PostgreSQL
 from src.infrastructure.external.etcd_client import EtcdClient
 from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
+from src.infrastructure.external.redis_client import RedisClient
+from src.infrastructure.adapters.cache import CacheAdapter
 
 
 class Container(containers.DeclarativeContainer):
@@ -117,6 +119,19 @@ class Container(containers.DeclarativeContainer):
         SendGridClient,
         api_key=configurations.sendgrid.api_key,
         logger=logger
+    )
+
+    redis_client = providers.Singleton(
+        RedisClient,
+        url=configurations.redis.url,
+        default_ttl=configurations.redis.cache_ttl,
+        enabled=configurations.redis.enabled,
+        logger=logger,
+    )
+
+    cache = providers.Singleton(
+        CacheAdapter,
+        client=redis_client,
     )
 
     rabbitmq_circuit_breaker = providers.Singleton(
@@ -201,12 +216,14 @@ class Container(containers.DeclarativeContainer):
     list_books_handler = providers.Factory(
         ListBooksHandler,
         query_repository=book_query_repository,
+        cache=cache,
         logger=logger
     )
 
     get_book_handler = providers.Factory(
         GetBookHandler,
         query_repository=book_query_repository,
+        cache=cache,
         logger=logger
     )
 
@@ -250,12 +267,14 @@ class Container(containers.DeclarativeContainer):
     get_patron_handler = providers.Factory(
         GetPatronHandler,
         query_repository=patron_query_repository,
+        cache=cache,
         logger=logger
     )
 
     list_patrons_handler = providers.Factory(
         ListPatronsHandler,
         query_repository=patron_query_repository,
+        cache=cache,
         logger=logger
     )
 
@@ -293,11 +312,13 @@ class Container(containers.DeclarativeContainer):
     get_loan_handler = providers.Factory(
         GetLoanHandler,
         query_repository=loan_query_repository,
+        cache=cache,
         logger=logger
     )
 
     list_patron_loans_handler = providers.Factory(
         ListPatronLoansHandler,
         query_repository=loan_query_repository,
+        cache=cache,
         logger=logger
     )

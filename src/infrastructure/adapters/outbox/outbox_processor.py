@@ -4,12 +4,17 @@ Outbox Processor - Background worker that polls the outbox and publishes events.
 This should be run as a separate process or background task to ensure
 events are reliably published to the message broker.
 """
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.domain.shared_kernel import EventDispatcher, Logger
 from src.infrastructure.adapters.outbox import OutboxMessage, OutboxRepository
+
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import IEventDispatcher, ILogger
 
 
 class OutboxProcessor:
@@ -22,8 +27,8 @@ class OutboxProcessor:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        event_dispatcher: EventDispatcher,
-        logger: Logger,
+        event_dispatcher: IEventDispatcher,
+        logger: ILogger,
         poll_interval: float = 1.0,
         batch_size: int = 100
     ):

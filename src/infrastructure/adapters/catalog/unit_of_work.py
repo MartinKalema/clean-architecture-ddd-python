@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from src.domain.catalog import Book
-    from src.domain.shared_kernel import EventDispatcher, Logger
+    from src.domain.shared_kernel import IEventDispatcher, ILogger
 
 
 class CatalogUnitOfWork:
@@ -33,7 +33,7 @@ class CatalogUnitOfWork:
         session_factory: async_sessionmaker[AsyncSession],
         event_dispatcher: Optional[EventDispatcher] = None,
         use_outbox: bool = True,
-        logger: Optional[Logger] = None
+        logger: Optional[ILogger] = None
     ):
         self.session_factory = session_factory
         self.event_dispatcher = event_dispatcher

@@ -13,13 +13,13 @@ from src.domain.catalog import CatalogBookBorrowed
 from src.domain.shared_kernel import EmailTemplate
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import EmailService, Logger, TemplateRenderer
+    from src.domain.shared_kernel import IEmailService, ILogger, ITemplateRenderer
 
 
 class BookHandlers:
     """Handles book-related domain events."""
 
-    def __init__(self, email_service: EmailService, template_renderer: TemplateRenderer, logger: Logger):
+    def __init__(self, email_service: IEmailService, template_renderer: ITemplateRenderer, logger: ILogger):
         self.email_service = email_service
         self.template_renderer = template_renderer
         self.logger = logger

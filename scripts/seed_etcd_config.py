@@ -5,63 +5,84 @@ Seed etcd with initial configuration.
 Usage:
     python scripts/seed_etcd_config.py
 
-Environment variables:
-    ETCD_HOST: etcd host (default: localhost)
-    ETCD_PORT: etcd port (default: 2379)
+Reads configuration from .env file in project root.
 """
 import json
 import os
 import sys
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+
+from dotenv import load_dotenv
 
 from src.infrastructure.external.etcd_client import EtcdClient
 
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
-DEFAULT_CONFIG = {
-    "environment": "development",
-    "logging": {
-        "format": "json",
-        "level": "INFO",
-    },
-    "database": {
-        "url": "postgresql+asyncpg://library:library_secret@localhost:5432/library_db",
-        "pool_size": 20,
-        "max_overflow": 30,
-        "pool_timeout": 30,
-        "pool_recycle": 1800,
-    },
-    "rabbitmq": {
-        "url": "amqp://guest:guest@localhost:5672/",
-        "exchange_name": "domain_events",
-    },
-    "sendgrid": {
-        "api_key": "SG.placeholder",
-        "from_email": "admin@library.com",
-        "admin_email": "admin@library.com",
-    },
-    "templates": {
-        "dir": "src/infrastructure/templates",
-        "map": {
-            "book_borrowed": "email/book_borrowed.html",
+
+def get_env(key: str, default: str = "") -> str:
+    return os.environ.get(key, default)
+
+
+def get_env_int(key: str, default: int) -> int:
+    return int(os.environ.get(key, default))
+
+
+def get_env_float(key: str, default: float) -> float:
+    return float(os.environ.get(key, default))
+
+
+def build_config() -> dict:
+    return {
+        "environment": get_env("ENVIRONMENT", "development"),
+        "logging": {
+            "format": get_env("LOG_FORMAT", "json"),
+            "level": get_env("LOG_LEVEL", "INFO"),
         },
-    },
-    "circuit_breakers": {
+        "database": {
+            "url": get_env("DATABASE_URL", "postgresql+asyncpg://library:library_secret@localhost:5432/library_db"),
+            "pool_size": get_env_int("DATABASE_POOL_SIZE", 20),
+            "max_overflow": get_env_int("DATABASE_MAX_OVERFLOW", 30),
+            "pool_timeout": get_env_int("DATABASE_POOL_TIMEOUT", 30),
+            "pool_recycle": get_env_int("DATABASE_POOL_RECYCLE", 1800),
+        },
         "rabbitmq": {
-            "name": "rabbitmq",
-            "failure_threshold": 5,
-            "success_threshold": 2,
-            "timeout": 30.0,
+            "url": get_env("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+            "exchange_name": get_env("RABBITMQ_EXCHANGE", "domain_events"),
         },
         "sendgrid": {
-            "name": "sendgrid",
-            "failure_threshold": 3,
-            "success_threshold": 2,
-            "timeout": 60.0,
+            "api_key": get_env("SENDGRID_API_KEY", "SG.placeholder"),
+            "from_email": get_env("SENDGRID_FROM_EMAIL", "admin@library.com"),
+            "admin_email": get_env("SENDGRID_ADMIN_EMAIL", "admin@library.com"),
         },
-    },
-}
+        "templates": {
+            "dir": get_env("TEMPLATES_DIR", "src/infrastructure/templates"),
+            "map": {
+                "book_borrowed": "email/book_borrowed.html",
+            },
+        },
+        "circuit_breakers": {
+            "rabbitmq": {
+                "name": get_env("CB_RABBITMQ_NAME", "rabbitmq"),
+                "failure_threshold": get_env_int("CB_RABBITMQ_FAILURE_THRESHOLD", 5),
+                "success_threshold": get_env_int("CB_RABBITMQ_SUCCESS_THRESHOLD", 2),
+                "timeout": get_env_float("CB_RABBITMQ_TIMEOUT", 30.0),
+            },
+            "sendgrid": {
+                "name": get_env("CB_SENDGRID_NAME", "sendgrid"),
+                "failure_threshold": get_env_int("CB_SENDGRID_FAILURE_THRESHOLD", 3),
+                "success_threshold": get_env_int("CB_SENDGRID_SUCCESS_THRESHOLD", 2),
+                "timeout": get_env_float("CB_SENDGRID_TIMEOUT", 60.0),
+            },
+        },
+        "redis": {
+            "url": get_env("REDIS_URL", "redis://localhost:6379/0"),
+            "cache_ttl": get_env_int("REDIS_CACHE_TTL", 300),
+            "enabled": get_env("REDIS_ENABLED", "true").lower() == "true",
+        },
+    }
 
 
 def flatten_config(config: dict, prefix: str = "") -> dict:
@@ -100,7 +121,8 @@ def main():
         print("Connected to etcd")
 
         print(f"\nSeeding configuration with prefix '{config_prefix}'...")
-        seed_config(client, DEFAULT_CONFIG, config_prefix)
+        config = build_config()
+        seed_config(client, config, config_prefix)
 
         print("\nConfiguration seeded successfully!")
         print("\nVerifying configuration...")

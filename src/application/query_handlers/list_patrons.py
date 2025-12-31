@@ -8,7 +8,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
+    from src.infrastructure.adapters.cache import CacheAdapter
     from src.infrastructure.adapters.patron import PatronQueryRepository
 
 
@@ -36,17 +37,40 @@ class ListPatronsQuery:
 
 
 class ListPatronsHandler:
-    """Handles listing patrons."""
+    """Handles listing patrons with caching."""
 
-    def __init__(self, query_repository: PatronQueryRepository, logger: Logger):
+    CACHE_PREFIX = "patron"
+
+    def __init__(
+        self,
+        query_repository: PatronQueryRepository,
+        cache: CacheAdapter,
+        logger: ILogger,
+    ):
         self.query_repository = query_repository
+        self.cache = cache
         self.logger = logger
 
     async def handle(self, query: ListPatronsQuery) -> List[PatronReadModel]:
+        cache_key = self.cache.build_list_key(
+            self.CACHE_PREFIX,
+            only_suspended=query.only_suspended,
+            membership_tier=query.membership_tier,
+            limit=query.limit,
+            offset=query.offset,
+        )
+
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            self.logger.debug(f"Cache hit for {cache_key}")
+            return [PatronReadModel(**item) for item in cached]
+
         results = await self.query_repository.find_all(
             only_suspended=query.only_suspended,
             membership_tier=query.membership_tier,
             limit=query.limit,
             offset=query.offset,
         )
+
+        self.cache.set(cache_key, results)
         return [PatronReadModel(**r) for r in results]

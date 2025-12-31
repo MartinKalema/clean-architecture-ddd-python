@@ -13,7 +13,7 @@ from typing import Optional
 from locust import HttpUser, events
 from locust.runners import MasterRunner, WorkerRunner
 
-from .config import DEFAULT_SLA, TEST_DATA_PREFIX
+from config import DEFAULT_SLA, TEST_DATA_PREFIX
 
 
 class BaseLibraryUser(HttpUser):

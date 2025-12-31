@@ -4,12 +4,16 @@ etcd Adapter - Real-time configuration from etcd.
 This adapter loads configuration from etcd and supports real-time
 updates via etcd's watch mechanism.
 """
+from __future__ import annotations
+
 import json
 import threading
-from typing import Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
-from src.domain.shared_kernel import Logger
 from src.infrastructure.external.etcd_client import EtcdClient
+
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class EtcdAdapter:
@@ -27,7 +31,7 @@ class EtcdAdapter:
         self,
         client: EtcdClient,
         config_prefix: str = "/config/",
-        logger: Optional[Logger] = None,
+        logger: Optional[ILogger] = None,
     ):
         self._client = client
         self._config_prefix = config_prefix

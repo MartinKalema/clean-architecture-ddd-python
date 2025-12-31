@@ -12,7 +12,7 @@ import uuid
 
 from locust import between, tag, task
 
-from .base import BaseLibraryUser
+from base import BaseLibraryUser
 
 
 class BrowserUser(BaseLibraryUser):

@@ -13,7 +13,7 @@ from src.domain.catalog import Author, Book, BookId, Title
 
 if TYPE_CHECKING:
     from src.domain.catalog import UnitOfWork
-    from src.domain.shared_kernel import Logger
+    from src.domain.shared_kernel import ILogger
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ class AddBookHandler:
     and may emit domain events for read model synchronization.
     """
 
-    def __init__(self, uow: UnitOfWork, logger: Logger):
+    def __init__(self, uow: UnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

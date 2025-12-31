@@ -11,9 +11,6 @@ import traceback
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from src.domain.shared_kernel import Logger
-
-
 class JsonFormatter(logging.Formatter):
     """Custom formatter that outputs JSON structured logs."""
 
@@ -49,7 +46,7 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(log_entry, default=str)
 
 
-class JsonLogger(Logger):
+class JsonLogger:
     """
     Structured JSON logger implementation.
 

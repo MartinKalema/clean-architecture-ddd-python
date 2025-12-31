@@ -4,12 +4,15 @@ etcd Client - External service wrapper for etcd.
 This is a thin wrapper around the etcd3 library that handles
 connection management and provides a clean interface.
 """
+from __future__ import annotations
+
 import threading
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import etcd3
 
-from src.domain.shared_kernel import Logger
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class EtcdClient:
@@ -24,7 +27,7 @@ class EtcdClient:
         self,
         host: str = "localhost",
         port: int = 2379,
-        logger: Optional[Logger] = None,
+        logger: Optional[ILogger] = None,
     ):
         self._host = host
         self._port = port

@@ -10,6 +10,7 @@ class CircuitBreakerTestShape(LoadTestShape):
 
     Creates conditions that should open circuit breakers,
     then backs off to allow recovery.
+    Uses 10k+ users to stress the system.
     """
 
     def tick(self):
@@ -17,18 +18,18 @@ class CircuitBreakerTestShape(LoadTestShape):
 
         if run_time < 30:
             # Normal load
-            return (50, 10)
+            return (2000, 200)
         elif run_time < 60:
             # Overwhelming spike to trigger circuit breakers
-            return (500, 100)
+            return (15000, 500)
         elif run_time < 120:
             # Back off - circuit breakers should be open
-            return (20, 5)
+            return (500, 50)
         elif run_time < 180:
             # Gradual increase - test half-open state
-            return (50, 10)
+            return (2000, 100)
         elif run_time < 240:
             # Normal load - circuit breakers should close
-            return (100, 10)
+            return (5000, 200)
         else:
             return None

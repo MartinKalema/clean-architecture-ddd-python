@@ -4,13 +4,16 @@ RabbitMQ Event Consumer
 Consumes domain events from RabbitMQ and dispatches them to handlers.
 This runs as a separate worker process.
 """
+from __future__ import annotations
+
 import json
-from typing import Awaitable, Callable, Dict
+from typing import TYPE_CHECKING, Awaitable, Callable, Dict
 
 import aio_pika
 from aio_pika import IncomingMessage
 
-from src.domain.shared_kernel import Logger
+if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
 
 
 class EventConsumer:
@@ -28,7 +31,7 @@ class EventConsumer:
         amqp_url: str,
         exchange_name: str,
         queue_name: str,
-        logger: Logger
+        logger: ILogger
     ):
         self.amqp_url = amqp_url
         self.exchange_name = exchange_name
