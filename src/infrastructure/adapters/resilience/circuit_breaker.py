@@ -12,18 +12,18 @@ States:
 
 Usage:
     circuit_breaker = CircuitBreaker(
-        name="rabbitmq",
-        failure_threshold=5,
+        name="sendgrid",
+        failure_threshold=3,
         success_threshold=2,
-        timeout=30.0,
+        timeout=60.0,
     )
 
     @circuit_breaker
-    async def publish_event(event):
-        await rabbitmq.publish(event)
+    async def send_email(to, subject, content):
+        await sendgrid.send(to, subject, content)
 
     async with circuit_breaker:
-        await rabbitmq.publish(event)
+        await sendgrid.send(to, subject, content)
 """
 from __future__ import annotations
 

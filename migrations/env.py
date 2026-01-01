@@ -21,7 +21,6 @@ from src.infrastructure.external.postgresql import Base
 from src.infrastructure.adapters.catalog.book_command_repository import BookModel
 from src.infrastructure.adapters.patron.patron_command_repository import PatronModel
 from src.infrastructure.adapters.lending.loan_command_repository import LoanModel
-from src.infrastructure.adapters.outbox.outbox_repository import OutboxMessage
 
 # this is the Alembic Config object
 config = context.config

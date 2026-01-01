@@ -120,7 +120,6 @@ async def circuit_breakers():
     Get detailed status of all circuit breakers.
 
     Use this endpoint to monitor the health of external service integrations:
-    - RabbitMQ event dispatcher
     - SendGrid email service
 
     Circuit breaker states:
