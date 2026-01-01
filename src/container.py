@@ -27,7 +27,6 @@ from src.application.command_handlers.suspend_patron import \
     SuspendPatronHandler
 from src.application.command_handlers.upgrade_patron_tier import \
     UpgradePatronTierHandler
-from src.application.event_handlers.book_handlers import BookHandlers
 from src.application.query_handlers import GetBookHandler, ListBooksHandler
 from src.application.query_handlers.get_loan import GetLoanHandler
 from src.application.query_handlers.get_patron import GetPatronHandler
@@ -44,8 +43,6 @@ from src.infrastructure.adapters.etcd import EtcdAdapter
 from src.infrastructure.adapters.lending import (LoanQueryRepository,
                                                  LoanUnitOfWork)
 from src.infrastructure.adapters.logger import LoggerFactory
-from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import \
-    RabbitMQEventDispatcher
 from src.infrastructure.adapters.patron import (PatronQueryRepository,
                                                 PatronUnitOfWork)
 from src.infrastructure.adapters.resilience import CircuitBreakerFactory
@@ -56,7 +53,6 @@ from src.infrastructure.external.elasticsearch_client import \
 from src.infrastructure.external.etcd_client import EtcdClient
 from src.infrastructure.external.kafka_client import KafkaClient
 from src.infrastructure.external.postgresql import PostgreSQL
-from src.infrastructure.external.rabbitmq_client import RabbitMQClient
 from src.infrastructure.external.redis_client import RedisClient
 from src.infrastructure.external.sendgrid_client import SendGridClient
 
@@ -113,12 +109,6 @@ class Container(containers.DeclarativeContainer):
         db=postgresql
     )
 
-    rabbitmq_client = providers.Singleton(
-        RabbitMQClient,
-        amqp_url=configurations.rabbitmq.url,
-        logger=logger
-    )
-
     sendgrid_client = providers.Singleton(
         SendGridClient,
         api_key=configurations.sendgrid.api_key,
@@ -162,15 +152,6 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
-    rabbitmq_circuit_breaker = providers.Singleton(
-        CircuitBreakerFactory,
-        name=configurations.circuit_breakers.rabbitmq.name,
-        failure_threshold=configurations.circuit_breakers.rabbitmq.failure_threshold,
-        success_threshold=configurations.circuit_breakers.rabbitmq.success_threshold,
-        timeout=configurations.circuit_breakers.rabbitmq.timeout,
-        logger=logger,
-    )
-
     sendgrid_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,
         name=configurations.circuit_breakers.sendgrid.name,
@@ -178,14 +159,6 @@ class Container(containers.DeclarativeContainer):
         success_threshold=configurations.circuit_breakers.sendgrid.success_threshold,
         timeout=configurations.circuit_breakers.sendgrid.timeout,
         logger=logger,
-    )
-
-    event_dispatcher = providers.Singleton(
-        RabbitMQEventDispatcher,
-        client=rabbitmq_client,
-        exchange_name=configurations.rabbitmq.exchange_name,
-        logger=logger,
-        circuit_breaker=rabbitmq_circuit_breaker,
     )
 
     email_service = providers.Singleton(
@@ -204,17 +177,9 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    book_handlers = providers.Singleton(
-        BookHandlers,
-        email_service=email_service,
-        template_renderer=template_renderer,
-        logger=logger
-    )
-
     catalog_uow = providers.Factory(
         CatalogUnitOfWork,
         session_factory=session_factory,
-        event_dispatcher=event_dispatcher,
         logger=logger
     )
 
@@ -260,7 +225,6 @@ class Container(containers.DeclarativeContainer):
     patron_uow = providers.Factory(
         PatronUnitOfWork,
         session_factory=session_factory,
-        event_dispatcher=event_dispatcher,
         logger=logger
     )
 
@@ -312,7 +276,6 @@ class Container(containers.DeclarativeContainer):
     loan_uow = providers.Factory(
         LoanUnitOfWork,
         session_factory=session_factory,
-        event_dispatcher=event_dispatcher,
         logger=logger
     )
 

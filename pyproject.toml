@@ -20,7 +20,6 @@ dependencies = [
     "httpx",
     "greenlet",
     "locust",
-    "aio_pika",
     "sendgrid",
     "jinja2",
     "alembic",
