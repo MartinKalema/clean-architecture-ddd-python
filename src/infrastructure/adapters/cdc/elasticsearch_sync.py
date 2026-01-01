@@ -23,20 +23,16 @@ class ElasticsearchSyncConsumer:
     indexes them in Elasticsearch for fast searching.
     """
 
-    TOPIC_TO_INDEX = {
-        "library.public.books": "books",
-        "library.public.patrons": "patrons",
-        "library.public.loans": "loans",
-    }
-
     def __init__(
         self,
         kafka_client: KafkaClient,
         elasticsearch_client: ElasticsearchClient,
+        topic_to_index: dict[str, str],
         logger: ILogger,
     ) -> None:
         self._kafka = kafka_client
         self._elasticsearch = elasticsearch_client
+        self._topic_to_index = topic_to_index
         self._logger = logger
         self._running = False
 
@@ -105,7 +101,7 @@ class ElasticsearchSyncConsumer:
 
     def _process_message(self, topic: str, key: dict | None, value: dict | None) -> None:
         """Process a single CDC message."""
-        index = self.TOPIC_TO_INDEX.get(topic)
+        index = self._topic_to_index.get(topic)
         if not index:
             self._logger.warning(f"Unknown topic: {topic}")
             return
@@ -158,7 +154,7 @@ class ElasticsearchSyncConsumer:
         self._logger.info("Connecting to Kafka and Elasticsearch...")
 
         self._kafka.connect_consumer(
-            topics=list(self.TOPIC_TO_INDEX.keys()),
+            topics=list(self._topic_to_index.keys()),
             group_id="es-sync-consumer",
         )
         self._elasticsearch.connect()
