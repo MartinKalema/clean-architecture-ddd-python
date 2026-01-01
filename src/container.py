@@ -46,8 +46,6 @@ from src.infrastructure.adapters.logger import LoggerFactory
 from src.infrastructure.adapters.patron import (PatronQueryRepository,
                                                 PatronUnitOfWork)
 from src.infrastructure.adapters.resilience import CircuitBreakerFactory
-from src.infrastructure.adapters.templates.jinja2_template_renderer import \
-    Jinja2TemplateRenderer
 from src.infrastructure.external.elasticsearch_client import \
     ElasticsearchClient
 from src.infrastructure.external.etcd_client import EtcdClient
@@ -168,13 +166,6 @@ class Container(containers.DeclarativeContainer):
         admin_email=configurations.sendgrid.admin_email,
         logger=logger,
         circuit_breaker=sendgrid_circuit_breaker,
-    )
-
-    template_renderer = providers.Singleton(
-        Jinja2TemplateRenderer,
-        template_dir=configurations.templates.dir,
-        template_map=configurations.templates.map,
-        logger=logger
     )
 
     catalog_uow = providers.Factory(
