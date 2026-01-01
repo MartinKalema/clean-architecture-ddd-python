@@ -345,15 +345,7 @@ services:
     container_name: clean_arch_debezium_init
     volumes:
       - ./deploy/debezium:/config:ro
-    command: >
-      sh -c "
-        echo 'Registering Debezium PostgreSQL connector...' &&
-        curl -X POST -H 'Content-Type: application/json' \
-          --data @/config/register-connector.json \
-          http://debezium:8083/connectors &&
-        echo '' &&
-        echo 'Connector registered successfully!'
-      "
+    command: ["sh", "-c", "echo 'Registering Debezium PostgreSQL connector...' && curl -X POST -H 'Content-Type: application/json' --data @/config/register-connector.json http://debezium:8083/connectors && echo '' && echo 'Connector registered successfully!'"]
     depends_on:
       debezium:
         condition: service_healthy
@@ -367,17 +359,7 @@ services:
     container_name: clean_arch_elasticsearch_init
     volumes:
       - ./deploy/elasticsearch/mappings:/mappings:ro
-    command: >
-      sh -c "
-        echo 'Creating Elasticsearch indices...' &&
-        curl -X PUT http://elasticsearch:9200/books -H 'Content-Type: application/json' -d @/mappings/books.json &&
-        echo '' &&
-        curl -X PUT http://elasticsearch:9200/patrons -H 'Content-Type: application/json' -d @/mappings/patrons.json &&
-        echo '' &&
-        curl -X PUT http://elasticsearch:9200/loans -H 'Content-Type: application/json' -d @/mappings/loans.json &&
-        echo '' &&
-        echo 'All indices created successfully!'
-      "
+    command: ["sh", "-c", "echo 'Creating Elasticsearch indices...' && curl -s -X PUT http://elasticsearch:9200/books -H 'Content-Type: application/json' -d @/mappings/books.json || true && curl -s -X PUT http://elasticsearch:9200/patrons -H 'Content-Type: application/json' -d @/mappings/patrons.json || true && curl -s -X PUT http://elasticsearch:9200/loans -H 'Content-Type: application/json' -d @/mappings/loans.json || true && echo 'Indices setup complete!'"]
     depends_on:
       elasticsearch:
         condition: service_healthy
