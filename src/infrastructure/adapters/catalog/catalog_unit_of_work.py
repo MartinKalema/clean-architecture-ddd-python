@@ -31,7 +31,7 @@ class CatalogUnitOfWork:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        event_dispatcher: Optional[EventDispatcher] = None,
+        event_dispatcher: Optional[IEventDispatcher] = None,
         use_outbox: bool = True,
         logger: Optional[ILogger] = None
     ):

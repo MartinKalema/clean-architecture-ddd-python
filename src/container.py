@@ -75,7 +75,6 @@ class Container(containers.DeclarativeContainer):
         "src.presentation.api.routes.health_routes",
         "src.presentation.api.routes.loan_routes",
         "src.presentation.api.routes.patron_routes",
-        "src.presentation.api.routes.search_routes",
         "src.presentation.cli.commands.add_book_command",
         "src.presentation.cli.commands.list_books_command",
         "src.presentation.cli.commands.borrow_book_command"
@@ -217,7 +216,8 @@ class Container(containers.DeclarativeContainer):
 
     book_query_repository = providers.Singleton(
         BookQueryRepository,
-        session_factory=session_factory
+        session_factory=session_factory,
+        elasticsearch_client=elasticsearch_client,
     )
 
     add_book_handler = providers.Factory(
@@ -262,7 +262,8 @@ class Container(containers.DeclarativeContainer):
 
     patron_query_repository = providers.Singleton(
         PatronQueryRepository,
-        session_factory=session_factory
+        session_factory=session_factory,
+        elasticsearch_client=elasticsearch_client,
     )
 
     register_patron_handler = providers.Factory(
@@ -313,7 +314,8 @@ class Container(containers.DeclarativeContainer):
 
     loan_query_repository = providers.Singleton(
         LoanQueryRepository,
-        session_factory=session_factory
+        session_factory=session_factory,
+        elasticsearch_client=elasticsearch_client,
     )
 
     create_loan_handler = providers.Factory(
