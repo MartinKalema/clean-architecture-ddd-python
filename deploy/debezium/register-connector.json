@@ -1,0 +1,21 @@
+{
+  "name": "library-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "library",
+    "database.password": "library_secret",
+    "database.dbname": "library_db",
+    "topic.prefix": "library",
+    "table.include.list": "public.books,public.patrons,public.loans",
+    "plugin.name": "pgoutput",
+    "slot.name": "library_slot",
+    "publication.name": "library_publication",
+    "tombstones.on.delete": "false",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
+  }
+}

@@ -13,48 +13,52 @@ import os
 
 from dependency_injector import containers, providers
 
-from src.application.command_handlers import (
-    AddBookHandler,
-    BorrowBookHandler,
-    ReturnBookHandler,
-)
+from src.application.command_handlers import (AddBookHandler,
+                                              BorrowBookHandler,
+                                              ReturnBookHandler)
 from src.application.command_handlers.create_loan import CreateLoanHandler
 from src.application.command_handlers.extend_loan import ExtendLoanHandler
-from src.application.command_handlers.register_patron import RegisterPatronHandler
-from src.application.command_handlers.reinstate_patron import ReinstatePatronHandler
+from src.application.command_handlers.register_patron import \
+    RegisterPatronHandler
+from src.application.command_handlers.reinstate_patron import \
+    ReinstatePatronHandler
 from src.application.command_handlers.return_loan import ReturnLoanHandler
-from src.application.command_handlers.suspend_patron import SuspendPatronHandler
-from src.application.command_handlers.upgrade_patron_tier import UpgradePatronTierHandler
+from src.application.command_handlers.suspend_patron import \
+    SuspendPatronHandler
+from src.application.command_handlers.upgrade_patron_tier import \
+    UpgradePatronTierHandler
 from src.application.event_handlers.book_handlers import BookHandlers
-from src.application.query_handlers import (
-    GetBookHandler,
-    ListBooksHandler,
-)
+from src.application.query_handlers import GetBookHandler, ListBooksHandler
 from src.application.query_handlers.get_loan import GetLoanHandler
 from src.application.query_handlers.get_patron import GetPatronHandler
-from src.application.query_handlers.list_patron_loans import ListPatronLoansHandler
+from src.application.query_handlers.list_patron_loans import \
+    ListPatronLoansHandler
 from src.application.query_handlers.list_patrons import ListPatronsHandler
-from src.infrastructure.adapters.email.sendgrid_email_service import (
-    SendGridEmailService,
-)
-from src.infrastructure.adapters.etcd import EtcdAdapter
-from src.infrastructure.adapters.logger import LoggerFactory
-from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import (
-    RabbitMQEventDispatcher,
-)
-from src.infrastructure.adapters.catalog import BookQueryRepository, CatalogUnitOfWork
-from src.infrastructure.adapters.lending import LoanQueryRepository, LoanUnitOfWork
-from src.infrastructure.adapters.patron import PatronQueryRepository, PatronUnitOfWork
-from src.infrastructure.adapters.resilience import CircuitBreakerFactory
-from src.infrastructure.adapters.templates.jinja2_template_renderer import (
-    Jinja2TemplateRenderer,
-)
-from src.infrastructure.external.postgresql import PostgreSQL
-from src.infrastructure.external.etcd_client import EtcdClient
-from src.infrastructure.external.rabbitmq_client import RabbitMQClient
-from src.infrastructure.external.sendgrid_client import SendGridClient
-from src.infrastructure.external.redis_client import RedisClient
 from src.infrastructure.adapters.cache import CacheAdapter
+from src.infrastructure.adapters.catalog import (BookQueryRepository,
+                                                 CatalogUnitOfWork)
+from src.infrastructure.adapters.cdc import ElasticsearchSyncConsumer
+from src.infrastructure.adapters.email.sendgrid_email_service import \
+    SendGridEmailService
+from src.infrastructure.adapters.etcd import EtcdAdapter
+from src.infrastructure.adapters.lending import (LoanQueryRepository,
+                                                 LoanUnitOfWork)
+from src.infrastructure.adapters.logger import LoggerFactory
+from src.infrastructure.adapters.messaging.rabbitmq_event_dispatcher import \
+    RabbitMQEventDispatcher
+from src.infrastructure.adapters.patron import (PatronQueryRepository,
+                                                PatronUnitOfWork)
+from src.infrastructure.adapters.resilience import CircuitBreakerFactory
+from src.infrastructure.adapters.templates.jinja2_template_renderer import \
+    Jinja2TemplateRenderer
+from src.infrastructure.external.elasticsearch_client import \
+    ElasticsearchClient
+from src.infrastructure.external.etcd_client import EtcdClient
+from src.infrastructure.external.kafka_client import KafkaClient
+from src.infrastructure.external.postgresql import PostgreSQL
+from src.infrastructure.external.rabbitmq_client import RabbitMQClient
+from src.infrastructure.external.redis_client import RedisClient
+from src.infrastructure.external.sendgrid_client import SendGridClient
 
 
 class Container(containers.DeclarativeContainer):
@@ -71,6 +75,7 @@ class Container(containers.DeclarativeContainer):
         "src.presentation.api.routes.health_routes",
         "src.presentation.api.routes.loan_routes",
         "src.presentation.api.routes.patron_routes",
+        "src.presentation.api.routes.search_routes",
         "src.presentation.cli.commands.add_book_command",
         "src.presentation.cli.commands.list_books_command",
         "src.presentation.cli.commands.borrow_book_command"
@@ -132,6 +137,26 @@ class Container(containers.DeclarativeContainer):
     cache = providers.Singleton(
         CacheAdapter,
         client=redis_client,
+    )
+
+    # CDC Pipeline
+    kafka_client = providers.Singleton(
+        KafkaClient,
+        bootstrap_servers=configurations.kafka.bootstrap_servers,
+        logger=logger,
+    )
+
+    elasticsearch_client = providers.Singleton(
+        ElasticsearchClient,
+        url=configurations.elasticsearch.url,
+        logger=logger,
+    )
+
+    elasticsearch_sync_consumer = providers.Singleton(
+        ElasticsearchSyncConsumer,
+        kafka_client=kafka_client,
+        elasticsearch_client=elasticsearch_client,
+        logger=logger,
     )
 
     rabbitmq_circuit_breaker = providers.Singleton(

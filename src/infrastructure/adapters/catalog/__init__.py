@@ -1,4 +1,5 @@
-from .book_command_repository import BookCommandRepository, BookModel
+from .book_command_repository import BookCommandRepository
+from .book_model import BookModel
 from .book_query_repository import BookQueryRepository
 from .unit_of_work import CatalogUnitOfWork
 

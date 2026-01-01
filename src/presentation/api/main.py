@@ -11,7 +11,7 @@ from src.domain.catalog import (
     DomainException,
 )
 from src.infrastructure.exceptions import InfrastructureException
-from src.presentation.api.routes import book_routes, health_routes, loan_routes, patron_routes
+from src.presentation.api.routes import book_routes, health_routes, loan_routes, patron_routes, search_routes
 
 
 container = Container()
@@ -57,3 +57,4 @@ app.include_router(health_routes.router)
 app.include_router(book_routes.router)
 app.include_router(loan_routes.router)
 app.include_router(patron_routes.router)
+app.include_router(search_routes.router)

@@ -5,7 +5,9 @@ Seed etcd with initial configuration.
 Usage:
     python scripts/seed_etcd_config.py
 
-Reads configuration from .env file in project root.
+Reads configuration from environment variables.
+In Docker: set via env_file in docker-compose.yaml
+Locally: load from .env file
 """
 import json
 import os
@@ -15,11 +17,13 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from dotenv import load_dotenv
+# Only load .env if it exists (for local development)
+env_file = os.path.join(PROJECT_ROOT, ".env")
+if os.path.exists(env_file):
+    from dotenv import load_dotenv
+    load_dotenv(env_file)
 
-from src.infrastructure.external.etcd_client import EtcdClient
-
-load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+from src.container import Container
 
 
 def get_env(key: str, default: str = "") -> str:
@@ -82,6 +86,14 @@ def build_config() -> dict:
             "cache_ttl": get_env_int("REDIS_CACHE_TTL", 300),
             "enabled": get_env("REDIS_ENABLED", "true").lower() == "true",
         },
+        "kafka": {
+            "bootstrap_servers": get_env("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+            "consumer_group": get_env("KAFKA_CONSUMER_GROUP", "es-sync-consumer"),
+        },
+        "elasticsearch": {
+            "url": get_env("ELASTICSEARCH_URL", "http://localhost:9200"),
+            "enabled": get_env("ELASTICSEARCH_ENABLED", "true").lower() == "true",
+        },
     }
 
 
@@ -97,7 +109,7 @@ def flatten_config(config: dict, prefix: str = "") -> dict:
     return result
 
 
-def seed_config(client: EtcdClient, config: dict, config_prefix: str = "/config/") -> None:
+def seed_config(client, config: dict, config_prefix: str = "/config/") -> None:
     """Seed configuration into etcd."""
     flat_config = flatten_config(config)
 
@@ -109,12 +121,12 @@ def seed_config(client: EtcdClient, config: dict, config_prefix: str = "/config/
 
 
 def main():
-    host = os.environ.get("ETCD_HOST", "localhost")
-    port = int(os.environ.get("ETCD_PORT", "2379"))
     config_prefix = os.environ.get("ETCD_CONFIG_PREFIX", "/config/")
 
-    print(f"Connecting to etcd at {host}:{port}...")
-    client = EtcdClient(host=host, port=port)
+    container = Container()
+    client = container.etcd_client()
+
+    print(f"Connecting to etcd...")
 
     try:
         client.connect()
