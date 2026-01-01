@@ -155,6 +155,7 @@ class Container(containers.DeclarativeContainer):
         ElasticsearchSyncConsumer,
         kafka_client=kafka_client,
         elasticsearch_client=elasticsearch_client,
+        topic_to_index=configurations.cdc.topic_to_index,
         logger=logger,
     )
 
