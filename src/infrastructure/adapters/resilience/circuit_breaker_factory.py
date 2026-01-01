@@ -25,10 +25,10 @@ class CircuitBreakerFactory:
     - Automatic registration with the global registry
 
     Usage in container:
-        rabbitmq_cb = providers.Singleton(
+        sendgrid_cb = providers.Singleton(
             CircuitBreakerFactory,
-            name="rabbitmq",
-            failure_threshold=config.circuit_breakers.rabbitmq.failure_threshold,
+            name="sendgrid",
+            failure_threshold=config.circuit_breakers.sendgrid.failure_threshold,
             ...
         )
     """
