@@ -102,11 +102,6 @@ def build_config() -> dict:
                 "library.public.patrons": "patrons",
                 "library.public.loans": "loans",
             },
-            "index_to_cache_type": {
-                "books": "book",
-                "patrons": "patron",
-                "loans": "loan",
-            },
         },
     }
 

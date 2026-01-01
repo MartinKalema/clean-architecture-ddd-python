@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.cache import CacheAdapter
     from src.infrastructure.external.elasticsearch_client import ElasticsearchClient
     from src.infrastructure.external.kafka_client import KafkaClient
 
@@ -23,7 +22,8 @@ class ElasticsearchSyncConsumer:
     them to Kafka topics. This consumer transforms those events and
     indexes them in Elasticsearch for fast searching.
 
-    Also invalidates Redis cache to ensure read consistency.
+    Cache consistency is handled via TTL-based expiry rather than
+    explicit invalidation, providing eventual consistency.
     """
 
     def __init__(
@@ -31,15 +31,11 @@ class ElasticsearchSyncConsumer:
         kafka_client: KafkaClient,
         elasticsearch_client: ElasticsearchClient,
         topic_to_index: dict[str, str],
-        index_to_cache_type: dict[str, str],
-        cache: CacheAdapter,
         logger: ILogger,
     ) -> None:
         self._kafka = kafka_client
         self._elasticsearch = elasticsearch_client
         self._topic_to_index = topic_to_index
-        self._index_to_cache_type = index_to_cache_type
-        self._cache = cache
         self._logger = logger
         self._running = False
 
@@ -101,7 +97,7 @@ class ElasticsearchSyncConsumer:
             return None
         if isinstance(value, int):
             # Debezium sends timestamps as microseconds since epoch
-            return datetime.utcfromtimestamp(value / 1_000_000).isoformat() + "Z"
+            return datetime.fromtimestamp(value / 1_000_000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         if isinstance(value, str):
             return value
         return None
