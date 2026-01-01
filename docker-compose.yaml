@@ -340,6 +340,50 @@ services:
     profiles:
       - cdc
 
+  debezium-init:
+    image: curlimages/curl:latest
+    container_name: clean_arch_debezium_init
+    volumes:
+      - ./deploy/debezium:/config:ro
+    command: >
+      sh -c "
+        echo 'Registering Debezium PostgreSQL connector...' &&
+        curl -X POST -H 'Content-Type: application/json' \
+          --data @/config/register-connector.json \
+          http://debezium:8083/connectors &&
+        echo '' &&
+        echo 'Connector registered successfully!'
+      "
+    depends_on:
+      debezium:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    profiles:
+      - cdc
+
+  elasticsearch-init:
+    image: curlimages/curl:latest
+    container_name: clean_arch_elasticsearch_init
+    volumes:
+      - ./deploy/elasticsearch/mappings:/mappings:ro
+    command: >
+      sh -c "
+        echo 'Creating Elasticsearch indices...' &&
+        curl -X PUT http://elasticsearch:9200/books -H 'Content-Type: application/json' -d @/mappings/books.json &&
+        echo '' &&
+        curl -X PUT http://elasticsearch:9200/patrons -H 'Content-Type: application/json' -d @/mappings/patrons.json &&
+        echo '' &&
+        curl -X PUT http://elasticsearch:9200/loans -H 'Content-Type: application/json' -d @/mappings/loans.json &&
+        echo '' &&
+        echo 'All indices created successfully!'
+      "
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles:
+      - cdc
+
   es-sync:
     build: .
     container_name: clean_arch_es_sync
@@ -351,10 +395,10 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-      debezium:
-        condition: service_healthy
+      elasticsearch-init:
+        condition: service_completed_successfully
+      debezium-init:
+        condition: service_completed_successfully
       etcd:
         condition: service_healthy
     restart: unless-stopped
