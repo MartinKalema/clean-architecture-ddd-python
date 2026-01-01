@@ -73,7 +73,7 @@ class PatronQueryRepository:
             membership_tier=membership_tier,
         )
 
-        result = self._es_client.search(
+        result = await self._es_client.search(
             index=self.ES_INDEX,
             query=query,
             size=limit,
@@ -89,7 +89,7 @@ class PatronQueryRepository:
         """Count patrons matching criteria (uses Elasticsearch)."""
         query = self._build_es_query(only_suspended=only_suspended)
 
-        result = self._es_client.search(
+        result = await self._es_client.search(
             index=self.ES_INDEX,
             query=query,
             size=0,

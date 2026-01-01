@@ -62,7 +62,7 @@ class LoanQueryRepository:
             only_active=only_active,
         )
 
-        result = self._es_client.search(
+        result = await self._es_client.search(
             index=self.ES_INDEX,
             query=query,
             size=limit,
@@ -78,7 +78,7 @@ class LoanQueryRepository:
         """Find overdue loans (uses Elasticsearch for search)."""
         query = {"bool": {"filter": [{"term": {"is_overdue": True}}]}}
 
-        result = self._es_client.search(
+        result = await self._es_client.search(
             index=self.ES_INDEX,
             query=query,
             size=limit,

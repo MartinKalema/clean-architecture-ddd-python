@@ -118,7 +118,7 @@ class ElasticsearchSyncConsumer:
             self._cache.invalidate_all(cache_type)
             self._logger.debug(f"Invalidated cache for {cache_type}")
 
-    def _process_message(self, topic: str, key: dict | None, value: dict | None) -> None:
+    async def _process_message(self, topic: str, key: dict | None, value: dict | None) -> None:
         """Process a single CDC message."""
         index = self._topic_to_index.get(topic)
         if not index:
@@ -134,7 +134,7 @@ class ElasticsearchSyncConsumer:
             if key and "id" in key:
                 doc_id = key["id"]
                 self._logger.info(f"Deleting {index}/{doc_id}")
-                self._elasticsearch.delete(index=index, doc_id=doc_id)
+                await self._elasticsearch.delete(index=index, doc_id=doc_id)
                 self._invalidate_cache(index, doc_id)
             return
 
@@ -147,7 +147,7 @@ class ElasticsearchSyncConsumer:
             if before and "id" in before:
                 doc_id = before["id"]
                 self._logger.info(f"Deleting {index}/{doc_id}")
-                self._elasticsearch.delete(index=index, doc_id=doc_id)
+                await self._elasticsearch.delete(index=index, doc_id=doc_id)
                 self._invalidate_cache(index, doc_id)
         elif op in ("c", "u", "r"):
             # Create, Update, or Read (snapshot)
@@ -168,35 +168,32 @@ class ElasticsearchSyncConsumer:
                     doc = after
 
                 self._logger.info(f"Indexing {index}/{doc_id}")
-                self._elasticsearch.index(index=index, doc_id=doc_id, document=doc)
+                await self._elasticsearch.index(index=index, doc_id=doc_id, document=doc)
                 self._invalidate_cache(index, doc_id)
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """Start the consumer loop."""
         self._logger.info("Connecting to Kafka and Elasticsearch...")
 
-        self._kafka.connect_consumer(
+        await self._kafka.connect_consumer(
             topics=list(self._topic_to_index.keys()),
             group_id="es-sync-consumer",
         )
-        self._elasticsearch.connect()
+        await self._elasticsearch.connect()
 
         self._running = True
         self._logger.info("Starting consumer loop...")
 
         try:
-            for _ in self._kafka.consume(
-                handler=self._process_message,
-                poll_timeout_ms=1000,
-            ):
+            async for _ in self._kafka.consume(handler=self._process_message):
                 if not self._running:
                     break
         finally:
-            self.stop()
+            await self.stop()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the consumer."""
         self._running = False
-        self._kafka.close()
-        self._elasticsearch.close()
+        await self._kafka.close()
+        await self._elasticsearch.close()
         self._logger.info("Consumer stopped")

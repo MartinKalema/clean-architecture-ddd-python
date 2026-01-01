@@ -92,7 +92,6 @@ def build_config() -> dict:
         },
         "elasticsearch": {
             "url": get_env("ELASTICSEARCH_URL", "http://localhost:9200"),
-            "enabled": get_env("ELASTICSEARCH_ENABLED", "true").lower() == "true",
         },
         "cdc": {
             "topic_to_index": {

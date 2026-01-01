@@ -68,7 +68,7 @@ class BookQueryRepository:
             title_contains=title_contains,
         )
 
-        result = self._es_client.search(
+        result = await self._es_client.search(
             index=self.ES_INDEX,
             query=query,
             size=limit,
@@ -91,7 +91,7 @@ class BookQueryRepository:
             only_borrowed=only_borrowed,
         )
 
-        result = self._es_client.search(
+        result = await self._es_client.search(
             index=self.ES_INDEX,
             query=query,
             size=0,
