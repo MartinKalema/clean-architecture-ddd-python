@@ -51,7 +51,7 @@ class GetLoanHandler:
     async def handle(self, query: GetLoanQuery) -> Optional[LoanReadModel]:
         cache_key = self.cache.build_key(self.CACHE_PREFIX, query.loan_id)
 
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached is not None:
             self.logger.debug(f"Cache hit for {cache_key}")
             return LoanReadModel(**cached)
@@ -60,5 +60,5 @@ class GetLoanHandler:
         if not result:
             return None
 
-        self.cache.set(cache_key, result)
+        await self.cache.set(cache_key, result)
         return LoanReadModel(**result)

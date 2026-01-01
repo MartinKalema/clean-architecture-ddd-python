@@ -50,6 +50,20 @@ async def liveness():
     )
 
 
+@router.get("/live", response_model=HealthStatus)
+async def live():
+    """
+    Lightweight liveness check - no dependency checks.
+
+    Use this for high-frequency health checks from load balancers.
+    Does not check database or other dependencies.
+    """
+    return HealthStatus(
+        status="healthy",
+        timestamp=datetime.utcnow().isoformat()
+    )
+
+
 @router.get("/ready", response_model=HealthStatus)
 @inject
 async def readiness(

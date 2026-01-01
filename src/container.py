@@ -148,6 +148,9 @@ class Container(containers.DeclarativeContainer):
     elasticsearch_client = providers.Singleton(
         ElasticsearchClient,
         url=configurations.elasticsearch.url,
+        max_connections=configurations.elasticsearch.max_connections,
+        request_timeout=configurations.elasticsearch.request_timeout,
+        max_retries=configurations.elasticsearch.max_retries,
         logger=logger,
     )
 

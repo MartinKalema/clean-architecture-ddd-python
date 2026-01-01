@@ -11,6 +11,7 @@ Environment variables:
     ETCD_HOST: etcd host (default: localhost)
     ETCD_PORT: etcd port (default: 2379)
 """
+import asyncio
 import os
 import signal
 import sys
@@ -22,7 +23,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from src.container import Container
 
 
-def main() -> None:
+async def main() -> None:
     """Main entry point."""
     container = Container()
 
@@ -38,20 +39,23 @@ def main() -> None:
 
     consumer = container.elasticsearch_sync_consumer()
 
-    def signal_handler(sig: int, frame) -> None:
-        logger.info(f"Received signal {sig}, shutting down...")
-        consumer.stop()
-        sys.exit(0)
+    loop = asyncio.get_running_loop()
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    def signal_handler() -> None:
+        logger.info("Received shutdown signal, stopping...")
+        asyncio.create_task(consumer.stop())
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, signal_handler)
 
     try:
-        consumer.start()
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user")
-        consumer.stop()
+        await consumer.start()
+    except asyncio.CancelledError:
+        logger.info("Consumer cancelled")
+    except Exception as e:
+        logger.error(f"Consumer error: {e}")
+        raise
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

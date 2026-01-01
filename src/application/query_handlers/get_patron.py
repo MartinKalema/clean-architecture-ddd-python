@@ -51,7 +51,7 @@ class GetPatronHandler:
     async def handle(self, query: GetPatronQuery) -> Optional[PatronReadModel]:
         cache_key = self.cache.build_key(self.CACHE_PREFIX, query.patron_id)
 
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached is not None:
             self.logger.debug(f"Cache hit for {cache_key}")
             return PatronReadModel(**cached)
@@ -60,5 +60,5 @@ class GetPatronHandler:
         if not result:
             return None
 
-        self.cache.set(cache_key, result)
+        await self.cache.set(cache_key, result)
         return PatronReadModel(**result)

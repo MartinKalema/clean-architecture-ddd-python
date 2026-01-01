@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from elasticsearch import Elasticsearch, NotFoundError
+from elasticsearch import AsyncElasticsearch, NotFoundError
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import ILogger
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 class ElasticsearchClient:
     """
-    Client for Elasticsearch operations.
+    Async client for Elasticsearch operations.
 
     Provides indexing, search, and document management functionality.
     Configuration is loaded from etcd via dependency injection.
@@ -22,53 +22,59 @@ class ElasticsearchClient:
     def __init__(
         self,
         url: str = "http://localhost:9200",
+        max_connections: int = 100,
+        request_timeout: int = 30,
+        max_retries: int = 3,
         logger: Optional[ILogger] = None,
     ):
         self._url = url
+        self._max_connections = max_connections
+        self._request_timeout = request_timeout
+        self._max_retries = max_retries
         self._logger = logger
-        self._client: Optional[Elasticsearch] = None
+        self._client: Optional[AsyncElasticsearch] = None
 
-    def connect(self) -> None:
-        """Establish connection to Elasticsearch."""
+    async def connect(self) -> None:
+        """Establish connection to Elasticsearch with connection pooling."""
         if self._client is None:
-            # ES 8.x client requires hosts as string, not list
-            self._client = Elasticsearch(
+            self._client = AsyncElasticsearch(
                 hosts=self._url,
                 verify_certs=False,
                 ssl_show_warn=False,
+                request_timeout=self._request_timeout,
+                max_retries=self._max_retries,
+                retry_on_timeout=True,
+                connections_per_node=self._max_connections,
             )
-            try:
-                info = self._client.info()
-                if self._logger:
-                    self._logger.info(f"Connected to Elasticsearch {info['version']['number']} at {self._url}")
-            except Exception as e:
-                raise ConnectionError(f"Failed to connect to Elasticsearch at {self._url}: {e}")
+            info = await self._client.info()
+            if self._logger:
+                self._logger.info(f"Connected to Elasticsearch {info['version']['number']} at {self._url}")
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close the Elasticsearch connection."""
         if self._client:
-            self._client.close()
+            await self._client.close()
             self._client = None
             if self._logger:
                 self._logger.info("Disconnected from Elasticsearch")
 
-    def _ensure_connected(self) -> Elasticsearch:
+    async def _ensure_connected(self) -> AsyncElasticsearch:
         """Ensure we have an active connection."""
         if self._client is None:
-            self.connect()
+            await self.connect()
         return self._client
 
-    def index(
+    async def index(
         self,
         index: str,
         doc_id: str,
         document: dict[str, Any],
     ) -> bool:
         """Index a document."""
-        client = self._ensure_connected()
+        client = await self._ensure_connected()
 
         try:
-            client.index(index=index, id=doc_id, document=document)
+            await client.index(index=index, id=doc_id, document=document)
             if self._logger:
                 self._logger.debug(f"Indexed document {index}/{doc_id}")
             return True
@@ -77,12 +83,12 @@ class ElasticsearchClient:
                 self._logger.error(f"Elasticsearch index error: {e}")
             return False
 
-    def get(self, index: str, doc_id: str) -> Optional[dict[str, Any]]:
+    async def get(self, index: str, doc_id: str) -> Optional[dict[str, Any]]:
         """Get a document by ID."""
-        client = self._ensure_connected()
+        client = await self._ensure_connected()
 
         try:
-            result = client.get(index=index, id=doc_id)
+            result = await client.get(index=index, id=doc_id)
             return result["_source"]
         except NotFoundError:
             return None
@@ -91,12 +97,12 @@ class ElasticsearchClient:
                 self._logger.error(f"Elasticsearch get error: {e}")
             return None
 
-    def delete(self, index: str, doc_id: str) -> bool:
+    async def delete(self, index: str, doc_id: str) -> bool:
         """Delete a document by ID."""
-        client = self._ensure_connected()
+        client = await self._ensure_connected()
 
         try:
-            client.delete(index=index, id=doc_id)
+            await client.delete(index=index, id=doc_id)
             if self._logger:
                 self._logger.debug(f"Deleted document {index}/{doc_id}")
             return True
@@ -107,7 +113,7 @@ class ElasticsearchClient:
                 self._logger.error(f"Elasticsearch delete error: {e}")
             return False
 
-    def search(
+    async def search(
         self,
         index: str,
         query: dict[str, Any],
@@ -115,10 +121,10 @@ class ElasticsearchClient:
         from_: int = 0,
     ) -> dict[str, Any]:
         """Execute a search query."""
-        client = self._ensure_connected()
+        client = await self._ensure_connected()
 
         try:
-            result = client.search(
+            result = await client.search(
                 index=index,
                 query=query,
                 size=size,
@@ -140,7 +146,7 @@ class ElasticsearchClient:
                 self._logger.error(f"Elasticsearch search error: {e}")
             return {"total": 0, "hits": []}
 
-    def search_text(
+    async def search_text(
         self,
         index: str,
         query_text: str,
@@ -149,7 +155,7 @@ class ElasticsearchClient:
         from_: int = 0,
     ) -> dict[str, Any]:
         """Execute a multi-match text search."""
-        return self.search(
+        return await self.search(
             index=index,
             query={
                 "multi_match": {
@@ -163,22 +169,23 @@ class ElasticsearchClient:
             from_=from_,
         )
 
-    def create_index(
+    async def create_index(
         self,
         index: str,
         mappings: dict[str, Any],
         settings: Optional[dict[str, Any]] = None,
     ) -> bool:
         """Create an index with mappings."""
-        client = self._ensure_connected()
+        client = await self._ensure_connected()
 
         try:
             body = {"mappings": mappings}
             if settings:
                 body["settings"] = settings
 
-            if not client.indices.exists(index=index):
-                client.indices.create(index=index, body=body)
+            exists = await client.indices.exists(index=index)
+            if not exists:
+                await client.indices.create(index=index, body=body)
                 if self._logger:
                     self._logger.info(f"Created index: {index}")
             return True
@@ -187,13 +194,14 @@ class ElasticsearchClient:
                 self._logger.error(f"Elasticsearch create_index error: {e}")
             return False
 
-    def delete_index(self, index: str) -> bool:
+    async def delete_index(self, index: str) -> bool:
         """Delete an index."""
-        client = self._ensure_connected()
+        client = await self._ensure_connected()
 
         try:
-            if client.indices.exists(index=index):
-                client.indices.delete(index=index)
+            exists = await client.indices.exists(index=index)
+            if exists:
+                await client.indices.delete(index=index)
                 if self._logger:
                     self._logger.info(f"Deleted index: {index}")
             return True
@@ -202,7 +210,7 @@ class ElasticsearchClient:
                 self._logger.error(f"Elasticsearch delete_index error: {e}")
             return False
 
-    def bulk_index(
+    async def bulk_index(
         self,
         index: str,
         documents: list[dict[str, Any]],
@@ -214,7 +222,7 @@ class ElasticsearchClient:
         Returns:
             Tuple of (success_count, error_count)
         """
-        client = self._ensure_connected()
+        client = await self._ensure_connected()
 
         operations = []
         for doc in documents:
@@ -227,7 +235,7 @@ class ElasticsearchClient:
             return 0, 0
 
         try:
-            result = client.bulk(operations=operations)
+            result = await client.bulk(operations=operations)
             errors = sum(1 for item in result["items"] if item.get("index", {}).get("error"))
             success = len(documents) - errors
             return success, errors
@@ -236,12 +244,11 @@ class ElasticsearchClient:
                 self._logger.error(f"Elasticsearch bulk_index error: {e}")
             return 0, len(documents)
 
-    @property
-    def is_connected(self) -> bool:
+    async def ping(self) -> bool:
         """Check if connected to Elasticsearch."""
         if not self._client:
             return False
         try:
-            return self._client.ping()
+            return await self._client.ping()
         except Exception:
             return False

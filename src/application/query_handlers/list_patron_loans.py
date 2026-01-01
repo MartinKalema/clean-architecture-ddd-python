@@ -32,7 +32,7 @@ class ListPatronLoansQuery:
     """Query to list loans for a patron."""
     patron_id: str
     only_active: bool = False
-    limit: int = 100
+    limit: int = 20
     offset: int = 0
 
 
@@ -60,7 +60,7 @@ class ListPatronLoansHandler:
             offset=query.offset,
         )
 
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached is not None:
             self.logger.debug(f"Cache hit for {cache_key}")
             return [LoanReadModel(**item) for item in cached]
@@ -72,5 +72,5 @@ class ListPatronLoansHandler:
             offset=query.offset,
         )
 
-        self.cache.set(cache_key, results)
+        await self.cache.set(cache_key, results)
         return [LoanReadModel(**r) for r in results]

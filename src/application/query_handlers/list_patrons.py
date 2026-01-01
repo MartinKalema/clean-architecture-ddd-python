@@ -32,7 +32,7 @@ class ListPatronsQuery:
     """Query to list patrons with filters."""
     only_suspended: bool = False
     membership_tier: Optional[str] = None
-    limit: int = 100
+    limit: int = 20
     offset: int = 0
 
 
@@ -60,7 +60,7 @@ class ListPatronsHandler:
             offset=query.offset,
         )
 
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached is not None:
             self.logger.debug(f"Cache hit for {cache_key}")
             return [PatronReadModel(**item) for item in cached]
@@ -72,5 +72,5 @@ class ListPatronsHandler:
             offset=query.offset,
         )
 
-        self.cache.set(cache_key, results)
+        await self.cache.set(cache_key, results)
         return [PatronReadModel(**r) for r in results]

@@ -8,8 +8,8 @@ class PostgreSQL:
     def __init__(
         self,
         db_url: str,
-        pool_size: int = 20,
-        max_overflow: int = 30,
+        pool_size: int = 200,
+        max_overflow: int = 100,
         pool_timeout: int = 30,
         pool_recycle: int = 1800,
     ):
@@ -18,9 +18,9 @@ class PostgreSQL:
 
         Args:
             db_url: Database connection URL
-            pool_size: Number of connections to keep in pool (default: 20)
-            max_overflow: Max connections beyond pool_size (default: 30)
-                          Total max connections = pool_size + max_overflow = 50
+            pool_size: Number of connections to keep in pool (default: 200)
+            max_overflow: Max connections beyond pool_size (default: 100)
+                          Total max connections = pool_size + max_overflow = 300
             pool_timeout: Seconds to wait for available connection (default: 30)
             pool_recycle: Recycle connections after N seconds (default: 1800)
         """
