@@ -52,10 +52,6 @@ def build_config() -> dict:
             "pool_timeout": get_env_int("DATABASE_POOL_TIMEOUT", 30),
             "pool_recycle": get_env_int("DATABASE_POOL_RECYCLE", 1800),
         },
-        "rabbitmq": {
-            "url": get_env("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
-            "exchange_name": get_env("RABBITMQ_EXCHANGE", "domain_events"),
-        },
         "sendgrid": {
             "api_key": get_env("SENDGRID_API_KEY", "SG.placeholder"),
             "from_email": get_env("SENDGRID_FROM_EMAIL", "admin@library.com"),
@@ -68,12 +64,6 @@ def build_config() -> dict:
             },
         },
         "circuit_breakers": {
-            "rabbitmq": {
-                "name": get_env("CB_RABBITMQ_NAME", "rabbitmq"),
-                "failure_threshold": get_env_int("CB_RABBITMQ_FAILURE_THRESHOLD", 5),
-                "success_threshold": get_env_int("CB_RABBITMQ_SUCCESS_THRESHOLD", 2),
-                "timeout": get_env_float("CB_RABBITMQ_TIMEOUT", 30.0),
-            },
             "sendgrid": {
                 "name": get_env("CB_SENDGRID_NAME", "sendgrid"),
                 "failure_threshold": get_env_int("CB_SENDGRID_FAILURE_THRESHOLD", 3),

@@ -76,9 +76,9 @@ Client → Nginx (LB) → API (x8) → PgBouncer → PostgreSQL
                          ↓                        ↓
                    Redis (Cache)            Debezium (CDC)
                          ↓                        ↓
-                   RabbitMQ (Events)          Kafka
-                         ↓                        ↓
-                   etcd (Config)          Elasticsearch
+                   etcd (Config)              Kafka
+                                                  ↓
+                                           Elasticsearch
 ```
 
 | Component | Purpose |
@@ -86,7 +86,6 @@ Client → Nginx (LB) → API (x8) → PgBouncer → PostgreSQL
 | **Nginx** | Load balancer across 8 API instances |
 | **PgBouncer** | Connection pooling (300 pool, 10k max connections) |
 | **Redis** | Cache layer with TTL-based expiry (120s) |
-| **RabbitMQ** | Async domain event messaging |
 | **etcd** | Centralized configuration |
 | **PostgreSQL** | Primary database (write model) |
 | **Debezium** | Change Data Capture from PostgreSQL WAL |
@@ -155,27 +154,15 @@ class ListBooksHandler:
 
 ```python
 circuit_breaker = CircuitBreaker(
-    name="rabbitmq",
-    failure_threshold=5,
+    name="sendgrid",
+    failure_threshold=3,
     success_threshold=2,
-    timeout=30.0
+    timeout=60.0
 )
 
 @circuit_breaker
-async def publish_event(event):
-    await rabbitmq.publish(event)
-```
-
-### Transactional Outbox
-
-Events are stored atomically with aggregate changes, then dispatched asynchronously:
-
-```python
-async with uow:
-    book.borrow(patron_email)
-    await uow.books.update(book)
-    await uow.outbox.add(BookBorrowedEvent(...))
-    await uow.commit()  # Both saved in same transaction
+async def send_email(to, subject, content):
+    await sendgrid.send(to, subject, content)
 ```
 
 ### Race Condition Prevention
