@@ -43,7 +43,7 @@ class ListBooksQuery:
     only_borrowed: bool = False
     author_contains: Optional[str] = None
     title_contains: Optional[str] = None
-    limit: int = 100
+    limit: int = 20
     offset: int = 0
 
 
@@ -82,7 +82,7 @@ class ListBooksHandler:
             offset=query.offset,
         )
 
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached is not None:
             self.logger.debug(f"Cache hit for {cache_key}")
             return [BookReadModel(**item) for item in cached]
@@ -96,6 +96,6 @@ class ListBooksHandler:
             offset=query.offset,
         )
 
-        self.cache.set(cache_key, [b.__dict__ for b in books])
+        await self.cache.set(cache_key, [b.__dict__ for b in books])
         self.logger.info(f"Listed {len(books)} books (query side)")
         return books

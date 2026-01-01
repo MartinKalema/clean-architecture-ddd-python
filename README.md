@@ -4,16 +4,19 @@ A production-grade implementation of **Clean Architecture**, **Domain-Driven Des
 
 ## Performance
 
-Tested with 10,000 concurrent users:
+Load tested with production-like traffic distribution (93% reads, 7% writes):
 
-| Metric | Value |
-|--------|-------|
-| Requests | 299,048 |
-| Error Rate | 0% |
-| P50 Latency | 1,500ms |
-| P95 Latency | 4,800ms |
-| P99 Latency | 6,600ms |
-| Peak RPS | 1,219 |
+| Concurrent Users | Requests | Error Rate | P50 | P95 | P99 | RPS |
+|------------------|----------|------------|-----|-----|-----|-----|
+| 2,000 | 44,000+ | 0% | 4ms | 49ms | - | 295 |
+| 3,000 | 183,593 | 0% | 8ms | 66ms | 560ms | 358 |
+
+**System Capacity:**
+- **Comfortable load**: 2k users (~295 RPS, sub-50ms P95)
+- **Maximum stable load**: 3k users (~358 RPS, 0% errors)
+- **Bottleneck**: Elasticsearch GC at higher loads
+
+**Infrastructure**: 8 API instances, PgBouncer (300 pool), Redis cache (120s TTL), single-node Elasticsearch (4GB heap)
 
 ## Quick Start
 
@@ -27,6 +30,16 @@ docker compose up --build
 
 # API available at http://localhost:8000
 # API docs at http://localhost:8000/docs
+```
+
+### Run with CDC Pipeline (Elasticsearch)
+
+```bash
+# Start with CDC profile (includes Kafka, Debezium, Elasticsearch)
+docker compose --profile cdc up --build
+
+# Kibana available at http://localhost:5601
+# Elasticsearch at http://localhost:9200
 ```
 
 ### Run Load Tests
@@ -60,22 +73,25 @@ docker compose --profile loadtest up --build --scale locust-worker=4
 
 ```
 Client → Nginx (LB) → API (x8) → PgBouncer → PostgreSQL
-                         ↓
-                   Redis (Cache)
-                         ↓
-                   RabbitMQ (Events)
-                         ↓
-                   etcd (Config)
+                         ↓                        ↓
+                   Redis (Cache)            Debezium (CDC)
+                         ↓                        ↓
+                   RabbitMQ (Events)          Kafka
+                         ↓                        ↓
+                   etcd (Config)          Elasticsearch
 ```
 
 | Component | Purpose |
 |-----------|---------|
 | **Nginx** | Load balancer across 8 API instances |
 | **PgBouncer** | Connection pooling (300 pool, 10k max connections) |
-| **Redis** | Cache layer with 5-minute TTL |
-| **RabbitMQ** | Async event messaging |
+| **Redis** | Cache layer with TTL-based expiry (120s) |
+| **RabbitMQ** | Async domain event messaging |
 | **etcd** | Centralized configuration |
-| **PostgreSQL** | Primary database |
+| **PostgreSQL** | Primary database (write model) |
+| **Debezium** | Change Data Capture from PostgreSQL WAL |
+| **Kafka** | Event streaming for CDC pipeline |
+| **Elasticsearch** | Read-optimized search (CQRS read model) |
 
 ## Layer Responsibilities
 
@@ -126,12 +142,12 @@ class ListBooksHandler:
     async def handle(self, query: ListBooksQuery) -> List[BookReadModel]:
         cache_key = self.cache.build_list_key("book", **query.__dict__)
 
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
             return cached
 
         books = await self.repository.find_all(**query.__dict__)
-        self.cache.set(cache_key, books)
+        await self.cache.set(cache_key, books)
         return books
 ```
 

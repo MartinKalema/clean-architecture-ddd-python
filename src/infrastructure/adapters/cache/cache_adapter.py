@@ -16,7 +16,7 @@ T = TypeVar("T")
 
 class CacheAdapter:
     """
-    Cache adapter for application layer handlers.
+    Async cache adapter for application layer handlers.
 
     Provides:
     - Simple get/set operations
@@ -27,17 +27,17 @@ class CacheAdapter:
     def __init__(self, client: RedisClient):
         self._client = client
 
-    def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Optional[Any]:
         """Get a value from cache."""
-        return self._client.get(key)
+        return await self._client.get(key)
 
-    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         """Set a value in cache."""
-        return self._client.set(key, value, ttl)
+        return await self._client.set(key, value, ttl)
 
-    def delete(self, key: str) -> bool:
+    async def delete(self, key: str) -> bool:
         """Delete a key from cache."""
-        return self._client.delete(key)
+        return await self._client.delete(key)
 
     async def get_or_set(
         self,
@@ -55,18 +55,18 @@ class CacheAdapter:
         4. Cache the computed value
         5. Return the value
         """
-        cached = self._client.get(key)
+        cached = await self._client.get(key)
         if cached is not None:
             return cached
 
         result = await factory()
 
         if result is not None:
-            self._client.set(key, result, ttl)
+            await self._client.set(key, result, ttl)
 
         return result
 
-    def invalidate_entity(self, entity_type: str, entity_id: str) -> None:
+    async def invalidate_entity(self, entity_type: str, entity_id: str) -> None:
         """
         Invalidate cache for a specific entity.
 
@@ -75,11 +75,11 @@ class CacheAdapter:
         - All list caches for this entity type
         - All count caches for this entity type
         """
-        self._client.invalidate_entity(entity_type, entity_id)
+        await self._client.invalidate_entity(entity_type, entity_id)
 
-    def invalidate_all(self, entity_type: str) -> None:
+    async def invalidate_all(self, entity_type: str) -> None:
         """Invalidate all cache entries for an entity type."""
-        self._client.invalidate_all(entity_type)
+        await self._client.invalidate_all(entity_type)
 
     @property
     def is_enabled(self) -> bool:

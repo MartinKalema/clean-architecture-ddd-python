@@ -82,20 +82,21 @@ CLEANUP_AFTER_TEST = True      # Whether to clean up test data
 
 
 # Endpoint weights (relative frequency)
+# Production-like: ~95% reads, ~5% writes
 ENDPOINT_WEIGHTS = {
-    # Book endpoints
-    "list_books": 40,       # Most common - browsing
-    "get_book": 20,         # View details
-    "add_book": 5,          # Rare - admin action
-    # Patron endpoints
+    # Book endpoints (reads)
+    "list_books": 50,       # Most common - browsing
+    "get_book": 25,         # View details
+    "add_book": 1,          # Very rare - admin action
+    # Patron endpoints (reads)
     "list_patrons": 10,     # Moderate - staff action
     "get_patron": 5,        # View patron details
-    "register_patron": 2,   # Rare - registration
+    "register_patron": 1,   # Very rare - registration
     # Loan endpoints
-    "create_loan": 8,       # Active borrowing
-    "list_patron_loans": 5, # View loans
-    "extend_loan": 2,       # Occasional extension
-    "return_loan": 3,       # Return books
+    "create_loan": 3,       # Occasional borrowing
+    "list_patron_loans": 3, # View loans
+    "extend_loan": 1,       # Rare extension
+    "return_loan": 1,       # Rare return
 }
 
 

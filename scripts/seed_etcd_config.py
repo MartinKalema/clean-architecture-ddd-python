@@ -47,8 +47,8 @@ def build_config() -> dict:
         },
         "database": {
             "url": get_env("DATABASE_URL", "postgresql+asyncpg://library:library_secret@localhost:5432/library_db"),
-            "pool_size": get_env_int("DATABASE_POOL_SIZE", 20),
-            "max_overflow": get_env_int("DATABASE_MAX_OVERFLOW", 30),
+            "pool_size": get_env_int("DATABASE_POOL_SIZE", 200),
+            "max_overflow": get_env_int("DATABASE_MAX_OVERFLOW", 100),
             "pool_timeout": get_env_int("DATABASE_POOL_TIMEOUT", 30),
             "pool_recycle": get_env_int("DATABASE_POOL_RECYCLE", 1800),
         },
@@ -83,7 +83,7 @@ def build_config() -> dict:
         },
         "redis": {
             "url": get_env("REDIS_URL", "redis://localhost:6379/0"),
-            "cache_ttl": get_env_int("REDIS_CACHE_TTL", 300),
+            "cache_ttl": get_env_int("REDIS_CACHE_TTL", 120),
             "enabled": get_env("REDIS_ENABLED", "true").lower() == "true",
         },
         "kafka": {
@@ -92,6 +92,9 @@ def build_config() -> dict:
         },
         "elasticsearch": {
             "url": get_env("ELASTICSEARCH_URL", "http://localhost:9200"),
+            "max_connections": get_env_int("ELASTICSEARCH_MAX_CONNECTIONS", 300),
+            "request_timeout": get_env_int("ELASTICSEARCH_REQUEST_TIMEOUT", 30),
+            "max_retries": get_env_int("ELASTICSEARCH_MAX_RETRIES", 3),
         },
         "cdc": {
             "topic_to_index": {

@@ -22,19 +22,29 @@ class ElasticsearchClient:
     def __init__(
         self,
         url: str = "http://localhost:9200",
+        max_connections: int = 100,
+        request_timeout: int = 30,
+        max_retries: int = 3,
         logger: Optional[ILogger] = None,
     ):
         self._url = url
+        self._max_connections = max_connections
+        self._request_timeout = request_timeout
+        self._max_retries = max_retries
         self._logger = logger
         self._client: Optional[AsyncElasticsearch] = None
 
     async def connect(self) -> None:
-        """Establish connection to Elasticsearch."""
+        """Establish connection to Elasticsearch with connection pooling."""
         if self._client is None:
             self._client = AsyncElasticsearch(
                 hosts=self._url,
                 verify_certs=False,
                 ssl_show_warn=False,
+                request_timeout=self._request_timeout,
+                max_retries=self._max_retries,
+                retry_on_timeout=True,
+                connections_per_node=self._max_connections,
             )
             info = await self._client.info()
             if self._logger:

@@ -45,7 +45,7 @@ class GetBookHandler:
         """Execute the query to get a book."""
         cache_key = self.cache.build_key(self.CACHE_PREFIX, query.book_id)
 
-        cached = self.cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached is not None:
             self.logger.debug(f"Cache hit for {cache_key}")
             return BookReadModel(**cached)
@@ -56,6 +56,6 @@ class GetBookHandler:
             self.logger.warning(f"Book not found: {query.book_id}")
             raise BookNotFoundException(query.book_id)
 
-        self.cache.set(cache_key, book.__dict__)
+        await self.cache.set(cache_key, book.__dict__)
         self.logger.info(f"Retrieved book: {book.title} (query side)")
         return book

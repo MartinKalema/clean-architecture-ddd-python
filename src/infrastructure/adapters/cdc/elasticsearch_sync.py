@@ -106,18 +106,6 @@ class ElasticsearchSyncConsumer:
             return value
         return None
 
-    def _invalidate_cache(self, index: str, entity_id: Optional[str] = None) -> None:
-        """Invalidate Redis cache for the affected entity type."""
-        cache_type = self._index_to_cache_type.get(index)
-        if not cache_type:
-            return
-
-        if self._cache.is_enabled:
-            # Invalidate all list/count caches for this entity type
-            # since any change could affect filtered results
-            self._cache.invalidate_all(cache_type)
-            self._logger.debug(f"Invalidated cache for {cache_type}")
-
     async def _process_message(self, topic: str, key: dict | None, value: dict | None) -> None:
         """Process a single CDC message."""
         index = self._topic_to_index.get(topic)
@@ -135,7 +123,6 @@ class ElasticsearchSyncConsumer:
                 doc_id = key["id"]
                 self._logger.info(f"Deleting {index}/{doc_id}")
                 await self._elasticsearch.delete(index=index, doc_id=doc_id)
-                self._invalidate_cache(index, doc_id)
             return
 
         op = value.get("op")
@@ -148,7 +135,6 @@ class ElasticsearchSyncConsumer:
                 doc_id = before["id"]
                 self._logger.info(f"Deleting {index}/{doc_id}")
                 await self._elasticsearch.delete(index=index, doc_id=doc_id)
-                self._invalidate_cache(index, doc_id)
         elif op in ("c", "u", "r"):
             # Create, Update, or Read (snapshot)
             if after:
@@ -169,7 +155,6 @@ class ElasticsearchSyncConsumer:
 
                 self._logger.info(f"Indexing {index}/{doc_id}")
                 await self._elasticsearch.index(index=index, doc_id=doc_id, document=doc)
-                self._invalidate_cache(index, doc_id)
 
     async def start(self) -> None:
         """Start the consumer loop."""
