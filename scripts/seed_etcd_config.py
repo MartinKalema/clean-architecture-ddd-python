@@ -57,12 +57,6 @@ def build_config() -> dict:
             "from_email": get_env("SENDGRID_FROM_EMAIL", "admin@library.com"),
             "admin_email": get_env("SENDGRID_ADMIN_EMAIL", "admin@library.com"),
         },
-        "templates": {
-            "dir": get_env("TEMPLATES_DIR", "src/infrastructure/templates"),
-            "map": {
-                "book_borrowed": "email/book_borrowed.html",
-            },
-        },
         "circuit_breakers": {
             "sendgrid": {
                 "name": get_env("CB_SENDGRID_NAME", "sendgrid"),
