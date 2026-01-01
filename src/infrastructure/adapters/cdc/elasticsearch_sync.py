@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import ILogger
+    from src.infrastructure.adapters.cache import CacheAdapter
     from src.infrastructure.external.elasticsearch_client import ElasticsearchClient
     from src.infrastructure.external.kafka_client import KafkaClient
 
@@ -21,6 +22,8 @@ class ElasticsearchSyncConsumer:
     Debezium captures row-level changes from PostgreSQL and publishes
     them to Kafka topics. This consumer transforms those events and
     indexes them in Elasticsearch for fast searching.
+
+    Also invalidates Redis cache to ensure read consistency.
     """
 
     def __init__(
@@ -28,11 +31,15 @@ class ElasticsearchSyncConsumer:
         kafka_client: KafkaClient,
         elasticsearch_client: ElasticsearchClient,
         topic_to_index: dict[str, str],
+        index_to_cache_type: dict[str, str],
+        cache: CacheAdapter,
         logger: ILogger,
     ) -> None:
         self._kafka = kafka_client
         self._elasticsearch = elasticsearch_client
         self._topic_to_index = topic_to_index
+        self._index_to_cache_type = index_to_cache_type
+        self._cache = cache
         self._logger = logger
         self._running = False
 
@@ -99,6 +106,18 @@ class ElasticsearchSyncConsumer:
             return value
         return None
 
+    def _invalidate_cache(self, index: str, entity_id: Optional[str] = None) -> None:
+        """Invalidate Redis cache for the affected entity type."""
+        cache_type = self._index_to_cache_type.get(index)
+        if not cache_type:
+            return
+
+        if self._cache.is_enabled:
+            # Invalidate all list/count caches for this entity type
+            # since any change could affect filtered results
+            self._cache.invalidate_all(cache_type)
+            self._logger.debug(f"Invalidated cache for {cache_type}")
+
     def _process_message(self, topic: str, key: dict | None, value: dict | None) -> None:
         """Process a single CDC message."""
         index = self._topic_to_index.get(topic)
@@ -116,6 +135,7 @@ class ElasticsearchSyncConsumer:
                 doc_id = key["id"]
                 self._logger.info(f"Deleting {index}/{doc_id}")
                 self._elasticsearch.delete(index=index, doc_id=doc_id)
+                self._invalidate_cache(index, doc_id)
             return
 
         op = value.get("op")
@@ -128,6 +148,7 @@ class ElasticsearchSyncConsumer:
                 doc_id = before["id"]
                 self._logger.info(f"Deleting {index}/{doc_id}")
                 self._elasticsearch.delete(index=index, doc_id=doc_id)
+                self._invalidate_cache(index, doc_id)
         elif op in ("c", "u", "r"):
             # Create, Update, or Read (snapshot)
             if after:
@@ -148,6 +169,7 @@ class ElasticsearchSyncConsumer:
 
                 self._logger.info(f"Indexing {index}/{doc_id}")
                 self._elasticsearch.index(index=index, doc_id=doc_id, document=doc)
+                self._invalidate_cache(index, doc_id)
 
     def start(self) -> None:
         """Start the consumer loop."""

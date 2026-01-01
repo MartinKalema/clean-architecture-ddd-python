@@ -100,17 +100,35 @@ def build_config() -> dict:
                 "library.public.patrons": "patrons",
                 "library.public.loans": "loans",
             },
+            "index_to_cache_type": {
+                "books": "book",
+                "patrons": "patron",
+                "loans": "loan",
+            },
         },
     }
 
 
+def is_leaf_dict(d: dict) -> bool:
+    """Check if a dict is a leaf dict (all values are primitives, not nested dicts)."""
+    return all(not isinstance(v, dict) for v in d.values())
+
+
 def flatten_config(config: dict, prefix: str = "") -> dict:
-    """Flatten nested config into etcd key-value pairs."""
+    """Flatten nested config into etcd key-value pairs.
+
+    Leaf dicts (dicts with only primitive values) are stored as JSON strings
+    to preserve them as dicts when loaded back.
+    """
     result = {}
     for key, value in config.items():
         full_key = f"{prefix}{key}" if prefix else key
         if isinstance(value, dict):
-            result.update(flatten_config(value, f"{full_key}/"))
+            if is_leaf_dict(value):
+                # Store leaf dicts as JSON to preserve structure
+                result[full_key] = json.dumps(value)
+            else:
+                result.update(flatten_config(value, f"{full_key}/"))
         else:
             result[full_key] = value
     return result
