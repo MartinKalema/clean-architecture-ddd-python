@@ -2,9 +2,43 @@
 
 A production-grade implementation of **Clean Architecture**, **Domain-Driven Design (DDD)**, and **CQRS** principles in Python. This project demonstrates enterprise patterns for building scalable, maintainable, and resilient backend applications.
 
-## Architecture Overview
+## Performance
 
-The project follows strict layered architecture with dependency inversion:
+Tested with 10,000 concurrent users:
+
+| Metric | Value |
+|--------|-------|
+| Requests | 299,048 |
+| Error Rate | 0% |
+| P50 Latency | 1,500ms |
+| P95 Latency | 4,800ms |
+| P99 Latency | 6,600ms |
+| Peak RPS | 1,219 |
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/MartinKalema/clean-architecture-ddd-python.git
+cd clean-architecture-ddd-python
+
+# Start all services with Docker
+docker compose up --build
+
+# API available at http://localhost:8000
+# API docs at http://localhost:8000/docs
+```
+
+### Run Load Tests
+
+```bash
+# Start with load testing profile
+docker compose --profile loadtest up --build --scale locust-worker=4
+
+# Open Locust UI at http://localhost:8089
+```
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -18,73 +52,125 @@ The project follows strict layered architecture with dependency inversion:
 │        (Entities, Value Objects, Domain Events, Interfaces)  │
 ├─────────────────────────────────────────────────────────────┤
 │                   Infrastructure Layer                       │
-│    (Repositories, Message Brokers, Email, Circuit Breakers)  │
+│    (Repositories, Message Brokers, Cache, Circuit Breakers)  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Layer Responsibilities
+### Infrastructure Stack
 
-1. **Domain Layer** (`src/domain/`)
-   - Enterprise business rules
-   - Entities (`Book`, `Loan`, `Patron`)
-   - Value Objects (`BookId`, `Title`, `Author`, `EmailAddress`)
-   - Domain Events (`BookBorrowed`, `BookReturned`)
-   - Repository interfaces (contracts)
-   - Bounded Contexts with Anti-Corruption Layers
-   - **Pure Python** - no external dependencies
+```
+Client → Nginx (LB) → API (x8) → PgBouncer → PostgreSQL
+                         ↓
+                   Redis (Cache)
+                         ↓
+                   RabbitMQ (Events)
+                         ↓
+                   etcd (Config)
+```
 
-2. **Application Layer** (`src/application/`)
-   - CQRS handlers separated by responsibility:
-     - **Command Handlers**: Write operations (`AddBook`, `BorrowBook`, `ReturnBook`)
-     - **Query Handlers**: Read operations (`ListBooks`, `GetBook`)
-     - **Event Handlers**: Async reactions to domain events
-   - DTOs for input/output
+| Component | Purpose |
+|-----------|---------|
+| **Nginx** | Load balancer across 8 API instances |
+| **PgBouncer** | Connection pooling (300 pool, 10k max connections) |
+| **Redis** | Cache layer with 5-minute TTL |
+| **RabbitMQ** | Async event messaging |
+| **etcd** | Centralized configuration |
+| **PostgreSQL** | Primary database |
 
-3. **Infrastructure Layer** (`src/infrastructure/`)
-   - Repository implementations (SQLAlchemy)
-   - External service adapters (RabbitMQ, SendGrid)
-   - Resilience patterns (Circuit Breaker)
-   - Transactional Outbox for reliable event delivery
-   - Configuration management
+## Layer Responsibilities
 
-4. **Presentation Layer** (`src/presentation/`)
-   - FastAPI REST endpoints
-   - CLI commands (Click)
-   - Background workers (Outbox processor, Event consumer)
-   - Request/response models
+### Domain Layer (`src/domain/`)
+
+Pure business logic with no external dependencies:
+
+- **Entities**: `Book`, `Loan`, `Patron` aggregates
+- **Value Objects**: `BookId`, `Title`, `EmailAddress`
+- **Domain Events**: `BookBorrowed`, `BookReturned`
+- **Interfaces**: `ILogger`, `IEventDispatcher`, `IEmailService`, `ICache`
+- **Bounded Contexts**: Catalog, Lending, Patron
+
+### Application Layer (`src/application/`)
+
+CQRS handlers for business operations:
+
+- **Command Handlers**: `AddBook`, `BorrowBook`, `CreateLoan`, `ReturnBook`
+- **Query Handlers**: `ListBooks`, `GetBook`, `ListPatrons` (with caching)
+- **Event Handlers**: Async reactions to domain events
+
+### Infrastructure Layer (`src/infrastructure/`)
+
+External integrations and technical concerns:
+
+- **Adapters**: Repository implementations, messaging, email, caching
+- **Resilience**: Circuit breakers for RabbitMQ and SendGrid
+- **Outbox**: Transactional event delivery guarantee
+- **External Clients**: Redis, RabbitMQ, SendGrid, etcd
+
+### Presentation Layer (`src/presentation/`)
+
+API and user interfaces:
+
+- **FastAPI Routes**: REST endpoints for books, loans, patrons
+- **Health Checks**: `/health`, `/health/ready`, `/health/circuit-breakers`
 
 ## Key Features
 
-### Core Patterns
-- **CQRS**: Command Query Responsibility Segregation
-  - Commands (write) and Queries (read) handled separately
-  - Optimized read models for query performance
-- **Async-First**: Built with `asyncio`, async SQLAlchemy, and `aio-pika`
-- **Dependency Injection**: `dependency-injector` for IoC container
-- **Unit of Work**: Transactional consistency across aggregates
-- **Repository Pattern**: Abstract data access behind interfaces
-- **Domain-Driven Design**: Bounded Contexts, Aggregates, Value Objects, Domain Events
+### CQRS with Caching
 
-### Resilience Patterns
-- **Circuit Breaker**: Prevents cascading failures to external services (RabbitMQ, SendGrid)
-  - States: CLOSED → OPEN → HALF_OPEN
-  - Configurable thresholds via `settings.yaml`
-  - Registry for monitoring all circuit breakers
+```python
+class ListBooksHandler:
+    def __init__(self, repository: BookQueryRepository, cache: ICache, logger: ILogger):
+        self.repository = repository
+        self.cache = cache
 
-- **Transactional Outbox**: Guarantees event delivery
-  - Events stored in same transaction as aggregate changes
-  - Background processor dispatches to message broker
-  - At-least-once delivery semantics
+    async def handle(self, query: ListBooksQuery) -> List[BookReadModel]:
+        cache_key = self.cache.build_list_key("book", **query.__dict__)
 
-### Event-Driven Architecture
-- **Domain Events**: Published when significant state changes occur
-- **RabbitMQ Integration**: Async event dispatching
-- **Event Handlers**: Process events for notifications, analytics, etc.
+        cached = self.cache.get(cache_key)
+        if cached:
+            return cached
 
-### Infrastructure
-- **PgBouncer**: Connection pooling for PostgreSQL (10k+ concurrent users)
-- **Health Endpoints**: `/health` and `/health/ready` for orchestration
-- **YAML Configuration**: Environment-aware settings with env var overrides
+        books = await self.repository.find_all(**query.__dict__)
+        self.cache.set(cache_key, books)
+        return books
+```
+
+### Circuit Breaker Pattern
+
+```python
+circuit_breaker = CircuitBreaker(
+    name="rabbitmq",
+    failure_threshold=5,
+    success_threshold=2,
+    timeout=30.0
+)
+
+@circuit_breaker
+async def publish_event(event):
+    await rabbitmq.publish(event)
+```
+
+### Transactional Outbox
+
+Events are stored atomically with aggregate changes, then dispatched asynchronously:
+
+```python
+async with uow:
+    book.borrow(patron_email)
+    await uow.books.update(book)
+    await uow.outbox.add(BookBorrowedEvent(...))
+    await uow.commit()  # Both saved in same transaction
+```
+
+### Race Condition Prevention
+
+Partial unique index prevents duplicate active loans:
+
+```sql
+CREATE UNIQUE INDEX ix_loans_active_book_unique
+ON loans (catalog_book_id)
+WHERE status = 'active'
+```
 
 ## Directory Structure
 
@@ -92,105 +178,50 @@ The project follows strict layered architecture with dependency inversion:
 src/
 ├── domain/                      # Domain Layer (Pure Python)
 │   ├── catalog/                 # Catalog Bounded Context
-│   │   ├── entities/            # Book aggregate
-│   │   ├── value_objects/       # BookId, Title, Author, ISBN
-│   │   ├── events/              # BookBorrowed, BookReturned
-│   │   └── interfaces/          # Repository contracts
 │   ├── lending/                 # Lending Bounded Context
-│   │   ├── entities/            # Loan aggregate
-│   │   ├── acl/                 # Anti-Corruption Layer
-│   │   └── ...
 │   ├── patron/                  # Patron Bounded Context
-│   │   ├── entities/            # Patron aggregate
-│   │   └── ...
-│   └── shared_kernel/           # Cross-context concerns
-│       ├── aggregate_root.py    # Base class for aggregates
-│       ├── domain_event.py      # Base class for events
-│       └── interfaces.py        # Logger, EmailService protocols
+│   └── shared_kernel/           # Cross-context interfaces
 ├── application/                 # Application Layer (CQRS)
-│   ├── command_handlers/        # Write operations (sync)
-│   │   ├── add_book.py
-│   │   ├── borrow_book.py
-│   │   └── return_book.py
-│   ├── query_handlers/          # Read operations (sync)
-│   │   ├── list_books.py
-│   │   └── get_book.py
-│   └── event_handlers/          # Async reactions to events
-│       └── book_handlers.py
+│   ├── command_handlers/        # Write operations
+│   ├── query_handlers/          # Read operations (cached)
+│   └── event_handlers/          # Async event processing
 ├── infrastructure/              # Infrastructure Layer
 │   ├── adapters/
-│   │   ├── repositories/        # SQLAlchemy implementations
+│   │   ├── cache/               # Redis cache adapter
 │   │   ├── messaging/           # RabbitMQ dispatcher
 │   │   ├── email/               # SendGrid service
-│   │   ├── resilience/          # Circuit breaker
-│   │   ├── outbox/              # Transactional outbox
-│   │   └── logger/              # Logging implementations
-│   ├── configurations/          # YAML settings
+│   │   ├── resilience/          # Circuit breakers
+│   │   └── outbox/              # Transactional outbox
 │   └── external/                # External service clients
 ├── presentation/                # Presentation Layer
-│   ├── api/                     # FastAPI routes
-│   │   ├── routes/              # Endpoint handlers
-│   │   └── models/              # Request/response schemas
-│   ├── cli/                     # Click commands
-│   └── workers/                 # Background processors
-└── container.py                 # Dependency Injection container
+│   └── api/                     # FastAPI routes
+└── container.py                 # Dependency Injection
 
 tests/
 ├── domain/                      # Entity & value object tests
 ├── unit/                        # Isolated unit tests
-├── infrastructure/              # Adapter tests
 ├── integration/                 # Repository & handler tests
-├── e2e/                         # API & CLI tests
+├── e2e/                         # API tests
 └── load/                        # Locust performance tests
+    ├── scenarios.py             # User behavior definitions
+    ├── shapes/                  # Load test shapes
+    └── run_*.py                 # Test runners
 ```
 
-## Getting Started
+## Configuration
 
-### Prerequisites
-- Python 3.10+
-- Docker & Docker Compose (for full stack)
-
-### Installation
+Configuration is managed through etcd with environment variable overrides:
 
 ```bash
-# Clone and setup
-git clone <repository-url>
-cd clean-architecture-ddd-python
+# Core services
+DATABASE_URL=postgresql+asyncpg://user:pass@pgbouncer:6432/db
+REDIS_URL=redis://redis:6379/0
+REDIS_ENABLED=true
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -e ".[dev]"
-```
-
-### Running the Application
-
-#### API Server
-```bash
-uvicorn src.presentation.api.main:app --reload
-```
-API docs: http://127.0.0.1:8000/docs
-
-#### CLI
-```bash
-# Add a book
-python -m src.presentation.cli.main add "Clean Architecture" "Robert C. Martin"
-
-# List all books
-python -m src.presentation.cli.main list
-
-# Borrow a book
-python -m src.presentation.cli.main borrow <book_id> user@example.com
-
-# Return a book
-python -m src.presentation.cli.main return <book_id>
-```
-
-#### Full Stack (Docker)
-```bash
-docker-compose up -d
+# Circuit breakers
+CB_RABBITMQ_FAILURE_THRESHOLD=5
+CB_RABBITMQ_TIMEOUT=30.0
 ```
 
 ## Testing
@@ -202,69 +233,65 @@ pytest
 # By category
 pytest tests/domain          # Domain logic
 pytest tests/unit            # Unit tests
-pytest tests/infrastructure  # Circuit breaker, adapters
-pytest tests/integration     # Repository, use cases
-pytest tests/e2e             # API, CLI
+pytest tests/integration     # Repository & handler tests
+pytest tests/e2e             # API tests
 
 # With coverage
 pytest --cov=src --cov-report=html
 ```
 
-### Load Testing
-```bash
-# Start API server, then:
-locust -f tests/load/locustfile.py
+## API Endpoints
 
-# Open http://localhost:8089
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/books` | List all books |
+| POST | `/books` | Add a new book |
+| GET | `/books/{id}` | Get book details |
+| POST | `/books/{id}/borrow` | Borrow a book |
+| POST | `/books/{id}/return` | Return a book |
+| GET | `/patrons` | List all patrons |
+| POST | `/patrons` | Register a patron |
+| GET | `/loans` | List all loans |
+| POST | `/loans` | Create a loan |
+| GET | `/health` | Liveness check |
+| GET | `/health/ready` | Readiness check |
+
+## Documentation
+
+- [Deployment Guide](docs/DEPLOYMENT.md) - Docker, Kubernetes, Cloud Run
+- [Strategic DDD Guide](docs/STRATEGIC_DDD_GUIDE.md) - Domain modeling approach
+- [Context Map](docs/CONTEXT_MAP.md) - Bounded context relationships
+- [Event Storming](docs/EVENT_STORMING.md) - Domain event flows
+- [Ubiquitous Language](docs/UBIQUITOUS_LANGUAGE.md) - Domain terminology
+
+## Code Conventions
+
+### Interface Naming
+
+All interfaces use `I` prefix:
+
+```python
+class ILogger(Protocol):
+    def info(self, message: str) -> None: ...
+
+class IEventDispatcher(Protocol):
+    async def dispatch(self, event: DomainEvent) -> None: ...
 ```
-
-## Configuration
-
-Settings are managed via `src/infrastructure/configurations/settings.yaml`:
-
-```yaml
-database:
-  url: "sqlite+aiosqlite:///./library.db"
-
-rabbitmq:
-  host: localhost
-  exchange: library_events
-
-circuit_breakers:
-  rabbitmq:
-    failure_threshold: 5
-    success_threshold: 2
-    timeout: 30.0
-  sendgrid:
-    failure_threshold: 3
-    success_threshold: 2
-    timeout: 60.0
-```
-
-Override with environment variables:
-```bash
-export DATABASE_URL="postgresql+asyncpg://..."
-export RABBITMQ_HOST="rabbitmq.prod"
-export CIRCUIT_BREAKER_RABBITMQ_FAILURE_THRESHOLD=10
-```
-
-## Code Style
 
 ### TYPE_CHECKING Pattern
-For type-hint-only imports, we use `TYPE_CHECKING` to avoid runtime overhead:
+
+Interface imports go under `TYPE_CHECKING` to avoid runtime overhead:
 
 ```python
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.domain.catalog import UnitOfWork
+    from src.domain.shared_kernel import ILogger
 
-class MyUseCase:
-    def __init__(self, uow: UnitOfWork): ...
+class MyService:
+    def __init__(self, logger: ILogger): ...
 ```
-
-**Note**: FastAPI routes cannot use this pattern as FastAPI needs runtime type evaluation for request body detection.
 
 ## License
 

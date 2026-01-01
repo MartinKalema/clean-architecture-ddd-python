@@ -10,7 +10,7 @@ from typing import List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.infrastructure.adapters.patron.patron_command_repository import PatronModel
+from src.infrastructure.adapters.patron.patron_model import PatronModel
 
 
 class PatronQueryRepository:

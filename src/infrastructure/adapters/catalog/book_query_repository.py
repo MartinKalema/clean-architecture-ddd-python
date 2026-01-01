@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.application.query_handlers import BookReadModel
-from src.infrastructure.adapters.catalog.book_command_repository import BookModel
+from src.infrastructure.adapters.catalog.book_model import BookModel
 
 
 class BookQueryRepository:

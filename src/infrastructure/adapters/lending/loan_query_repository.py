@@ -10,7 +10,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.infrastructure.adapters.lending.loan_command_repository import LoanModel
+from src.infrastructure.adapters.lending.loan_model import LoanModel
 
 
 class LoanQueryRepository:

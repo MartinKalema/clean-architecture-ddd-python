@@ -1,0 +1,27 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "keyword" },
+      "patron_id": { "type": "keyword" },
+      "patron_email": { "type": "keyword" },
+      "catalog_book_id": { "type": "keyword" },
+      "book_title": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "borrowed_at": { "type": "date" },
+      "due_date": { "type": "date" },
+      "returned_at": { "type": "date" },
+      "status": { "type": "keyword" },
+      "is_overdue": { "type": "boolean" }
+    }
+  }
+}
