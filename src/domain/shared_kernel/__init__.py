@@ -10,6 +10,7 @@ from .domain_event import DomainEvent
 from .email_template import EmailTemplate
 from .exceptions import (
     DomainException,
+    EmailDeliveryException,
     EmptyValueException,
     InvalidEmailException,
     ValidationException,
@@ -38,6 +39,7 @@ __all__ = [
     "ITemplateRenderer",
     "EmailTemplate",
     "DomainException",
+    "EmailDeliveryException",
     "ValidationException",
     "InvalidEmailException",
     "EmptyValueException",

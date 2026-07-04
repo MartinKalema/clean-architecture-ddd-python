@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.domain.shared_kernel import EmailDeliveryException
 from src.infrastructure.adapters.resilience import CircuitBreakerOpenException
 
 if TYPE_CHECKING:
@@ -53,29 +54,43 @@ class SendGridEmailService:
         content: str,
     ) -> None:
         """Internal method to send email."""
-        self.client.send(
-            from_email=self.from_email,
-            to_email=to_email,
-            subject=subject,
-            content_str=content,
-            cc_email=self.admin_email
-        )
+        try:
+            self.client.send(
+                from_email=self.from_email,
+                to_email=to_email,
+                subject=subject,
+                content_str=content,
+                cc_email=self.admin_email
+            )
+        except Exception as e:
+            status = getattr(e, "status_code", None)
+            if status is not None and 400 <= status < 500:
+                # A 4xx means SendGrid is up and rejecting this request
+                # (bad credentials, invalid recipient). That is a permanent
+                # failure, not a service-health signal: it must not trip
+                # the circuit breaker (excluded in the container wiring)
+                # and retrying it will not change the outcome.
+                raise EmailDeliveryException(
+                    f"SendGrid rejected the send ({status}): {e}",
+                    original_exception=e,
+                )
+            raise
 
     async def send_email(self, to_email: str, subject: str, content: str) -> None:
         """
         Send an email via SendGrid.
 
         Protected by circuit breaker - will fail fast if SendGrid is down.
-        Failed emails should be queued for retry.
-
-        Args:
-            to_email: Recipient email address
-            subject: Email subject
-            content: Email body (HTML supported)
 
         Raises:
-            CircuitBreakerOpenException: If circuit is open (SendGrid unhealthy)
-            EmailServiceException: If send fails
+            EmailDeliveryException: Permanent — SendGrid rejected the send
+                                    (4xx: bad credentials, invalid recipient);
+                                    retrying will not change the outcome, and
+                                    it does not count toward the breaker
+            CircuitBreakerOpenException: Transient — circuit is open
+                                         (SendGrid unhealthy); worth retrying
+            Exception: Transient — timeouts, connection errors, 5xx; these
+                       count toward the breaker and are worth retrying
         """
         try:
             await self._circuit_breaker.execute(
@@ -88,6 +103,10 @@ class SendGridEmailService:
                 f"Email sent to {to_email} (CC: {self.admin_email})"
             )
 
+        except EmailDeliveryException as e:
+            self.logger.error(f"Email to {to_email} permanently rejected", exception=e)
+            raise
+
         except CircuitBreakerOpenException as e:
             self.logger.warning(
                 f"Circuit breaker OPEN for SendGrid. Email to {to_email} not sent. "
@@ -96,14 +115,10 @@ class SendGridEmailService:
             raise
 
         except Exception as e:
-            from src.infrastructure.exceptions.infrastructure_exceptions import (
-                EmailServiceException,
-            )
+            # Service-health failures (timeout, connection error, 5xx):
+            # counted by the breaker, propagated for retry
             self.logger.error(f"Failed to send email to {to_email}", exception=e)
-            raise EmailServiceException(
-                f"Failed to send email to {to_email}: {str(e)}",
-                original_exception=e
-            )
+            raise
 
     async def is_healthy(self) -> bool:
         """

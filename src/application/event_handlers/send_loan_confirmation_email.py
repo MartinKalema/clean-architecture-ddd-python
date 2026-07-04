@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.domain.shared_kernel import EmailDeliveryException
+
 if TYPE_CHECKING:
     from src.domain.lending import LoanCreated
     from src.domain.shared_kernel import IEmailService, ILogger
@@ -30,11 +32,25 @@ class SendLoanConfirmationEmailHandler:
             f"<p>Please return it by <strong>{event.due_date:%Y-%m-%d}</strong>.</p>"
         )
 
-        await self.email_service.send_email(
-            to_email=event.patron_email,
-            subject=subject,
-            content=content,
-        )
+        try:
+            await self.email_service.send_email(
+                to_email=event.patron_email,
+                subject=subject,
+                content=content,
+            )
+        except EmailDeliveryException as e:
+            # Permanent rejection: retrying the message will not change the
+            # outcome, and raising would head-of-line block the pipeline
+            # behind pointless retries. Escalate and move on. Transient
+            # failures (timeout, open circuit) propagate and are retried.
+            self.logger.error(
+                f"Confirmation email for loan {event.loan_id} to "
+                f"{event.patron_email} permanently rejected; "
+                f"manual follow-up required",
+                exception=e,
+            )
+            return
+
         self.logger.info(
             f"Loan confirmation email sent for loan {event.loan_id} "
             f"to {event.patron_email}"
