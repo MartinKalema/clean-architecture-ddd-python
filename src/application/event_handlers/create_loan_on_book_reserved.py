@@ -108,9 +108,13 @@ class CreateLoanOnBookReservedHandler:
                 ReleaseBookReservationCommand(book_id=event.book_id, reason=reason)
             )
         except Exception as e:
+            # Re-raise so the message is redelivered and the compensation
+            # retried; the reservation reaper is the final backstop if the
+            # message ends up dead-lettered
             self.logger.error(
-                f"COMPENSATION FAILED: book {event.book_id} is reserved "
-                f"but has no loan; the reservation reaper will release it "
-                f"after the TTL",
+                f"Compensation failed for book {event.book_id}; the message "
+                f"will be retried (reaper releases the reservation after "
+                f"the TTL if retries are exhausted)",
                 exception=e,
             )
+            raise

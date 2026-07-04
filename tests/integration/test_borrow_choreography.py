@@ -64,9 +64,17 @@ async def _reserve_and_capture_event(test_db, title: str, email: str):
     book = await AddBookHandler(catalog_uow, logger=logger).handle(
         AddBookCommand(title=title, author="Choreography Tester")
     )
-    reserved = await BorrowBookHandler(catalog_uow, logger=logger).handle(
-        BorrowBookCommand(book_id=book.id, borrower_email=email)
-    )
+    # Pre-flight check passes (the read-model guess says the patron is
+    # fine); the lending-side reaction remains the authority
+    preflight_patron_repository = AsyncMock()
+    preflight_patron_repository.find_by_email.return_value = {
+        "id": "patron-guess", "is_suspended": False,
+    }
+    reserved = await BorrowBookHandler(
+        catalog_uow,
+        patron_query_repository=preflight_patron_repository,
+        logger=logger,
+    ).handle(BorrowBookCommand(book_id=book.id, borrower_email=email))
     assert reserved.status == "reserved"
 
     event = await _outbox_event(session_factory, "CatalogBookReserved", book.id)

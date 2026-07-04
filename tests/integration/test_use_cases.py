@@ -1,7 +1,16 @@
 """
 Integration tests for CQRS Command Handlers.
 """
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+
+def _patron_repository(patron=...):
+    """Stub patron read model for the borrow pre-flight check."""
+    repo = AsyncMock()
+    repo.find_by_email.return_value = (
+        {"id": "patron-uc-1", "is_suspended": False} if patron is ... else patron
+    )
+    return repo
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -12,7 +21,8 @@ from src.application.command_handlers import (
     BorrowBookCommand,
     BorrowBookHandler,
 )
-from src.domain.catalog import BookAlreadyBorrowedException
+from src.domain.catalog import (BookAlreadyBorrowedException,
+                                BorrowerNotEligibleException)
 from src.infrastructure.adapters.catalog import CatalogUnitOfWork
 
 
@@ -38,7 +48,7 @@ async def test_borrow_book_use_case(test_db):
     uow = CatalogUnitOfWork(session_factory)
     mock_logger = MagicMock()
     add_handler = AddBookHandler(uow, logger=mock_logger)
-    borrow_handler = BorrowBookHandler(uow, logger=mock_logger)
+    borrow_handler = BorrowBookHandler(uow, patron_query_repository=_patron_repository(), logger=mock_logger)
 
     # Add
     add_command = AddBookCommand(title="Borrowable Book", author="UC Tester")
@@ -63,7 +73,7 @@ async def test_borrow_book_already_borrowed(test_db):
     uow = CatalogUnitOfWork(session_factory)
     mock_logger = MagicMock()
     add_handler = AddBookHandler(uow, logger=mock_logger)
-    borrow_handler = BorrowBookHandler(uow, logger=mock_logger)
+    borrow_handler = BorrowBookHandler(uow, patron_query_repository=_patron_repository(), logger=mock_logger)
 
     # Add
     add_command = AddBookCommand(title="Twice Borrowed", author="UC Tester")
@@ -75,3 +85,27 @@ async def test_borrow_book_already_borrowed(test_db):
     # Borrow again - should fail
     with pytest.raises(BookAlreadyBorrowedException):
         await borrow_handler.handle(BorrowBookCommand(book_id=book_result.id, borrower_email="another@example.com"))
+
+
+@pytest.mark.asyncio
+async def test_borrow_rejected_before_reserving_for_unknown_patron(test_db):
+    """The pre-flight check rejects doomed borrows without taking the lock."""
+    session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
+    uow = CatalogUnitOfWork(session_factory)
+    mock_logger = MagicMock()
+    add_handler = AddBookHandler(uow, logger=mock_logger)
+    borrow_handler = BorrowBookHandler(
+        uow, patron_query_repository=_patron_repository(patron=None), logger=mock_logger
+    )
+
+    book = await add_handler.handle(AddBookCommand(title="Preflight Reject", author="UC Tester"))
+
+    with pytest.raises(BorrowerNotEligibleException):
+        await borrow_handler.handle(
+            BorrowBookCommand(book_id=book.id, borrower_email="ghost@example.com")
+        )
+
+    # No lock was taken: the book is still available, no compensation needed
+    async with uow:
+        fetched = await uow.books.get_by_id(book.id)
+        assert fetched.is_borrowed is False

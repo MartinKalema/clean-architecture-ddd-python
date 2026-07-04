@@ -18,7 +18,7 @@ from src.application.query_handlers import (
     ListBooksQuery,
 )
 from src.container import Container
-from src.domain.catalog import DomainException
+from src.domain.catalog import BorrowerNotEligibleException, DomainException
 from src.presentation.api.models.book_models import (
     BookCreate,
     BookResponse,
@@ -70,6 +70,8 @@ async def borrow_book(
             is_borrowed=result.is_borrowed,
             status=result.status
         )
+    except BorrowerNotEligibleException as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except DomainException as e:
         raise HTTPException(status_code=409, detail=str(e))
 

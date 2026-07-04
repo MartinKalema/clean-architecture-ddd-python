@@ -12,6 +12,7 @@ from src.infrastructure.adapters.events import (
     deserialize_event,
     serialize_event,
 )
+from src.infrastructure.exceptions import EventDispatcherException
 from src.infrastructure.adapters.events.domain_event_consumer import (
     DomainEventConsumer,
 )
@@ -50,7 +51,7 @@ class TestEventDispatcher:
         handler.handle.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_failing_handler_does_not_block_others(self):
+    async def test_failing_handler_does_not_block_others_but_raises_after(self):
         failing = AsyncMock()
         failing.handle.side_effect = RuntimeError("boom")
         succeeding = AsyncMock()
@@ -59,10 +60,14 @@ class TestEventDispatcher:
             subscriptions={LoanCreated: [failing, succeeding]}, logger=logger
         )
 
-        await dispatcher.dispatch(_loan_created())
+        # Every handler gets its chance...
+        with pytest.raises(EventDispatcherException):
+            await dispatcher.dispatch(_loan_created())
 
         succeeding.handle.assert_awaited_once()
         logger.error.assert_called_once()
+        # ...and the raise hands the message back to the delivery layer
+        # for retry/DLQ, so a transient failure is not silently dropped
 
     @pytest.mark.asyncio
     async def test_subscribe_adds_handler(self):

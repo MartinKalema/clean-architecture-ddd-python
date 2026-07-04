@@ -219,6 +219,14 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
+    patron_query_repository = providers.Singleton(
+        PatronQueryRepository,
+        session_factory=session_factory,
+        elasticsearch_client=elasticsearch_client,
+        circuit_breaker=elasticsearch_circuit_breaker,
+        logger=logger,
+    )
+
     add_book_handler = providers.Factory(
         AddBookHandler,
         uow=catalog_uow,
@@ -228,6 +236,7 @@ class Container(containers.DeclarativeContainer):
     borrow_book_handler = providers.Factory(
         BorrowBookHandler,
         uow=catalog_uow,
+        patron_query_repository=patron_query_repository,
         logger=logger
     )
 
@@ -274,14 +283,6 @@ class Container(containers.DeclarativeContainer):
         PatronUnitOfWork,
         session_factory=session_factory,
         logger=logger
-    )
-
-    patron_query_repository = providers.Singleton(
-        PatronQueryRepository,
-        session_factory=session_factory,
-        elasticsearch_client=elasticsearch_client,
-        circuit_breaker=elasticsearch_circuit_breaker,
-        logger=logger,
     )
 
     register_patron_handler = providers.Factory(

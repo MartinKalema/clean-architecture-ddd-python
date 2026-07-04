@@ -121,11 +121,14 @@ class TestCreateLoanOnBookReserved:
         release.handle.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_failed_compensation_is_escalated_not_raised(self):
+    async def test_failed_compensation_is_reraised_for_retry(self):
         handler, create_loan, release = _reserved_handler(patron=None)
         release.handle.side_effect = RuntimeError("catalog down")
 
-        await handler.handle(_book_reserved())  # must not raise
+        # A transiently-failed compensation must trigger redelivery, not
+        # silent loss (the reaper is only the final backstop)
+        with pytest.raises(RuntimeError):
+            await handler.handle(_book_reserved())
 
         handler.logger.error.assert_called_once()
 

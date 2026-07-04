@@ -7,25 +7,31 @@ Routes domain events to subscribed application-layer event handlers.
 Subscriptions are injected by the composition root (the container), which
 maps each domain event type to the handlers that react to it.
 
-In this architecture reliability comes from the transactional outbox and
-Kafka (at-least-once delivery); this dispatcher is only the last hop —
-in-process routing inside the event worker after a message is consumed.
+Error contract: every subscribed handler gets a chance to run on every
+dispatch — one failing handler never blocks the others. But failures are
+not swallowed: if any handler failed, dispatch() raises after the loop so
+the delivery layer (Kafka consumer) retries the message with backoff and
+dead-letters it when retries are exhausted. Post-pivot steps are promises
+(the loan exists, so the email must eventually send); a transient outage
+must trigger redelivery, not silent loss.
 
-Handler failures are logged and isolated: Kafka has already delivered the
-message, so one failing handler must not prevent the other handlers of the
-same event from running. Handlers must be idempotent, because at-least-once
-delivery means an event can be dispatched more than once.
+This makes handler idempotency mandatory: a retried message re-runs the
+handlers that already succeeded. Handlers that detect a permanently
+unprocessable situation should catch it themselves and escalate instead
+of raising, so it is not pointlessly retried.
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Type
+
+from src.infrastructure.exceptions import EventDispatcherException
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import DomainEvent, IEventHandler, ILogger
 
 
 class EventDispatcher:
-    """Routes domain events to subscribed handlers. dispatch() never raises."""
+    """Routes domain events to subscribed handlers."""
 
     def __init__(
         self,
@@ -45,7 +51,15 @@ class EventDispatcher:
         self._handlers.setdefault(event_type, []).append(handler)
 
     async def dispatch(self, event: "DomainEvent") -> None:
-        """Invoke every handler subscribed to this event's type."""
+        """
+        Invoke every handler subscribed to this event's type.
+
+        All handlers run even if some fail; raises after the loop if any
+        failed, so the delivery layer retries (and eventually dead-letters)
+        the message.
+        """
+        failures: List[Exception] = []
+
         for subscribed_type, handlers in self._handlers.items():
             if not isinstance(event, subscribed_type):
                 continue
@@ -53,9 +67,17 @@ class EventDispatcher:
                 try:
                     await handler.handle(event)
                 except Exception as e:
+                    failures.append(e)
                     if self.logger:
                         self.logger.error(
-                            f"Event handler failed for {event.event_type} "
-                            f"(event_id={event.event_id})",
+                            f"Event handler {type(handler).__name__} failed "
+                            f"for {event.event_type} (event_id={event.event_id})",
                             exception=e,
                         )
+
+        if failures:
+            raise EventDispatcherException(
+                f"{len(failures)} handler(s) failed for {event.event_type} "
+                f"(event_id={event.event_id}); message will be retried",
+                original_exception=failures[0],
+            )

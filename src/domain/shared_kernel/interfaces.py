@@ -34,10 +34,13 @@ class IEventDispatcher(Protocol):
     """
     Dispatches domain events to subscribed handlers.
 
-    dispatch() must never raise: by the time an event is dispatched its
-    originating transaction has already committed, so a failing handler
-    must not fail the request. Implementations isolate and log handler
-    errors instead. Handlers must be idempotent (at-least-once delivery).
+    Contract: every subscribed handler runs on every dispatch (one failure
+    does not block the others), but if any handler failed, dispatch()
+    raises so the delivery layer can retry the message and dead-letter it
+    when retries are exhausted. Handlers must therefore be idempotent —
+    a retry re-runs handlers that already succeeded — and should catch
+    permanently unprocessable situations themselves (escalate, don't
+    raise) so they are not pointlessly retried.
     """
 
     def subscribe(

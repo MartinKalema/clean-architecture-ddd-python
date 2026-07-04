@@ -7,10 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from src.domain.catalog import BookNotFoundException
+from src.domain.catalog import BookNotFoundException, BorrowerNotEligibleException
 
 if TYPE_CHECKING:
     from src.domain.catalog import UnitOfWork
+    from src.domain.patron.interfaces.patron_query_repository import (
+        IPatronQueryRepository,
+    )
     from src.domain.shared_kernel import ILogger
 
 
@@ -41,12 +44,32 @@ class BorrowBookHandler:
     reservation is confirmed into a borrow — or released on failure.
     """
 
-    def __init__(self, uow: UnitOfWork, logger: ILogger):
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        patron_query_repository: IPatronQueryRepository,
+        logger: ILogger,
+    ):
         self.uow = uow
+        self.patron_query_repository = patron_query_repository
         self.logger = logger
 
     async def handle(self, command: BorrowBookCommand) -> BorrowBookResult:
         """Execute the command to borrow a book."""
+        # Pre-flight check against the patron read model: a cheap guess
+        # that rejects doomed borrows BEFORE taking the reservation lock,
+        # so compensation stays the exception. The read model may lag, so
+        # the lending-side event handler remains the authority.
+        patron = await self.patron_query_repository.find_by_email(command.borrower_email)
+        if patron is None:
+            raise BorrowerNotEligibleException(
+                command.borrower_email, "no patron registered with this email"
+            )
+        if patron.get("is_suspended"):
+            raise BorrowerNotEligibleException(
+                command.borrower_email, "patron is suspended"
+            )
+
         async with self.uow:
             book = await self.uow.books.get_by_id(command.book_id)
             if not book:

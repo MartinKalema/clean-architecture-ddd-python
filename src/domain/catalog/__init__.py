@@ -20,6 +20,7 @@ from .exceptions import (
     BookNotFoundException,
     BookNotReservedException,
     BorrowerEmailRequiredException,
+    BorrowerNotEligibleException,
     CatalogException,
     ConcurrentModificationException,
 )
@@ -50,5 +51,6 @@ __all__ = [
     "BookNotBorrowedException",
     "BookNotReservedException",
     "BorrowerEmailRequiredException",
+    "BorrowerNotEligibleException",
     "ConcurrentModificationException",
 ]
