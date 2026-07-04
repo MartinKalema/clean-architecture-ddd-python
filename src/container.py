@@ -27,13 +27,15 @@ from src.application.command_handlers.suspend_patron import \
     SuspendPatronHandler
 from src.application.command_handlers.upgrade_patron_tier import \
     UpgradePatronTierHandler
-from src.application.event_handlers import SendLoanConfirmationEmailHandler
+from src.application.event_handlers import (CreateLoanOnBookBorrowedHandler,
+                                            SendLoanConfirmationEmailHandler)
 from src.application.query_handlers import GetBookHandler, ListBooksHandler
 from src.application.query_handlers.get_loan import GetLoanHandler
 from src.application.query_handlers.get_patron import GetPatronHandler
 from src.application.query_handlers.list_patron_loans import \
     ListPatronLoansHandler
 from src.application.query_handlers.list_patrons import ListPatronsHandler
+from src.domain.catalog import CatalogBookBorrowed
 from src.domain.lending import LoanCreated
 from src.infrastructure.adapters.cache import CacheAdapter
 from src.infrastructure.adapters.catalog import (BookQueryRepository,
@@ -196,28 +198,6 @@ class Container(containers.DeclarativeContainer):
         circuit_breaker=sendgrid_circuit_breaker,
     )
 
-    # Domain Events (outbox -> Debezium -> Kafka -> event worker)
-    send_loan_confirmation_email_handler = providers.Factory(
-        SendLoanConfirmationEmailHandler,
-        email_service=email_service,
-        logger=logger
-    )
-
-    event_dispatcher = providers.Singleton(
-        EventDispatcher,
-        subscriptions=providers.Dict({
-            LoanCreated: providers.List(send_loan_confirmation_email_handler),
-        }),
-        logger=logger
-    )
-
-    domain_event_consumer = providers.Singleton(
-        DomainEventConsumer,
-        kafka_client=kafka_client,
-        event_dispatcher=event_dispatcher,
-        logger=logger
-    )
-
     catalog_uow = providers.Factory(
         CatalogUnitOfWork,
         session_factory=session_factory,
@@ -361,5 +341,36 @@ class Container(containers.DeclarativeContainer):
         ListPatronLoansHandler,
         query_repository=loan_query_repository,
         cache=cache,
+        logger=logger
+    )
+
+    # Domain Events (outbox -> Debezium -> Kafka -> event worker)
+    send_loan_confirmation_email_handler = providers.Factory(
+        SendLoanConfirmationEmailHandler,
+        email_service=email_service,
+        logger=logger
+    )
+
+    create_loan_on_book_borrowed_handler = providers.Factory(
+        CreateLoanOnBookBorrowedHandler,
+        create_loan_handler=create_loan_handler,
+        return_book_handler=return_book_handler,
+        patron_query_repository=patron_query_repository,
+        logger=logger
+    )
+
+    event_dispatcher = providers.Singleton(
+        EventDispatcher,
+        subscriptions=providers.Dict({
+            CatalogBookBorrowed: providers.List(create_loan_on_book_borrowed_handler),
+            LoanCreated: providers.List(send_loan_confirmation_email_handler),
+        }),
+        logger=logger
+    )
+
+    domain_event_consumer = providers.Singleton(
+        DomainEventConsumer,
+        kafka_client=kafka_client,
+        event_dispatcher=event_dispatcher,
         logger=logger
     )
