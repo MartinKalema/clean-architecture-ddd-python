@@ -5,10 +5,18 @@
   },
   "mappings": {
     "properties": {
-      "id": { "type": "keyword" },
-      "patron_id": { "type": "keyword" },
-      "patron_email": { "type": "keyword" },
-      "catalog_book_id": { "type": "keyword" },
+      "id": {
+        "type": "keyword"
+      },
+      "patron_id": {
+        "type": "keyword"
+      },
+      "patron_email": {
+        "type": "keyword"
+      },
+      "catalog_book_id": {
+        "type": "keyword"
+      },
       "book_title": {
         "type": "text",
         "fields": {
@@ -17,11 +25,24 @@
           }
         }
       },
-      "borrowed_at": { "type": "date" },
-      "due_date": { "type": "date" },
-      "returned_at": { "type": "date" },
-      "status": { "type": "keyword" },
-      "is_overdue": { "type": "boolean" }
+      "borrowed_at": {
+        "type": "date"
+      },
+      "due_date": {
+        "type": "date"
+      },
+      "returned_at": {
+        "type": "date"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "is_overdue": {
+        "type": "boolean"
+      }
     }
+  },
+  "aliases": {
+    "loans": {}
   }
 }

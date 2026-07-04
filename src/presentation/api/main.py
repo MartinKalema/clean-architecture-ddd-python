@@ -10,7 +10,11 @@ from src.domain.catalog import (
     ConcurrentModificationException,
     DomainException,
 )
-from src.infrastructure.exceptions import InfrastructureException
+from src.infrastructure.exceptions import (
+    CircuitBreakerOpenException,
+    InfrastructureException,
+    SearchEngineException,
+)
 from src.presentation.api.routes import book_routes, health_routes, loan_routes, patron_routes
 
 
@@ -24,6 +28,11 @@ container.configurations.from_dict(etcd_adapter.get_all())
 async def lifespan(app: FastAPI):
     db = container.postgresql()
     await db.init_models()
+    # Instantiate circuit breakers eagerly: they register with the global
+    # registry on creation, so /health/circuits reports every breaker from
+    # startup instead of only after the first protected call
+    container.sendgrid_circuit_breaker()
+    container.elasticsearch_circuit_breaker()
     yield
     await db.engine.dispose()
 
@@ -39,6 +48,10 @@ app.container = container
 
 @app.exception_handler(InfrastructureException)
 async def infrastructure_exception_handler(request: Request, exc: InfrastructureException):
+    # Search backend unavailable (and PostgreSQL fallback also failed):
+    # temporary condition, not a server bug
+    if isinstance(exc, (SearchEngineException, CircuitBreakerOpenException)):
+        return JSONResponse(status_code=503, content={"message": "Search temporarily unavailable"})
     return JSONResponse(status_code=500, content={"message": "Internal Server Error"})
 
 

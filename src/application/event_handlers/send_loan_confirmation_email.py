@@ -1,0 +1,41 @@
+"""
+Send Loan Confirmation Email - Application event handler.
+
+Reacts to LoanCreated by emailing the patron a confirmation. Runs in the
+event worker, in a separate transaction from the one that created the loan:
+if SendGrid is down the loan still exists, and the failure is logged for
+retry rather than failing the borrow request.
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.domain.lending import LoanCreated
+    from src.domain.shared_kernel import IEmailService, ILogger
+
+
+class SendLoanConfirmationEmailHandler:
+    """Sends a confirmation email when a loan is created."""
+
+    def __init__(self, email_service: IEmailService, logger: ILogger):
+        self.email_service = email_service
+        self.logger = logger
+
+    async def handle(self, event: LoanCreated) -> None:
+        subject = f"Loan confirmation: {event.book_title}"
+        content = (
+            f"<p>You borrowed <strong>{event.book_title}</strong> "
+            f"on {event.borrowed_at:%Y-%m-%d}.</p>"
+            f"<p>Please return it by <strong>{event.due_date:%Y-%m-%d}</strong>.</p>"
+        )
+
+        await self.email_service.send_email(
+            to_email=event.patron_email,
+            subject=subject,
+            content=content,
+        )
+        self.logger.info(
+            f"Loan confirmation email sent for loan {event.loan_id} "
+            f"to {event.patron_email}"
+        )

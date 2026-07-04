@@ -3,7 +3,7 @@ Shared interfaces used across all bounded contexts.
 
 These are infrastructure ports that any context might need.
 """
-from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol, Type
 
 if TYPE_CHECKING:
     from .domain_event import DomainEvent
@@ -23,7 +23,28 @@ class ILogger(Protocol):
         ...
 
 
+class IEventHandler(Protocol):
+    """A handler that reacts to a single type of domain event."""
+
+    async def handle(self, event: Any) -> None:
+        ...
+
+
 class IEventDispatcher(Protocol):
+    """
+    Dispatches domain events to subscribed handlers.
+
+    dispatch() must never raise: by the time an event is dispatched its
+    originating transaction has already committed, so a failing handler
+    must not fail the request. Implementations isolate and log handler
+    errors instead. Handlers must be idempotent (at-least-once delivery).
+    """
+
+    def subscribe(
+        self, event_type: Type["DomainEvent"], handler: "IEventHandler"
+    ) -> None:
+        ...
+
     async def dispatch(self, event: "DomainEvent") -> None:
         ...
 

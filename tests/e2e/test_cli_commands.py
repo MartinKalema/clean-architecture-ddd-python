@@ -43,8 +43,15 @@ def setup_cli_db():
         return engine
 
     engine = asyncio.run(init_db())
-    
+
     container = Container()
+
+    # Load configuration from etcd (same bootstrap as the API/CLI mains);
+    # an unconfigured container gives every provider None-valued settings
+    etcd_adapter = container.etcd_adapter()
+    etcd_adapter.load()
+    container.configurations.from_dict(etcd_adapter.get_all())
+
     session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     container.session_factory.override(session_factory)
     

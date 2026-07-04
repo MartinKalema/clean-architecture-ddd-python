@@ -27,12 +27,14 @@ from src.application.command_handlers.suspend_patron import \
     SuspendPatronHandler
 from src.application.command_handlers.upgrade_patron_tier import \
     UpgradePatronTierHandler
+from src.application.event_handlers import SendLoanConfirmationEmailHandler
 from src.application.query_handlers import GetBookHandler, ListBooksHandler
 from src.application.query_handlers.get_loan import GetLoanHandler
 from src.application.query_handlers.get_patron import GetPatronHandler
 from src.application.query_handlers.list_patron_loans import \
     ListPatronLoansHandler
 from src.application.query_handlers.list_patrons import ListPatronsHandler
+from src.domain.lending import LoanCreated
 from src.infrastructure.adapters.cache import CacheAdapter
 from src.infrastructure.adapters.catalog import (BookQueryRepository,
                                                  CatalogUnitOfWork)
@@ -40,6 +42,8 @@ from src.infrastructure.adapters.cdc import ElasticsearchSyncConsumer
 from src.infrastructure.adapters.email.sendgrid_email_service import \
     SendGridEmailService
 from src.infrastructure.adapters.etcd import EtcdAdapter
+from src.infrastructure.adapters.events import (DomainEventConsumer,
+                                                EventDispatcher)
 from src.infrastructure.adapters.lending import (LoanQueryRepository,
                                                  LoanUnitOfWork)
 from src.infrastructure.adapters.logger import LoggerFactory
@@ -130,6 +134,8 @@ class Container(containers.DeclarativeContainer):
     kafka_client = providers.Singleton(
         KafkaClient,
         bootstrap_servers=configurations.kafka.bootstrap_servers,
+        consumer_max_retries=configurations.kafka.consumer_max_retries,
+        retry_backoff_seconds=configurations.kafka.retry_backoff_seconds,
         logger=logger,
     )
 
@@ -139,6 +145,9 @@ class Container(containers.DeclarativeContainer):
         max_connections=configurations.elasticsearch.max_connections,
         request_timeout=configurations.elasticsearch.request_timeout,
         max_retries=configurations.elasticsearch.max_retries,
+        username=configurations.elasticsearch.username,
+        password=configurations.elasticsearch.password,
+        verify_certs=configurations.elasticsearch.verify_certs,
         logger=logger,
     )
 
@@ -156,6 +165,25 @@ class Container(containers.DeclarativeContainer):
         failure_threshold=configurations.circuit_breakers.sendgrid.failure_threshold,
         success_threshold=configurations.circuit_breakers.sendgrid.success_threshold,
         timeout=configurations.circuit_breakers.sendgrid.timeout,
+        failure_rate_threshold=configurations.circuit_breakers.sendgrid.failure_rate_threshold,
+        window_seconds=configurations.circuit_breakers.sendgrid.window_seconds,
+        minimum_calls=configurations.circuit_breakers.sendgrid.minimum_calls,
+        half_open_max_calls=configurations.circuit_breakers.sendgrid.half_open_max_calls,
+        call_timeout=configurations.circuit_breakers.sendgrid.call_timeout,
+        logger=logger,
+    )
+
+    elasticsearch_circuit_breaker = providers.Singleton(
+        CircuitBreakerFactory,
+        name=configurations.circuit_breakers.elasticsearch.name,
+        failure_threshold=configurations.circuit_breakers.elasticsearch.failure_threshold,
+        success_threshold=configurations.circuit_breakers.elasticsearch.success_threshold,
+        timeout=configurations.circuit_breakers.elasticsearch.timeout,
+        failure_rate_threshold=configurations.circuit_breakers.elasticsearch.failure_rate_threshold,
+        window_seconds=configurations.circuit_breakers.elasticsearch.window_seconds,
+        minimum_calls=configurations.circuit_breakers.elasticsearch.minimum_calls,
+        half_open_max_calls=configurations.circuit_breakers.elasticsearch.half_open_max_calls,
+        call_timeout=configurations.circuit_breakers.elasticsearch.call_timeout,
         logger=logger,
     )
 
@@ -168,6 +196,28 @@ class Container(containers.DeclarativeContainer):
         circuit_breaker=sendgrid_circuit_breaker,
     )
 
+    # Domain Events (outbox -> Debezium -> Kafka -> event worker)
+    send_loan_confirmation_email_handler = providers.Factory(
+        SendLoanConfirmationEmailHandler,
+        email_service=email_service,
+        logger=logger
+    )
+
+    event_dispatcher = providers.Singleton(
+        EventDispatcher,
+        subscriptions=providers.Dict({
+            LoanCreated: providers.List(send_loan_confirmation_email_handler),
+        }),
+        logger=logger
+    )
+
+    domain_event_consumer = providers.Singleton(
+        DomainEventConsumer,
+        kafka_client=kafka_client,
+        event_dispatcher=event_dispatcher,
+        logger=logger
+    )
+
     catalog_uow = providers.Factory(
         CatalogUnitOfWork,
         session_factory=session_factory,
@@ -178,6 +228,8 @@ class Container(containers.DeclarativeContainer):
         BookQueryRepository,
         session_factory=session_factory,
         elasticsearch_client=elasticsearch_client,
+        circuit_breaker=elasticsearch_circuit_breaker,
+        logger=logger,
     )
 
     add_book_handler = providers.Factory(
@@ -223,6 +275,8 @@ class Container(containers.DeclarativeContainer):
         PatronQueryRepository,
         session_factory=session_factory,
         elasticsearch_client=elasticsearch_client,
+        circuit_breaker=elasticsearch_circuit_breaker,
+        logger=logger,
     )
 
     register_patron_handler = providers.Factory(
@@ -274,6 +328,8 @@ class Container(containers.DeclarativeContainer):
         LoanQueryRepository,
         session_factory=session_factory,
         elasticsearch_client=elasticsearch_client,
+        circuit_breaker=elasticsearch_circuit_breaker,
+        logger=logger,
     )
 
     create_loan_handler = providers.Factory(

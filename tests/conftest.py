@@ -34,6 +34,12 @@ async def db_session(test_db) -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def client(test_db) -> AsyncGenerator[AsyncClient, None]:
     container = Container()
+
+    # Load configuration from etcd (same bootstrap as src.presentation.api.main)
+    etcd_adapter = container.etcd_adapter()
+    etcd_adapter.load()
+    container.configurations.from_dict(etcd_adapter.get_all())
+
     container.postgresql.override(providers.Object(test_db))
     
     # Mock external services

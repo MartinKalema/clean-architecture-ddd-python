@@ -63,6 +63,24 @@ def build_config() -> dict:
                 "failure_threshold": get_env_int("CB_SENDGRID_FAILURE_THRESHOLD", 3),
                 "success_threshold": get_env_int("CB_SENDGRID_SUCCESS_THRESHOLD", 2),
                 "timeout": get_env_float("CB_SENDGRID_TIMEOUT", 60.0),
+                "failure_rate_threshold": get_env_float("CB_SENDGRID_FAILURE_RATE_THRESHOLD", 50.0),
+                "window_seconds": get_env_float("CB_SENDGRID_WINDOW_SECONDS", 60.0),
+                "minimum_calls": get_env_int("CB_SENDGRID_MINIMUM_CALLS", 10),
+                "half_open_max_calls": get_env_int("CB_SENDGRID_HALF_OPEN_MAX_CALLS", 1),
+                "call_timeout": get_env_float("CB_SENDGRID_CALL_TIMEOUT", 30.0),
+            },
+            "elasticsearch": {
+                "name": get_env("CB_ELASTICSEARCH_NAME", "elasticsearch"),
+                "failure_threshold": get_env_int("CB_ELASTICSEARCH_FAILURE_THRESHOLD", 5),
+                "success_threshold": get_env_int("CB_ELASTICSEARCH_SUCCESS_THRESHOLD", 2),
+                "timeout": get_env_float("CB_ELASTICSEARCH_TIMEOUT", 30.0),
+                "failure_rate_threshold": get_env_float("CB_ELASTICSEARCH_FAILURE_RATE_THRESHOLD", 50.0),
+                "window_seconds": get_env_float("CB_ELASTICSEARCH_WINDOW_SECONDS", 60.0),
+                "minimum_calls": get_env_int("CB_ELASTICSEARCH_MINIMUM_CALLS", 10),
+                "half_open_max_calls": get_env_int("CB_ELASTICSEARCH_HALF_OPEN_MAX_CALLS", 1),
+                # ES client's own request_timeout is 30s; the breaker cuts
+                # slightly later so the client timeout fires first
+                "call_timeout": get_env_float("CB_ELASTICSEARCH_CALL_TIMEOUT", 35.0),
             },
         },
         "redis": {
@@ -73,12 +91,17 @@ def build_config() -> dict:
         "kafka": {
             "bootstrap_servers": get_env("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
             "consumer_group": get_env("KAFKA_CONSUMER_GROUP", "es-sync-consumer"),
+            "consumer_max_retries": get_env_int("KAFKA_CONSUMER_MAX_RETRIES", 3),
+            "retry_backoff_seconds": get_env_float("KAFKA_RETRY_BACKOFF_SECONDS", 1.0),
         },
         "elasticsearch": {
             "url": get_env("ELASTICSEARCH_URL", "http://localhost:9200"),
             "max_connections": get_env_int("ELASTICSEARCH_MAX_CONNECTIONS", 300),
             "request_timeout": get_env_int("ELASTICSEARCH_REQUEST_TIMEOUT", 30),
             "max_retries": get_env_int("ELASTICSEARCH_MAX_RETRIES", 3),
+            "username": get_env("ELASTICSEARCH_USERNAME", ""),
+            "password": get_env("ELASTICSEARCH_PASSWORD", ""),
+            "verify_certs": get_env("ELASTICSEARCH_VERIFY_CERTS", "true").lower() == "true",
         },
         "cdc": {
             "topic_to_index": {

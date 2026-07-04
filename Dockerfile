@@ -23,4 +23,7 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.presentation.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# One worker per container: scaling is horizontal via API container
+# replicas. A single process keeps circuit breaker state and
+# /health/circuits coherent per container.
+CMD ["uvicorn", "src.presentation.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

@@ -5,6 +5,8 @@ from .infrastructure_exceptions import (
     EmailServiceException,
     EventDispatcherException,
     InfrastructureException,
+    MessageBrokerException,
+    SearchEngineException,
     TemplateRenderingException,
 )
 
@@ -15,5 +17,7 @@ __all__ = [
     "EmailServiceException",
     "EventDispatcherException",
     "InfrastructureException",
+    "MessageBrokerException",
+    "SearchEngineException",
     "TemplateRenderingException",
 ]
