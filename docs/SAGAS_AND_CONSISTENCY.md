@@ -246,6 +246,97 @@ costing.
 
 ---
 
+## 11. Scaling the pipeline: the one line at the post office
+
+Think of Kafka as a post office, and a **partition** as one line of
+people. Right now, every topic in this system has exactly **one line**,
+and the event worker is **one clerk** serving that line.
+
+The clerk works carefully: take one envelope, fully handle it (create
+the loan, confirm the book, try the email), and only then take the next
+one. This is called **serial** processing.
+
+```text
+events waiting:  [E5] [E4] [E3] [E2] → clerk → done: [E1]
+                                one at a time
+```
+
+### Why one careful clerk is a good thing
+
+Order matters. For one book, the story must play out in sequence:
+*reserved*, then *borrowed*, then *returned*. If a fast clerk handled
+"returned" before a slow clerk finished "borrowed", the book's story
+would come out scrambled.
+
+One line + one clerk makes order automatic. Nothing can overtake
+anything. That simplicity is why the system starts this way.
+
+### Why it becomes a ceiling
+
+The math is unforgiving: if handling one envelope takes 50 milliseconds,
+one clerk can do at most ~20 per second. **It does not matter how many
+API servers you add** — they only make envelopes arrive *faster*. The
+line grows, and the "consumer lag" number the worker logs is literally
+the length of that line.
+
+A load test made this visible: borrows poured in from 8 API servers, one
+clerk processed them one by one, and hundreds of books sat waiting in
+RESERVED. Worse, if the line gets longer than the reservation TTL
+(section 5), the reaper starts giving up on reservations that were
+actually fine — the queue's slowness starts *causing* problems, not just
+delaying work.
+
+### The fix: more lines, with one trick
+
+The obvious fix is more lines (partitions) and more clerks (worker
+instances) — one clerk per line, working in parallel. But doesn't that
+scramble the order we just said we need?
+
+Here is the trick: **order only matters per book**. The story of book A
+must stay in sequence, but it does not care what is happening to book B.
+So the rule is:
+
+> All envelopes about the same book always go into the same line.
+
+Kafka does this with the message **key**. The Debezium setup already
+stamps every event with the aggregate's ID (the book's ID) as its key,
+and Kafka routes by key: same key → same line, always. So:
+
+```text
+line 1:  book A reserved → book A borrowed        → clerk 1
+line 2:  book B reserved → book B released        → clerk 2
+line 3:  book C reserved → book C borrowed        → clerk 3
+```
+
+Each book's story stays perfectly in order. Different books proceed in
+parallel. Three clerks ≈ three times the speed — and you can keep adding
+lines.
+
+We lose only one thing: the order *between* different books ("did A's
+borrow happen before B's?"). Nothing in this system depends on that, so
+it costs nothing.
+
+### Why "not yet" instead of "now"
+
+- **The measurement says no.** Under normal traffic the lag is zero. The
+  queue only grew when a load test deliberately flooded it — and even
+  then the real cause was a broken handler, not a slow clerk.
+- **It is not free.** Partition count is chosen when a topic is created,
+  extra workers are extra containers to run, and Kafka reassigns lines
+  when workers join or crash ("rebalancing") — one more behavior to
+  understand and monitor.
+- **We will know exactly when.** The trigger is already built in:
+  **consumer lag that grows during normal traffic**, or lag that
+  regularly approaches the reservation TTL. The worker logs lag every
+  minute precisely so this decision is a measurement, not a guess.
+
+The door is already built (events carry the right keys), the doorknob is
+known (partition count + worker count), and the sign that says it is
+time to open it is on the wall (sustained lag). Until then, one careful
+clerk is the simplest system that does the job.
+
+---
+
 ## Quick glossary
 
 | Term | Plain meaning |
@@ -260,3 +351,6 @@ costing.
 | Choreography | Steps react to each other's events; no boss |
 | Orchestration | One component (a process manager) directs the steps |
 | Apology | Fixing a rare conflict with human/business action instead of locks |
+| Partition | One "line" inside a Kafka topic; order is guaranteed only within a line |
+| Message key | Decides which line a message joins; same key → same line, always |
+| Consumer lag | How many messages are waiting in line — the pipeline's staleness meter |
