@@ -7,7 +7,10 @@
         "autocomplete": {
           "type": "custom",
           "tokenizer": "standard",
-          "filter": ["lowercase", "autocomplete_filter"]
+          "filter": [
+            "lowercase",
+            "autocomplete_filter"
+          ]
         }
       },
       "filter": {
@@ -21,7 +24,9 @@
   },
   "mappings": {
     "properties": {
-      "id": { "type": "keyword" },
+      "id": {
+        "type": "keyword"
+      },
       "title": {
         "type": "text",
         "analyzer": "standard",
@@ -50,9 +55,24 @@
           }
         }
       },
-      "is_borrowed": { "type": "boolean" },
-      "borrowed_at": { "type": "date" },
-      "return_due_date": { "type": "date" }
+      "is_borrowed": {
+        "type": "boolean"
+      },
+      "borrowed_at": {
+        "type": "date"
+      },
+      "return_due_date": {
+        "type": "date"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "reserved_at": {
+        "type": "date"
+      }
     }
+  },
+  "aliases": {
+    "books": {}
   }
 }

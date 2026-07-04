@@ -7,7 +7,10 @@
         "autocomplete": {
           "type": "custom",
           "tokenizer": "standard",
-          "filter": ["lowercase", "autocomplete_filter"]
+          "filter": [
+            "lowercase",
+            "autocomplete_filter"
+          ]
         }
       },
       "filter": {
@@ -21,7 +24,9 @@
   },
   "mappings": {
     "properties": {
-      "id": { "type": "keyword" },
+      "id": {
+        "type": "keyword"
+      },
       "first_name": {
         "type": "text",
         "analyzer": "standard",
@@ -64,11 +69,24 @@
       "email": {
         "type": "keyword"
       },
-      "membership_tier": { "type": "keyword" },
-      "is_suspended": { "type": "boolean" },
-      "suspended_reason": { "type": "text" },
-      "registered_at": { "type": "date" },
-      "current_loan_count": { "type": "integer" }
+      "membership_tier": {
+        "type": "keyword"
+      },
+      "is_suspended": {
+        "type": "boolean"
+      },
+      "suspended_reason": {
+        "type": "text"
+      },
+      "registered_at": {
+        "type": "date"
+      },
+      "current_loan_count": {
+        "type": "integer"
+      }
     }
+  },
+  "aliases": {
+    "patrons": {}
   }
 }

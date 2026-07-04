@@ -19,6 +19,7 @@ from .interfaces import (
     IConfigurationProvider,
     IEmailService,
     IEventDispatcher,
+    IEventHandler,
     ILogger,
     ITemplateRenderer,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "IConfigurationProvider",
     "IEmailService",
     "IEventDispatcher",
+    "IEventHandler",
     "ILogger",
     "ITemplateRenderer",
     "EmailTemplate",

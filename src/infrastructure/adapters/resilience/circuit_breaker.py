@@ -10,6 +10,22 @@ States:
 - OPEN: Service is unhealthy, requests fail immediately
 - HALF_OPEN: Testing if service has recovered
 
+The circuit opens on either of two conditions:
+- failure_threshold consecutive failures (catches hard-down services
+  quickly, even at low traffic), or
+- failure rate >= failure_rate_threshold percent over the sliding
+  window_seconds window, once at least minimum_calls outcomes have been
+  observed (catches partial degradation that consecutive counting misses:
+  a service failing 30% of requests rarely fails N in a row).
+
+Recovery is probe-limited: in HALF_OPEN at most half_open_max_calls
+requests are admitted concurrently, so a barely-recovered service is not
+hit with the full request volume as its recovery test.
+
+Calls can be bounded with call_timeout so a hanging downstream (which
+raises nothing) still counts as a failure. Sync callables run in the
+default executor so they cannot block the event loop.
+
 Usage:
     circuit_breaker = CircuitBreaker(
         name="sendgrid",
@@ -28,12 +44,15 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import time
+from collections import deque
+from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Deque, Optional, Tuple
 
 from src.infrastructure.exceptions import CircuitBreakerOpenException
 
@@ -95,17 +114,27 @@ class CircuitBreaker:
 
     Features:
     - Thread-safe with asyncio locks
-    - Configurable failure/success thresholds
-    - Automatic recovery testing
+    - Consecutive-failure AND sliding-window failure-rate tripping
+    - Probe-limited recovery testing (half-open admits few calls)
+    - Per-call timeout so hanging calls count as failures
+    - Sync callables dispatched to the executor (never block the loop)
     - Metrics for observability
     - Decorator and context manager support
     - Optional fallback function
 
     Args:
         name: Identifier for logging and metrics
-        failure_threshold: Failures before opening circuit (default: 5)
+        failure_threshold: Consecutive failures before opening circuit (default: 5)
         success_threshold: Successes in half-open before closing (default: 2)
         timeout: Seconds before testing recovery (default: 30)
+        failure_rate_threshold: Percent of failures in the sliding window
+                                that opens the circuit (default: 50.0)
+        window_seconds: Length of the sliding window (default: 60)
+        minimum_calls: Outcomes required in the window before the failure
+                       rate is evaluated (default: 10)
+        half_open_max_calls: Concurrent probes admitted in half-open (default: 1)
+        call_timeout: Seconds before an in-flight call counts as failed
+                      (default: None = unbounded)
         excluded_exceptions: Exceptions that don't count as failures
         fallback: Optional function to call when circuit is open
         logger: Optional logger for observability
@@ -117,6 +146,11 @@ class CircuitBreaker:
         failure_threshold: int = 5,
         success_threshold: int = 2,
         timeout: float = 30.0,
+        failure_rate_threshold: float = 50.0,
+        window_seconds: float = 60.0,
+        minimum_calls: int = 10,
+        half_open_max_calls: int = 1,
+        call_timeout: Optional[float] = None,
         excluded_exceptions: tuple = (),
         fallback: Optional[Callable] = None,
         logger: Optional[ILogger] = None,
@@ -125,6 +159,11 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.success_threshold = success_threshold
         self.timeout = timeout
+        self.failure_rate_threshold = failure_rate_threshold
+        self.window_seconds = window_seconds
+        self.minimum_calls = minimum_calls
+        self.half_open_max_calls = half_open_max_calls
+        self.call_timeout = call_timeout
         self.excluded_exceptions = excluded_exceptions
         self.fallback = fallback
         self._logger = logger or logging.getLogger(__name__)
@@ -134,6 +173,15 @@ class CircuitBreaker:
         self._success_count = 0
         self._last_failure_time: Optional[float] = None
         self._lock = asyncio.Lock()
+
+        # Sliding window of (monotonic timestamp, is_failure) outcomes
+        self._window: Deque[Tuple[float, bool]] = deque()
+        # In-flight probes while HALF_OPEN
+        self._half_open_in_flight = 0
+        # Whether the current task's context-manager call is a probe
+        self._ctx_is_probe: ContextVar[bool] = ContextVar(
+            f"circuit_breaker_{name}_is_probe", default=False
+        )
 
         self.metrics = CircuitBreakerMetrics()
 
@@ -167,11 +215,43 @@ class CircuitBreaker:
         elapsed = time.time() - self._last_failure_time
         return max(0, self.timeout - elapsed)
 
+    def _record_outcome(self, is_failure: bool) -> None:
+        """Add an outcome to the sliding window and evict expired entries."""
+        now = time.monotonic()
+        self._window.append((now, is_failure))
+        self._prune_window(now)
+
+    def _prune_window(self, now: Optional[float] = None) -> None:
+        now = now if now is not None else time.monotonic()
+        cutoff = now - self.window_seconds
+        while self._window and self._window[0][0] < cutoff:
+            self._window.popleft()
+
+    def _window_failure_rate(self) -> Optional[float]:
+        """
+        Failure rate (percent) over the sliding window.
+
+        Returns None below minimum_calls: too few outcomes to judge.
+        """
+        self._prune_window()
+        total = len(self._window)
+        if total < self.minimum_calls:
+            return None
+        failures = sum(1 for _, is_failure in self._window if is_failure)
+        return failures / total * 100
+
     async def _transition_to(self, new_state: CircuitState) -> None:
         """Transition to a new state with logging."""
         old_state = self._state
         self._state = new_state
         self.metrics.state_changes += 1
+
+        if new_state == CircuitState.CLOSED:
+            # Fresh start after recovery: pre-outage outcomes must not
+            # re-trip the rate condition immediately
+            self._window.clear()
+        if new_state != CircuitState.HALF_OPEN:
+            self._half_open_in_flight = 0
 
         log_msg = f"Circuit breaker '{self.name}': {old_state.value} -> {new_state.value}"
         if hasattr(self._logger, 'info'):
@@ -179,9 +259,11 @@ class CircuitBreaker:
         else:
             logging.info(log_msg)
 
-    async def _handle_success(self) -> None:
+    async def _handle_success(self, is_probe: bool = False) -> None:
         """Handle a successful call."""
         self.metrics.record_success()
+        self._record_outcome(is_failure=False)
+        self._release_probe(is_probe)
 
         if self._state == CircuitState.HALF_OPEN:
             self._success_count += 1
@@ -192,12 +274,15 @@ class CircuitBreaker:
         elif self._state == CircuitState.CLOSED:
             self._failure_count = 0
 
-    async def _handle_failure(self, exception: Exception) -> None:
+    async def _handle_failure(self, exception: Exception, is_probe: bool = False) -> None:
         """Handle a failed call."""
         if isinstance(exception, self.excluded_exceptions):
+            self._release_probe(is_probe)
             return
 
         self.metrics.record_failure()
+        self._record_outcome(is_failure=True)
+        self._release_probe(is_probe)
         self._last_failure_time = time.time()
         self._failure_count += 1
 
@@ -207,20 +292,45 @@ class CircuitBreaker:
         elif self._state == CircuitState.CLOSED:
             if self._failure_count >= self.failure_threshold:
                 await self._transition_to(CircuitState.OPEN)
+            else:
+                rate = self._window_failure_rate()
+                if rate is not None and rate >= self.failure_rate_threshold:
+                    if hasattr(self._logger, 'warning'):
+                        self._logger.warning(
+                            f"Circuit breaker '{self.name}': failure rate "
+                            f"{rate:.1f}% over last {self.window_seconds:.0f}s "
+                            f"exceeds {self.failure_rate_threshold:.1f}%"
+                        )
+                    await self._transition_to(CircuitState.OPEN)
 
-    async def _can_execute(self) -> bool:
-        """Check if request can be executed."""
+    def _release_probe(self, is_probe: bool) -> None:
+        if is_probe and self._half_open_in_flight > 0:
+            self._half_open_in_flight -= 1
+
+    async def _acquire(self) -> Tuple[bool, bool]:
+        """
+        Decide whether a call may execute.
+
+        Returns:
+            (allowed, is_probe): is_probe marks calls admitted in HALF_OPEN,
+            which count against half_open_max_calls until they complete.
+        """
         if self._state == CircuitState.CLOSED:
-            return True
+            return True, False
 
         if self._state == CircuitState.OPEN:
             if self._should_attempt_reset():
                 await self._transition_to(CircuitState.HALF_OPEN)
                 self._success_count = 0
-                return True
-            return False
+                self._half_open_in_flight = 1
+                return True, True
+            return False, False
 
-        return True
+        # HALF_OPEN: admit a bounded number of concurrent probes
+        if self._half_open_in_flight < self.half_open_max_calls:
+            self._half_open_in_flight += 1
+            return True, True
+        return False, False
 
     async def execute(
         self,
@@ -231,8 +341,12 @@ class CircuitBreaker:
         """
         Execute a function with circuit breaker protection.
 
+        Sync functions run in the default executor so they cannot block
+        the event loop. With call_timeout set, a call that exceeds it
+        raises asyncio.TimeoutError and counts as a failure.
+
         Args:
-            func: Async function to execute
+            func: Function to execute (async or sync)
             *args: Positional arguments for func
             **kwargs: Keyword arguments for func
 
@@ -240,13 +354,15 @@ class CircuitBreaker:
             Result of func
 
         Raises:
-            CircuitBreakerOpenException: If circuit is open
+            CircuitBreakerOpenException: If circuit is open (or half-open
+                                         with all probe slots taken)
+            asyncio.TimeoutError: If the call exceeds call_timeout
             Exception: Original exception if call fails
         """
         async with self._lock:
-            can_execute = await self._can_execute()
+            allowed, is_probe = await self._acquire()
 
-        if not can_execute:
+        if not allowed:
             self.metrics.record_rejection()
             if self.fallback:
                 return await self.fallback(*args, **kwargs) if asyncio.iscoroutinefunction(self.fallback) else self.fallback(*args, **kwargs)
@@ -256,20 +372,31 @@ class CircuitBreaker:
             )
 
         try:
-            if asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
-            else:
-                result = func(*args, **kwargs)
+            result = await self._run_call(func, *args, **kwargs)
 
             async with self._lock:
-                await self._handle_success()
+                await self._handle_success(is_probe)
 
             return result
 
         except Exception as e:
             async with self._lock:
-                await self._handle_failure(e)
+                await self._handle_failure(e, is_probe)
             raise
+
+    async def _run_call(self, func: Callable, *args, **kwargs) -> Any:
+        """Run the protected call, off-loop for sync functions, with timeout."""
+        if asyncio.iscoroutinefunction(func):
+            awaitable = func(*args, **kwargs)
+        else:
+            loop = asyncio.get_running_loop()
+            awaitable = loop.run_in_executor(
+                None, functools.partial(func, *args, **kwargs)
+            )
+
+        if self.call_timeout:
+            return await asyncio.wait_for(awaitable, timeout=self.call_timeout)
+        return await awaitable
 
     def __call__(self, func: Callable) -> Callable:
         """Decorator for protecting async functions."""
@@ -281,23 +408,28 @@ class CircuitBreaker:
     async def __aenter__(self) -> "CircuitBreaker":
         """Context manager entry."""
         async with self._lock:
-            can_execute = await self._can_execute()
+            allowed, is_probe = await self._acquire()
 
-        if not can_execute:
+        if not allowed:
             self.metrics.record_rejection()
             raise CircuitBreakerOpenException(
                 self.name,
                 self._time_until_retry()
             )
+
+        # ContextVar is task-local, so concurrent tasks sharing this breaker
+        # each see their own probe flag
+        self._ctx_is_probe.set(is_probe)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
         """Context manager exit."""
+        is_probe = self._ctx_is_probe.get()
         async with self._lock:
             if exc_type is None:
-                await self._handle_success()
+                await self._handle_success(is_probe)
             elif exc_val is not None:
-                await self._handle_failure(exc_val)
+                await self._handle_failure(exc_val, is_probe)
         return False
 
     def reset(self) -> None:
@@ -306,9 +438,12 @@ class CircuitBreaker:
         self._failure_count = 0
         self._success_count = 0
         self._last_failure_time = None
+        self._window.clear()
+        self._half_open_in_flight = 0
 
     def get_status(self) -> dict:
         """Get current status for monitoring."""
+        failure_rate = self._window_failure_rate()
         return {
             "name": self.name,
             "state": self._state.value,
@@ -317,6 +452,11 @@ class CircuitBreaker:
             "failure_threshold": self.failure_threshold,
             "success_threshold": self.success_threshold,
             "timeout": self.timeout,
+            "failure_rate_threshold": self.failure_rate_threshold,
+            "window_seconds": self.window_seconds,
+            "window_calls": len(self._window),
+            "window_failure_rate": round(failure_rate, 1) if failure_rate is not None else None,
+            "call_timeout": self.call_timeout,
             "time_until_retry": self._time_until_retry() if self.is_open else 0,
             "metrics": self.metrics.to_dict(),
         }

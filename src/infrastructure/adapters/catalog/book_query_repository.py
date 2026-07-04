@@ -5,18 +5,28 @@ Implements: IBookQueryRepository
 
 Uses PostgreSQL for point lookups (find_by_id) and Elasticsearch
 for search/aggregation operations (find_all, count).
+
+Elasticsearch calls are protected by a circuit breaker; when ES is
+unavailable (or the circuit is open) searches degrade to PostgreSQL —
+without fuzzy matching or relevance scoring, but correct and available.
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.application.query_handlers import BookReadModel
 from src.infrastructure.adapters.catalog.book_model import BookModel
+from src.infrastructure.exceptions import (
+    CircuitBreakerOpenException,
+    SearchEngineException,
+)
 
 if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
+    from src.infrastructure.adapters.resilience import CircuitBreaker
     from src.infrastructure.external.elasticsearch_client import ElasticsearchClient
 
 
@@ -27,6 +37,7 @@ class BookQueryRepository:
     Uses a hybrid approach:
     - PostgreSQL for point lookups (O(1) by ID)
     - Elasticsearch for search/filter operations (full-text search, aggregations)
+    - PostgreSQL fallback when Elasticsearch is unavailable
     """
 
     ES_INDEX = "books"
@@ -35,9 +46,13 @@ class BookQueryRepository:
         self,
         session_factory: async_sessionmaker,
         elasticsearch_client: ElasticsearchClient,
+        circuit_breaker: CircuitBreaker,
+        logger: ILogger,
     ):
         self._session_factory = session_factory
         self._es_client = elasticsearch_client
+        self._circuit_breaker = circuit_breaker
+        self._logger = logger
 
     async def find_by_id(self, book_id: str) -> Optional[BookReadModel]:
         """Find a book by its ID (uses PostgreSQL for consistency)."""
@@ -68,12 +83,27 @@ class BookQueryRepository:
             title_contains=title_contains,
         )
 
-        result = await self._es_client.search(
-            index=self.ES_INDEX,
-            query=query,
-            size=limit,
-            from_=offset,
-        )
+        try:
+            result = await self._circuit_breaker.execute(
+                self._es_client.search,
+                index=self.ES_INDEX,
+                query=query,
+                size=limit,
+                from_=offset,
+            )
+        except (SearchEngineException, CircuitBreakerOpenException) as e:
+            self._logger.warning(
+                f"Elasticsearch unavailable for book search, "
+                f"falling back to PostgreSQL: {e}"
+            )
+            return await self._find_all_from_db(
+                only_available=only_available,
+                only_borrowed=only_borrowed,
+                author_contains=author_contains,
+                title_contains=title_contains,
+                limit=limit,
+                offset=offset,
+            )
 
         return [
             self._to_read_model_from_es(hit)
@@ -91,13 +121,65 @@ class BookQueryRepository:
             only_borrowed=only_borrowed,
         )
 
-        result = await self._es_client.search(
-            index=self.ES_INDEX,
-            query=query,
-            size=0,
-        )
+        try:
+            return await self._circuit_breaker.execute(
+                self._es_client.count,
+                index=self.ES_INDEX,
+                query=query,
+            )
+        except (SearchEngineException, CircuitBreakerOpenException) as e:
+            self._logger.warning(
+                f"Elasticsearch unavailable for book count, "
+                f"falling back to PostgreSQL: {e}"
+            )
+            return await self._count_from_db(
+                only_available=only_available,
+                only_borrowed=only_borrowed,
+            )
 
-        return result["total"]
+    async def _find_all_from_db(
+        self,
+        only_available: bool = False,
+        only_borrowed: bool = False,
+        author_contains: Optional[str] = None,
+        title_contains: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[BookReadModel]:
+        """PostgreSQL fallback for find_all (substring match, no fuzziness)."""
+        stmt = select(BookModel)
+
+        if title_contains:
+            stmt = stmt.where(BookModel.title.ilike(f"%{title_contains}%"))
+        if author_contains:
+            stmt = stmt.where(BookModel.author.ilike(f"%{author_contains}%"))
+        if only_available:
+            stmt = stmt.where(BookModel.status == "available")
+        elif only_borrowed:
+            stmt = stmt.where(BookModel.status == "borrowed")
+
+        stmt = stmt.order_by(BookModel.title).limit(limit).offset(offset)
+
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            return [self._to_read_model_from_db(row) for row in result.scalars().all()]
+
+    async def _count_from_db(
+        self,
+        only_available: bool = False,
+        only_borrowed: bool = False,
+    ) -> int:
+        """PostgreSQL fallback for count."""
+        stmt = select(func.count()).select_from(BookModel)
+
+        if only_available:
+            stmt = stmt.where(BookModel.status == "available")
+        elif only_borrowed:
+            stmt = stmt.where(BookModel.status == "borrowed")
+
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            return result.scalar_one()
 
     def _build_es_query(
         self,
@@ -131,11 +213,12 @@ class BookQueryRepository:
                 }
             })
 
-        # Boolean filters (use filter for exact matching)
+        # Status filters (use filter for exact matching). A RESERVED book
+        # is neither available (semantic lock held) nor borrowed (tentative)
         if only_available:
-            filter_clauses.append({"term": {"is_borrowed": False}})
+            filter_clauses.append({"term": {"status": "available"}})
         elif only_borrowed:
-            filter_clauses.append({"term": {"is_borrowed": True}})
+            filter_clauses.append({"term": {"status": "borrowed"}})
 
         # Build final query
         if must or filter_clauses:
@@ -153,18 +236,21 @@ class BookQueryRepository:
             id=row.id,
             title=row.title,
             author=row.author,
-            is_borrowed=row.is_borrowed,
+            is_borrowed=row.status != "available",
+            status=row.status,
             borrowed_at=row.borrowed_at,
             return_due_date=row.return_due_date,
         )
 
     def _to_read_model_from_es(self, hit: dict[str, Any]) -> BookReadModel:
         """Convert Elasticsearch hit to read model."""
+        status = hit.get("status", "available")
         return BookReadModel(
             id=hit["id"],
             title=hit.get("title", ""),
             author=hit.get("author", ""),
-            is_borrowed=hit.get("is_borrowed", False),
+            is_borrowed=status != "available",
+            status=status,
             borrowed_at=hit.get("borrowed_at"),
             return_due_date=hit.get("return_due_date"),
         )

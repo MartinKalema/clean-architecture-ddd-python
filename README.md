@@ -266,6 +266,7 @@ pytest --cov=src --cov-report=html
 - [Context Map](docs/CONTEXT_MAP.md) - Bounded context relationships
 - [Event Storming](docs/EVENT_STORMING.md) - Domain event flows
 - [Ubiquitous Language](docs/UBIQUITOUS_LANGUAGE.md) - Domain terminology
+- [Sagas & Consistency](docs/SAGAS_AND_CONSISTENCY.md) - Sagas, compensation, semantic locks, and apologies in simple English
 
 ## Code Conventions
 

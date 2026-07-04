@@ -496,6 +496,213 @@ class TestCircuitBreakerRegistry:
         assert cb2._failure_count == 0
 
 
+class TestCircuitBreakerFailureRate:
+    """Tests for sliding-window failure-rate tripping."""
+
+    @pytest.mark.asyncio
+    async def test_opens_on_failure_rate_without_consecutive_failures(self):
+        # Consecutive threshold high enough to never trip; rate must trip
+        cb = CircuitBreaker(
+            name="test",
+            failure_threshold=100,
+            failure_rate_threshold=50.0,
+            window_seconds=60.0,
+            minimum_calls=6,
+        )
+
+        async def failing_func():
+            raise Exception("Fail")
+
+        async def success_func():
+            return "ok"
+
+        # Alternate S/F: never two consecutive failures, but 50% rate
+        for _ in range(3):
+            await cb.execute(success_func)
+            with pytest.raises(Exception):
+                await cb.execute(failing_func)
+
+        assert cb.is_open
+
+    @pytest.mark.asyncio
+    async def test_stays_closed_below_minimum_calls(self):
+        cb = CircuitBreaker(
+            name="test",
+            failure_threshold=100,
+            failure_rate_threshold=50.0,
+            minimum_calls=10,
+        )
+
+        async def failing_func():
+            raise Exception("Fail")
+
+        # 100% failure rate, but only 4 outcomes: not enough evidence
+        for _ in range(4):
+            with pytest.raises(Exception):
+                await cb.execute(failing_func)
+
+        assert cb.is_closed
+
+    @pytest.mark.asyncio
+    async def test_recovery_clears_the_window(self):
+        cb = CircuitBreaker(
+            name="test",
+            failure_threshold=2,
+            success_threshold=1,
+            timeout=0.05,
+            failure_rate_threshold=50.0,
+            minimum_calls=2,
+        )
+
+        async def failing_func():
+            raise Exception("Fail")
+
+        async def success_func():
+            return "ok"
+
+        # Open, then recover through half-open
+        for _ in range(2):
+            with pytest.raises(Exception):
+                await cb.execute(failing_func)
+        assert cb.is_open
+
+        await asyncio.sleep(0.1)
+        await cb.execute(success_func)
+        assert cb.is_closed
+
+        # Pre-outage failures must not count toward the rate anymore
+        with pytest.raises(Exception):
+            await cb.execute(failing_func)
+        assert cb.is_closed
+
+
+class TestCircuitBreakerHalfOpenProbing:
+    """Tests for probe limiting in half-open state."""
+
+    @pytest.mark.asyncio
+    async def test_half_open_admits_limited_concurrent_probes(self):
+        cb = CircuitBreaker(
+            name="test",
+            failure_threshold=2,
+            timeout=0.05,
+            half_open_max_calls=1,
+        )
+
+        async def failing_func():
+            raise Exception("Fail")
+
+        # Open the circuit, then wait for the recovery timeout
+        for _ in range(2):
+            with pytest.raises(Exception):
+                await cb.execute(failing_func)
+        await asyncio.sleep(0.1)
+
+        probe_started = asyncio.Event()
+        release_probe = asyncio.Event()
+
+        async def slow_probe():
+            probe_started.set()
+            await release_probe.wait()
+            return "ok"
+
+        # First call becomes the probe and holds the only slot
+        probe_task = asyncio.create_task(cb.execute(slow_probe))
+        await probe_started.wait()
+        assert cb.is_half_open
+
+        # Concurrent second call is rejected: recovering service is
+        # tested by one probe, not hammered by the full request volume
+        with pytest.raises(CircuitBreakerOpenException):
+            await cb.execute(slow_probe)
+
+        release_probe.set()
+        assert await probe_task == "ok"
+
+    @pytest.mark.asyncio
+    async def test_probe_slot_is_released_after_completion(self):
+        cb = CircuitBreaker(
+            name="test",
+            failure_threshold=2,
+            success_threshold=2,
+            timeout=0.05,
+            half_open_max_calls=1,
+        )
+
+        async def failing_func():
+            raise Exception("Fail")
+
+        async def success_func():
+            return "ok"
+
+        for _ in range(2):
+            with pytest.raises(Exception):
+                await cb.execute(failing_func)
+        await asyncio.sleep(0.1)
+
+        # Sequential probes are each admitted (slot freed between them)
+        await cb.execute(success_func)
+        await cb.execute(success_func)
+        assert cb.is_closed
+
+
+class TestCircuitBreakerCallTimeout:
+    """Tests for per-call timeout enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_hanging_call_times_out_and_counts_as_failure(self):
+        cb = CircuitBreaker(name="test", failure_threshold=2, call_timeout=0.05)
+
+        async def hanging_func():
+            await asyncio.sleep(10)  # never raises on its own
+
+        for _ in range(2):
+            with pytest.raises(asyncio.TimeoutError):
+                await cb.execute(hanging_func)
+
+        # The hanging downstream tripped the breaker despite raising nothing
+        assert cb.is_open
+        assert cb.metrics.failed_requests == 2
+
+    @pytest.mark.asyncio
+    async def test_fast_call_unaffected_by_timeout(self):
+        cb = CircuitBreaker(name="test", call_timeout=1.0)
+
+        async def fast_func():
+            return "ok"
+
+        assert await cb.execute(fast_func) == "ok"
+        assert cb.is_closed
+
+
+class TestCircuitBreakerSyncExecution:
+    """Tests for sync callables running off the event loop."""
+
+    @pytest.mark.asyncio
+    async def test_sync_function_does_not_block_event_loop(self):
+        import time as time_module
+
+        cb = CircuitBreaker(name="test")
+
+        def blocking_func():
+            time_module.sleep(0.2)  # blocking I/O stand-in
+            return "done"
+
+        loop_ticks = 0
+
+        async def ticker():
+            nonlocal loop_ticks
+            for _ in range(10):
+                loop_ticks += 1
+                await asyncio.sleep(0.02)
+
+        # If blocking_func ran on the loop, ticker could not advance
+        # until it finished
+        result, _ = await asyncio.gather(cb.execute(blocking_func), ticker())
+
+        assert result == "done"
+        assert loop_ticks >= 5
+
+
 class TestCircuitBreakerConcurrency:
     """Tests for circuit breaker under concurrent access."""
 

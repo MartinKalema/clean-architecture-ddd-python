@@ -18,7 +18,7 @@ from src.application.query_handlers import (
     ListBooksQuery,
 )
 from src.container import Container
-from src.domain.catalog import DomainException
+from src.domain.catalog import BorrowerNotEligibleException, DomainException
 from src.presentation.api.models.book_models import (
     BookCreate,
     BookResponse,
@@ -42,7 +42,8 @@ async def create_book(
             id=result.id,
             title=result.title,
             author=result.author,
-            is_borrowed=result.is_borrowed
+            is_borrowed=result.is_borrowed,
+            status=result.status
         )
     except DomainException as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -66,8 +67,11 @@ async def borrow_book(
             id=result.id,
             title=result.title,
             author=result.author,
-            is_borrowed=result.is_borrowed
+            is_borrowed=result.is_borrowed,
+            status=result.status
         )
+    except BorrowerNotEligibleException as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except DomainException as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -86,7 +90,8 @@ async def return_book(
             id=result.id,
             title=result.title,
             author=result.author,
-            is_borrowed=result.is_borrowed
+            is_borrowed=result.is_borrowed,
+            status=result.status
         )
     except DomainException as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -118,7 +123,8 @@ async def list_books(
             id=book.id,
             title=book.title,
             author=book.author,
-            is_borrowed=book.is_borrowed
+            is_borrowed=book.is_borrowed,
+            status=book.status
         )
         for book in results
     ]
@@ -138,7 +144,8 @@ async def get_book(
             id=result.id,
             title=result.title,
             author=result.author,
-            is_borrowed=result.is_borrowed
+            is_borrowed=result.is_borrowed,
+            status=result.status
         )
     except DomainException as e:
         raise HTTPException(status_code=404, detail=str(e))

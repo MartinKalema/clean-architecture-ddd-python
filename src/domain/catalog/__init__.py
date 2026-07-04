@@ -10,28 +10,35 @@ from .events import (
     BookAddedToCatalog,
     BookRemovedFromCatalog,
     CatalogBookBorrowed,
+    CatalogBookReleased,
+    CatalogBookReserved,
     CatalogBookReturned,
 )
 from .exceptions import (
     BookAlreadyBorrowedException,
     BookNotBorrowedException,
     BookNotFoundException,
+    BookNotReservedException,
     BorrowerEmailRequiredException,
+    BorrowerNotEligibleException,
     CatalogException,
     ConcurrentModificationException,
 )
 from .interfaces import IBookCommandRepository, IBookQueryRepository, ICatalogUnitOfWork
-from .value_objects import ISBN, Author, BookId, Title
+from .value_objects import ISBN, Author, BookId, BookStatus, Title
 
 __all__ = [
     "Book",
     "BookId",
+    "BookStatus",
     "Title",
     "Author",
     "ISBN",
     "BookAddedToCatalog",
     "BookRemovedFromCatalog",
     "CatalogBookBorrowed",
+    "CatalogBookReleased",
+    "CatalogBookReserved",
     "CatalogBookReturned",
     "IBookCommandRepository",
     "IBookQueryRepository",
@@ -42,6 +49,8 @@ __all__ = [
     "BookNotFoundException",
     "BookAlreadyBorrowedException",
     "BookNotBorrowedException",
+    "BookNotReservedException",
     "BorrowerEmailRequiredException",
+    "BorrowerNotEligibleException",
     "ConcurrentModificationException",
 ]

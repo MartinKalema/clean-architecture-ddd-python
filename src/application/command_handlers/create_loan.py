@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from src.domain.lending import Loan
 from src.domain.lending.exceptions import BookNotAvailableException
@@ -23,6 +23,9 @@ class CreateLoanCommand:
     catalog_book_id: str
     book_title: str
     loan_duration_days: int = 14
+    # When the loan reacts to a borrow that already happened (event-driven
+    # flow), the borrow time comes from the event, not this handler's clock
+    borrowed_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -55,7 +58,7 @@ class CreateLoanHandler:
                 catalog_book_id=command.catalog_book_id,
                 book_title=command.book_title,
                 loan_duration_days=command.loan_duration_days,
-                borrowed_at=datetime.now(),
+                borrowed_at=command.borrowed_at or datetime.now(),
             )
 
             await self.uow.loans.add(loan)

@@ -22,5 +22,8 @@ class BookResponse(BaseModel):
     title: str
     author: str
     is_borrowed: bool
+    # available | reserved | borrowed — reserved means a borrow is being
+    # confirmed and the book is temporarily withheld
+    status: str = "available"
 
     model_config = ConfigDict(from_attributes=True)

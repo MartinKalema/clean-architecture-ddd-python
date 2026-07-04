@@ -41,11 +41,14 @@ class ElasticsearchSyncConsumer:
 
     def transform_book(self, data: dict[str, Any]) -> dict[str, Any]:
         """Transform book CDC event to ES document."""
+        status = data.get("status", "available")
         return {
             "id": data.get("id"),
             "title": data.get("title"),
             "author": data.get("author"),
-            "is_borrowed": data.get("is_borrowed", False),
+            "status": status,
+            "is_borrowed": status != "available",
+            "reserved_at": self._parse_timestamp(data.get("reserved_at")),
             "borrowed_at": self._parse_timestamp(data.get("borrowed_at")),
             "return_due_date": self._parse_timestamp(data.get("return_due_date")),
         }

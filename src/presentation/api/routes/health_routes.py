@@ -121,6 +121,7 @@ async def circuit_breakers():
 
     Use this endpoint to monitor the health of external service integrations:
     - SendGrid email service
+    - Elasticsearch (read-model search)
 
     Circuit breaker states:
     - closed: Normal operation

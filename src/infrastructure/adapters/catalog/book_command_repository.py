@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.catalog import Book, ConcurrentModificationException
+from src.domain.catalog import Book, BookStatus, ConcurrentModificationException
 from src.infrastructure.adapters.catalog.book_model import BookModel
 from src.infrastructure.exceptions import DatabaseException
 
@@ -63,6 +63,27 @@ class BookCommandRepository:
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error retrieving book {book_id}: {str(e)}", original_exception=e)
 
+    async def find_expired_reservations(self, cutoff) -> List[Book]:
+        """Find books whose reservation started before the cutoff."""
+        try:
+            result = await self.session.execute(
+                select(BookModel)
+                .where(BookModel.status == BookStatus.RESERVED.value)
+                .where(BookModel.reserved_at < cutoff)
+            )
+            db_books = result.scalars().all()
+            entities = []
+            for db_book in db_books:
+                if db_book.id in self.identity_map:
+                    entities.append(self.identity_map[db_book.id])
+                else:
+                    entity = db_book.to_entity()
+                    self.identity_map[entity.id.value] = entity
+                    entities.append(entity)
+            return entities
+        except SQLAlchemyError as e:
+            raise DatabaseException(f"Error finding expired reservations: {str(e)}", original_exception=e)
+
     async def update(self, book: Book) -> None:
         """
         Update a book with optimistic locking.
@@ -79,7 +100,8 @@ class BookCommandRepository:
                 .where(BookModel.id == book.id.value)
                 .where(BookModel.version == expected_version)
                 .values(
-                    is_borrowed=book.is_borrowed,
+                    status=book.status.value,
+                    reserved_at=book.reserved_at,
                     borrowed_at=book.borrowed_at,
                     return_due_date=book.return_due_date,
                     version=new_version

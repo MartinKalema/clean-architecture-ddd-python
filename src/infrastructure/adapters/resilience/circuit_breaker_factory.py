@@ -40,16 +40,27 @@ class CircuitBreakerFactory:
         success_threshold: int,
         timeout: float,
         logger: ILogger,
+        failure_rate_threshold: float = 50.0,
+        window_seconds: float = 60.0,
+        minimum_calls: int = 10,
+        half_open_max_calls: int = 1,
+        call_timeout: float | None = None,
     ) -> CircuitBreaker:
         """
         Create and register a circuit breaker.
 
         Args:
             name: Identifier for logging and monitoring
-            failure_threshold: Failures before opening circuit
+            failure_threshold: Consecutive failures before opening circuit
             success_threshold: Successes in half-open before closing
             timeout: Seconds before testing recovery
             logger: Logger instance for observability
+            failure_rate_threshold: Percent of failures in the sliding
+                                    window that opens the circuit
+            window_seconds: Length of the sliding window
+            minimum_calls: Outcomes required before the rate is evaluated
+            half_open_max_calls: Concurrent probes admitted in half-open
+            call_timeout: Seconds before an in-flight call counts as failed
 
         Returns:
             Configured and registered CircuitBreaker instance
@@ -59,6 +70,11 @@ class CircuitBreakerFactory:
             failure_threshold=failure_threshold,
             success_threshold=success_threshold,
             timeout=timeout,
+            failure_rate_threshold=failure_rate_threshold,
+            window_seconds=window_seconds,
+            minimum_calls=minimum_calls,
+            half_open_max_calls=half_open_max_calls,
+            call_timeout=call_timeout,
             logger=logger,
         )
 

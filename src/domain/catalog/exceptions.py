@@ -26,6 +26,22 @@ class BookNotBorrowedException(CatalogException):
         super().__init__(f"Book with id {book_id} is not borrowed")
 
 
+class BookNotReservedException(CatalogException):
+    """Raised when confirming or releasing a book that is not reserved."""
+    def __init__(self, book_id: str, status: str):
+        super().__init__(
+            f"Book with id {book_id} is not reserved (status: {status})"
+        )
+
+
+class BorrowerNotEligibleException(CatalogException):
+    """Raised when the borrower cannot borrow (unknown or suspended)."""
+    def __init__(self, borrower_email: str, reason: str):
+        super().__init__(
+            f"Borrower {borrower_email} cannot borrow: {reason}"
+        )
+
+
 class BorrowerEmailRequiredException(CatalogException):
     """Raised when borrower email is not provided."""
     def __init__(self):

@@ -26,6 +26,20 @@ class EventDispatcherException(InfrastructureException):
         self.original_exception = original_exception
 
 
+class MessageBrokerException(InfrastructureException):
+    """Raised when a message broker operation fails."""
+    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+        super().__init__(message)
+        self.original_exception = original_exception
+
+
+class SearchEngineException(InfrastructureException):
+    """Raised when a search engine operation fails."""
+    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+        super().__init__(message)
+        self.original_exception = original_exception
+
+
 class TemplateRenderingException(InfrastructureException):
     """Raised when rendering a template fails."""
     def __init__(self, message: str, original_exception: Optional[Exception] = None):

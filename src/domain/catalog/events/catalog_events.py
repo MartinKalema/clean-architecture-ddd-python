@@ -22,13 +22,36 @@ class BookRemovedFromCatalog(DomainEvent):
 
 
 @dataclass(frozen=True)
+class CatalogBookReserved(DomainEvent):
+    """
+    Published when a book is reserved for a borrower.
+
+    A reservation is the tentative first step of the borrow saga: the
+    Lending context reacts by creating the loan, after which the
+    reservation is confirmed into a borrow (or released on failure).
+    """
+    book_id: str
+    title: str
+    reserved_at: datetime
+    return_due_date: datetime
+    borrower_email: str
+
+
+@dataclass(frozen=True)
 class CatalogBookBorrowed(DomainEvent):
-    """Published when a book is borrowed from the catalog."""
+    """Published when a reservation is confirmed into a final borrow."""
     book_id: str
     title: str
     borrowed_at: datetime
     return_due_date: datetime
     borrower_email: str
+
+
+@dataclass(frozen=True)
+class CatalogBookReleased(DomainEvent):
+    """Published when a reservation is released without becoming a borrow."""
+    book_id: str
+    reason: str
 
 
 @dataclass(frozen=True)

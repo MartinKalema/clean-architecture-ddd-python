@@ -5,17 +5,27 @@ Implements: ILoanQueryRepository
 
 Uses PostgreSQL for point lookups (find_by_id) and Elasticsearch
 for search/aggregation operations (find_by_patron, find_overdue).
+
+Elasticsearch calls are protected by a circuit breaker; when ES is
+unavailable (or the circuit is open) searches degrade to PostgreSQL.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.infrastructure.adapters.lending.loan_model import LoanModel
+from src.infrastructure.exceptions import (
+    CircuitBreakerOpenException,
+    SearchEngineException,
+)
 
 if TYPE_CHECKING:
+    from src.domain.shared_kernel import ILogger
+    from src.infrastructure.adapters.resilience import CircuitBreaker
     from src.infrastructure.external.elasticsearch_client import ElasticsearchClient
 
 
@@ -26,6 +36,7 @@ class LoanQueryRepository:
     Uses a hybrid approach:
     - PostgreSQL for point lookups (O(1) by ID)
     - Elasticsearch for search/filter operations (full-text search, aggregations)
+    - PostgreSQL fallback when Elasticsearch is unavailable
     """
 
     ES_INDEX = "loans"
@@ -34,9 +45,13 @@ class LoanQueryRepository:
         self,
         session_factory: async_sessionmaker,
         elasticsearch_client: ElasticsearchClient,
+        circuit_breaker: CircuitBreaker,
+        logger: ILogger,
     ):
         self._session_factory = session_factory
         self._es_client = elasticsearch_client
+        self._circuit_breaker = circuit_breaker
+        self._logger = logger
 
     async def find_by_id(self, loan_id: str) -> Optional[dict]:
         """Find a loan by ID (uses PostgreSQL for consistency)."""
@@ -62,12 +77,25 @@ class LoanQueryRepository:
             only_active=only_active,
         )
 
-        result = await self._es_client.search(
-            index=self.ES_INDEX,
-            query=query,
-            size=limit,
-            from_=offset,
-        )
+        try:
+            result = await self._circuit_breaker.execute(
+                self._es_client.search,
+                index=self.ES_INDEX,
+                query=query,
+                size=limit,
+                from_=offset,
+            )
+        except (SearchEngineException, CircuitBreakerOpenException) as e:
+            self._logger.warning(
+                f"Elasticsearch unavailable for loan search, "
+                f"falling back to PostgreSQL: {e}"
+            )
+            return await self._find_by_patron_from_db(
+                patron_id=patron_id,
+                only_active=only_active,
+                limit=limit,
+                offset=offset,
+            )
 
         return [
             self._to_read_model_from_es(hit)
@@ -78,16 +106,57 @@ class LoanQueryRepository:
         """Find overdue loans (uses Elasticsearch for search)."""
         query = {"bool": {"filter": [{"term": {"is_overdue": True}}]}}
 
-        result = await self._es_client.search(
-            index=self.ES_INDEX,
-            query=query,
-            size=limit,
-        )
+        try:
+            result = await self._circuit_breaker.execute(
+                self._es_client.search,
+                index=self.ES_INDEX,
+                query=query,
+                size=limit,
+            )
+        except (SearchEngineException, CircuitBreakerOpenException) as e:
+            self._logger.warning(
+                f"Elasticsearch unavailable for overdue loan search, "
+                f"falling back to PostgreSQL: {e}"
+            )
+            return await self._find_overdue_from_db(limit=limit)
 
         return [
             self._to_read_model_from_es(hit)
             for hit in result["hits"]
         ]
+
+    async def _find_by_patron_from_db(
+        self,
+        patron_id: str,
+        only_active: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[dict]:
+        """PostgreSQL fallback for find_by_patron."""
+        stmt = select(LoanModel).where(LoanModel.patron_id == patron_id)
+
+        if only_active:
+            stmt = stmt.where(LoanModel.status == "active")
+
+        stmt = stmt.order_by(LoanModel.borrowed_at.desc()).limit(limit).offset(offset)
+
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            return [self._to_read_model_from_db(row) for row in result.scalars().all()]
+
+    async def _find_overdue_from_db(self, limit: int = 100) -> List[dict]:
+        """PostgreSQL fallback for find_overdue."""
+        stmt = (
+            select(LoanModel)
+            .where(LoanModel.status == "active")
+            .where(LoanModel.due_date < datetime.now())
+            .order_by(LoanModel.due_date)
+            .limit(limit)
+        )
+
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            return [self._to_read_model_from_db(row) for row in result.scalars().all()]
 
     def _build_es_query(
         self,

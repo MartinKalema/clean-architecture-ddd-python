@@ -3,8 +3,25 @@ Value Objects for the Catalog bounded context.
 """
 import uuid
 from dataclasses import dataclass
+from enum import Enum
 
 from src.domain.shared_kernel.exceptions import ValidationException
+
+
+class BookStatus(str, Enum):
+    """
+    Lifecycle of a catalog book.
+
+    RESERVED is a semantic lock: the borrow has committed but the loan in
+    the Lending context has not yet been confirmed. The book is withheld
+    from other borrowers, but the state is tentative — it either advances
+    to BORROWED (loan created) or falls back to AVAILABLE (compensation
+    or reservation expiry).
+    """
+
+    AVAILABLE = "available"
+    RESERVED = "reserved"
+    BORROWED = "borrowed"
 
 
 @dataclass(frozen=True)

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, Optional
 
+from src.infrastructure.adapters.outbox import OutboxMessageModel
 from src.infrastructure.adapters.patron.patron_command_repository import (
     PatronCommandRepository,
 )
@@ -48,7 +49,27 @@ class PatronUnitOfWork:
 
     async def commit(self):
         if self._session:
+            self._stage_domain_events()
             await self._session.commit()
+
+    def _stage_domain_events(self) -> None:
+        """
+        Write pending domain events to the transactional outbox.
+
+        Runs inside the same transaction as the aggregate changes, so the
+        state change and its events commit (or roll back) atomically.
+        Debezium picks the rows up from the WAL and publishes them to Kafka.
+        """
+        for aggregate in self.identity_map.values():
+            for event in aggregate.get_domain_events():
+                self._session.add(
+                    OutboxMessageModel.from_domain_event(
+                        event,
+                        aggregate_type=type(aggregate).__name__.lower(),
+                        aggregate_id=aggregate.id.value,
+                    )
+                )
+            aggregate.clear_events()
 
     async def rollback(self):
         if self._session:
