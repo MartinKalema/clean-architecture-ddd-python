@@ -15,6 +15,8 @@ from src.domain.catalog.events.catalog_events import (
     BookAddedToCatalog,
     BookRemovedFromCatalog,
     CatalogBookBorrowed,
+    CatalogBookReleased,
+    CatalogBookReserved,
     CatalogBookReturned,
 )
 from src.domain.lending.events.lending_events import (
@@ -36,6 +38,8 @@ EVENT_TYPES: Dict[str, Type[DomainEvent]] = {
         BookAddedToCatalog,
         BookRemovedFromCatalog,
         CatalogBookBorrowed,
+        CatalogBookReleased,
+        CatalogBookReserved,
         CatalogBookReturned,
         LoanCreated,
         LoanCompleted,

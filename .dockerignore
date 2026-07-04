@@ -15,7 +15,10 @@ __pycache__
 tests/
 docs/
 *.md
+# deploy/ is excluded except the ES index mappings, which
+# scripts/reindex_read_models.py needs at runtime
 deploy/
+!deploy/elasticsearch/mappings/
 docker-compose*.yaml
 Dockerfile
 .dockerignore

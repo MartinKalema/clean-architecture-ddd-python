@@ -390,6 +390,23 @@ services:
     profiles:
       - cdc
 
+  reservation-reaper:
+    build: .
+    container_name: clean_arch_reservation_reaper
+    env_file: .env.docker
+    command: ["python", "scripts/run_reservation_reaper.py"]
+    environment:
+      ETCD_HOST: etcd
+      ETCD_PORT: 2379
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      etcd:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - cdc
+
   locust-master:
     image: locustio/locust
     container_name: clean_arch_locust_master

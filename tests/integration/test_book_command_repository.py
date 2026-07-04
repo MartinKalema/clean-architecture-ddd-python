@@ -19,7 +19,6 @@ async def test_repository_add_and_get(test_db):
             id=BookId.next_id(),
             title=Title("Integration Test Book"),
             author=Author("Tester"),
-            is_borrowed=False
         )
 
         # Add
@@ -47,13 +46,12 @@ async def test_repository_update(test_db):
             id=BookId.next_id(),
             title=Title("Update Test Book"),
             author=Author("Tester"),
-            is_borrowed=False
         )
         await repo.add(book)
         await session.commit()
 
         # Update
-        book.borrow("test@example.com", datetime.now())
+        book.reserve("test@example.com", datetime.now())
         await repo.update(book)
         await session.commit()
 

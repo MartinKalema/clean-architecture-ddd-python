@@ -154,9 +154,9 @@ class BookQueryRepository:
         if author_contains:
             stmt = stmt.where(BookModel.author.ilike(f"%{author_contains}%"))
         if only_available:
-            stmt = stmt.where(BookModel.is_borrowed.is_(False))
+            stmt = stmt.where(BookModel.status == "available")
         elif only_borrowed:
-            stmt = stmt.where(BookModel.is_borrowed.is_(True))
+            stmt = stmt.where(BookModel.status == "borrowed")
 
         stmt = stmt.order_by(BookModel.title).limit(limit).offset(offset)
 
@@ -173,9 +173,9 @@ class BookQueryRepository:
         stmt = select(func.count()).select_from(BookModel)
 
         if only_available:
-            stmt = stmt.where(BookModel.is_borrowed.is_(False))
+            stmt = stmt.where(BookModel.status == "available")
         elif only_borrowed:
-            stmt = stmt.where(BookModel.is_borrowed.is_(True))
+            stmt = stmt.where(BookModel.status == "borrowed")
 
         async with self._session_factory() as session:
             result = await session.execute(stmt)
@@ -213,11 +213,12 @@ class BookQueryRepository:
                 }
             })
 
-        # Boolean filters (use filter for exact matching)
+        # Status filters (use filter for exact matching). A RESERVED book
+        # is neither available (semantic lock held) nor borrowed (tentative)
         if only_available:
-            filter_clauses.append({"term": {"is_borrowed": False}})
+            filter_clauses.append({"term": {"status": "available"}})
         elif only_borrowed:
-            filter_clauses.append({"term": {"is_borrowed": True}})
+            filter_clauses.append({"term": {"status": "borrowed"}})
 
         # Build final query
         if must or filter_clauses:
@@ -235,18 +236,21 @@ class BookQueryRepository:
             id=row.id,
             title=row.title,
             author=row.author,
-            is_borrowed=row.is_borrowed,
+            is_borrowed=row.status != "available",
+            status=row.status,
             borrowed_at=row.borrowed_at,
             return_due_date=row.return_due_date,
         )
 
     def _to_read_model_from_es(self, hit: dict[str, Any]) -> BookReadModel:
         """Convert Elasticsearch hit to read model."""
+        status = hit.get("status", "available")
         return BookReadModel(
             id=hit["id"],
             title=hit.get("title", ""),
             author=hit.get("author", ""),
-            is_borrowed=hit.get("is_borrowed", False),
+            is_borrowed=status != "available",
+            status=status,
             borrowed_at=hit.get("borrowed_at"),
             return_due_date=hit.get("return_due_date"),
         )

@@ -103,6 +103,13 @@ def build_config() -> dict:
             "password": get_env("ELASTICSEARCH_PASSWORD", ""),
             "verify_certs": get_env("ELASTICSEARCH_VERIFY_CERTS", "true").lower() == "true",
         },
+        "catalog": {
+            # TTL must stay comfortably above worst-case event latency:
+            # a reservation released before its loan event arrives leaves
+            # a loan for a book the catalog gave back
+            "reservation_ttl_seconds": get_env_int("RESERVATION_TTL_SECONDS", 300),
+            "reaper_interval_seconds": get_env_int("RESERVATION_REAPER_INTERVAL_SECONDS", 60),
+        },
         "cdc": {
             "topic_to_index": {
                 "library.public.books": "books",

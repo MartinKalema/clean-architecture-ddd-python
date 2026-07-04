@@ -38,11 +38,11 @@ async def _seed_books(test_db):
     async with session_factory() as session:
         session.add(BookModel(
             id="fallback-1", title="Fallback Patterns", author="Ada Resilience",
-            is_borrowed=False, version=0,
+            status="available", version=0,
         ))
         session.add(BookModel(
             id="fallback-2", title="Fallback in Practice", author="Grace Degraded",
-            is_borrowed=True, version=0,
+            status="borrowed", version=0,
         ))
         await session.commit()
 

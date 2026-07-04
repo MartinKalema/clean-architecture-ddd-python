@@ -30,6 +30,7 @@ class AddBookResult:
     title: str
     author: str
     is_borrowed: bool = False
+    status: str = "available"
 
 
 class AddBookHandler:
@@ -62,5 +63,6 @@ class AddBookHandler:
                 id=book.id.value,
                 title=book.title.value,
                 author=book.author.value,
-                is_borrowed=book.is_borrowed
+                is_borrowed=book.is_borrowed,
+                status=book.status.value
             )

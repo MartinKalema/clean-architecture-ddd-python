@@ -25,9 +25,16 @@ from src.application.command_handlers.reinstate_patron import \
 from src.application.command_handlers.return_loan import ReturnLoanHandler
 from src.application.command_handlers.suspend_patron import \
     SuspendPatronHandler
+from src.application.command_handlers.confirm_book_borrow import \
+    ConfirmBookBorrowHandler
+from src.application.command_handlers.release_book_reservation import \
+    ReleaseBookReservationHandler
+from src.application.command_handlers.release_expired_reservations import \
+    ReleaseExpiredReservationsHandler
 from src.application.command_handlers.upgrade_patron_tier import \
     UpgradePatronTierHandler
-from src.application.event_handlers import (CreateLoanOnBookBorrowedHandler,
+from src.application.event_handlers import (ConfirmBorrowOnLoanCreatedHandler,
+                                            CreateLoanOnBookReservedHandler,
                                             SendLoanConfirmationEmailHandler)
 from src.application.query_handlers import GetBookHandler, ListBooksHandler
 from src.application.query_handlers.get_loan import GetLoanHandler
@@ -35,7 +42,7 @@ from src.application.query_handlers.get_patron import GetPatronHandler
 from src.application.query_handlers.list_patron_loans import \
     ListPatronLoansHandler
 from src.application.query_handlers.list_patrons import ListPatronsHandler
-from src.domain.catalog import CatalogBookBorrowed
+from src.domain.catalog import CatalogBookReserved
 from src.domain.lending import LoanCreated
 from src.infrastructure.adapters.cache import CacheAdapter
 from src.infrastructure.adapters.catalog import (BookQueryRepository,
@@ -230,6 +237,24 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
+    confirm_book_borrow_handler = providers.Factory(
+        ConfirmBookBorrowHandler,
+        uow=catalog_uow,
+        logger=logger
+    )
+
+    release_book_reservation_handler = providers.Factory(
+        ReleaseBookReservationHandler,
+        uow=catalog_uow,
+        logger=logger
+    )
+
+    release_expired_reservations_handler = providers.Factory(
+        ReleaseExpiredReservationsHandler,
+        uow=catalog_uow,
+        logger=logger
+    )
+
     list_books_handler = providers.Factory(
         ListBooksHandler,
         query_repository=book_query_repository,
@@ -351,19 +376,28 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    create_loan_on_book_borrowed_handler = providers.Factory(
-        CreateLoanOnBookBorrowedHandler,
+    create_loan_on_book_reserved_handler = providers.Factory(
+        CreateLoanOnBookReservedHandler,
         create_loan_handler=create_loan_handler,
-        return_book_handler=return_book_handler,
+        release_book_reservation_handler=release_book_reservation_handler,
         patron_query_repository=patron_query_repository,
+        logger=logger
+    )
+
+    confirm_borrow_on_loan_created_handler = providers.Factory(
+        ConfirmBorrowOnLoanCreatedHandler,
+        confirm_book_borrow_handler=confirm_book_borrow_handler,
         logger=logger
     )
 
     event_dispatcher = providers.Singleton(
         EventDispatcher,
         subscriptions=providers.Dict({
-            CatalogBookBorrowed: providers.List(create_loan_on_book_borrowed_handler),
-            LoanCreated: providers.List(send_loan_confirmation_email_handler),
+            CatalogBookReserved: providers.List(create_loan_on_book_reserved_handler),
+            LoanCreated: providers.List(
+                confirm_borrow_on_loan_created_handler,
+                send_loan_confirmation_email_handler,
+            ),
         }),
         logger=logger
     )

@@ -3,9 +3,9 @@ SQLAlchemy models for Catalog bounded context.
 
 These models are shared between command and query repositories.
 """
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Column, DateTime, Integer, String
 
-from src.domain.catalog import Author, Book, BookId, Title
+from src.domain.catalog import Author, Book, BookId, BookStatus, Title
 from src.infrastructure.external.postgresql import Base
 
 
@@ -17,7 +17,8 @@ class BookModel(Base):
     id = Column(String, primary_key=True, index=True)
     title = Column(String, index=True)
     author = Column(String)
-    is_borrowed = Column(Boolean, default=False)
+    status = Column(String, default=BookStatus.AVAILABLE.value, nullable=False, index=True)
+    reserved_at = Column(DateTime, nullable=True)
     borrowed_at = Column(DateTime, nullable=True)
     return_due_date = Column(DateTime, nullable=True)
     version = Column(Integer, default=0, nullable=False)
@@ -28,7 +29,8 @@ class BookModel(Base):
             id=BookId(self.id),
             title=Title(self.title),
             author=Author(self.author),
-            is_borrowed=self.is_borrowed,
+            status=BookStatus(self.status),
+            reserved_at=self.reserved_at,
             borrowed_at=self.borrowed_at,
             return_due_date=self.return_due_date,
         )
@@ -42,7 +44,8 @@ class BookModel(Base):
             id=book.id.value,
             title=book.title.value,
             author=book.author.value,
-            is_borrowed=book.is_borrowed,
+            status=book.status.value,
+            reserved_at=book.reserved_at,
             borrowed_at=book.borrowed_at,
             return_due_date=book.return_due_date,
             version=book.version,

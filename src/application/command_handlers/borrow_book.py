@@ -28,6 +28,7 @@ class BorrowBookResult:
     title: str
     author: str
     is_borrowed: bool
+    status: str = "reserved"
     return_due_date: Optional[datetime] = None
 
 
@@ -35,7 +36,9 @@ class BorrowBookHandler:
     """
     Handles the BorrowBookCommand.
 
-    Emits BookBorrowed domain event for read model sync.
+    Reserves the book (semantic lock) and emits CatalogBookReserved; the
+    Lending context reacts by creating the loan, after which the
+    reservation is confirmed into a borrow — or released on failure.
     """
 
     def __init__(self, uow: UnitOfWork, logger: ILogger):
@@ -50,17 +53,18 @@ class BorrowBookHandler:
                 self.logger.warning(f"Attempted to borrow non-existent book: {command.book_id}")
                 raise BookNotFoundException(command.book_id)
 
-            book.borrow(command.borrower_email, datetime.now())
+            book.reserve(command.borrower_email, datetime.now())
 
             await self.uow.books.update(book)
             await self.uow.commit()
 
-            self.logger.info(f"Book borrowed: {book.title.value} ({book.id.value})")
+            self.logger.info(f"Book reserved: {book.title.value} ({book.id.value})")
 
             return BorrowBookResult(
                 id=book.id.value,
                 title=book.title.value,
                 author=book.author.value,
                 is_borrowed=book.is_borrowed,
+                status=book.status.value,
                 return_due_date=book.return_due_date
             )

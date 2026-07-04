@@ -16,6 +16,8 @@ RUN uv pip install --system -e .
 COPY src/ src/
 COPY scripts/ scripts/
 COPY migrations/ migrations/
+# Index mappings are needed at runtime by scripts/reindex_read_models.py
+COPY deploy/elasticsearch/mappings/ deploy/elasticsearch/mappings/
 COPY alembic.ini .
 
 ENV PYTHONPATH=/app

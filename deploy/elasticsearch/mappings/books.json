@@ -63,6 +63,12 @@
       },
       "return_due_date": {
         "type": "date"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "reserved_at": {
+        "type": "date"
       }
     }
   },

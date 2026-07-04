@@ -28,6 +28,7 @@ class BookReadModel:
     title: str
     author: str
     is_borrowed: bool
+    status: str = "available"
     borrowed_at: Optional[datetime] = None
     return_due_date: Optional[datetime] = None
 
