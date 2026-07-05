@@ -321,9 +321,11 @@ it costs nothing.
 This is implemented here — a load test found the ceiling, so the ceiling
 was removed:
 
-- **Four lines per topic.** The `kafka-init` service in
-  `docker-compose.yaml` creates every data topic with 4 partitions
-  before Debezium can auto-create them with 1.
+- **Four lines per topic.** The Debezium connectors declare the shape of
+  the topics they produce to (`topic.creation.default.partitions: 4` in
+  `deploy/debezium/register-*.json`) — the component that owns the
+  topics declares what they need, in the same reviewed config file that
+  defines the connector.
 - **Two clerks per worker.** The `event-worker` and `es-sync` services
   run 2 replicas each (`deploy.replicas`). They join the same consumer
   group and Kafka spreads the lines across them automatically — no code

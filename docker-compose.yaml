@@ -233,7 +233,11 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Off, as in production: topic shape is declared by the Debezium
+      # connectors (topic.creation.*) and DLQ topics are created by the
+      # messaging layer on first use. With auto-create on, any consumer
+      # metadata request races the connector and wins with 1 partition.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
       - kafka_data:/var/lib/kafka/data
     depends_on:
@@ -324,34 +328,21 @@ services:
     profiles:
       - cdc
 
-  kafka-init:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: clean_arch_kafka_init
-    # Pre-create the data topics with 4 partitions each. Debezium would
-    # otherwise auto-create them with 1 partition, capping the pipeline at
-    # one serial consumer. Messages are keyed by aggregate id, so ordering
-    # per aggregate survives partitioning. DLQ topics stay auto-created
-    # (low volume).
-    command: ["sh", "-c", "for t in library.public.books library.public.patrons library.public.loans outbox.event.book outbox.event.patron outbox.event.loan; do kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic $$t --partitions 4 --replication-factor 1; done && echo 'Topics ready'"]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    profiles:
-      - cdc
-
   debezium-init:
     image: curlimages/curl:latest
     container_name: clean_arch_debezium_init
     volumes:
       - ./deploy/debezium:/config:ro
+    # Topic partitioning is declared by the connectors themselves
+    # (topic.creation.* in the register-*.json configs): the component
+    # that owns the topics declares their shape. DLQ topics are created
+    # by the messaging layer on first use (KafkaClient._ensure_topic).
     command: ["sh", "-c", "echo 'Registering Debezium PostgreSQL connector...' && curl -X POST -H 'Content-Type: application/json' --data @/config/register-connector.json http://debezium:8083/connectors && echo '' && echo 'Registering Debezium outbox connector...' && curl -X POST -H 'Content-Type: application/json' --data @/config/register-outbox-connector.json http://debezium:8083/connectors && echo '' && echo 'Connectors registered successfully!'"]
     depends_on:
       debezium:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
     profiles:
       - cdc
 

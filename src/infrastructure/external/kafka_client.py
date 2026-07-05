@@ -9,6 +9,8 @@ import time
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Optional
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+from aiokafka.errors import TopicAlreadyExistsError
 
 from src.infrastructure.exceptions import MessageBrokerException
 
@@ -44,6 +46,7 @@ class KafkaClient:
         self._logger = logger
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
+        self._ensured_topics: set[str] = set()
 
     async def connect_producer(self) -> None:
         """Establish producer connection to Kafka."""
@@ -167,9 +170,37 @@ class KafkaClient:
                 else:
                     await self._send_to_dead_letter(record, e)
 
+    async def _ensure_topic(self, topic: str, partitions: int = 1) -> None:
+        """
+        Create an app-owned internal topic (DLQ) if it does not exist.
+
+        The broker runs with auto-create disabled (production posture), so
+        the component that owns a topic creates it: Debezium declares its
+        data topics via topic.creation.*, and the messaging layer creates
+        its dead-letter topics here on first use.
+        """
+        if topic in self._ensured_topics:
+            return
+
+        admin = AIOKafkaAdminClient(bootstrap_servers=self._bootstrap_servers)
+        await admin.start()
+        try:
+            await admin.create_topics(
+                [NewTopic(name=topic, num_partitions=partitions, replication_factor=1)]
+            )
+            if self._logger:
+                self._logger.info(f"Created topic {topic}")
+        except TopicAlreadyExistsError:
+            pass
+        finally:
+            await admin.close()
+
+        self._ensured_topics.add(topic)
+
     async def _send_to_dead_letter(self, record, error: Exception) -> None:
         """Park an unprocessable message on the topic's dead-letter queue."""
         dlq_topic = f"{record.topic}.dlq"
+        await self._ensure_topic(dlq_topic)
         message = {
             "original_topic": record.topic,
             "partition": record.partition,
