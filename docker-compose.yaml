@@ -324,6 +324,21 @@ services:
     profiles:
       - cdc
 
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: clean_arch_kafka_init
+    # Pre-create the data topics with 4 partitions each. Debezium would
+    # otherwise auto-create them with 1 partition, capping the pipeline at
+    # one serial consumer. Messages are keyed by aggregate id, so ordering
+    # per aggregate survives partitioning. DLQ topics stay auto-created
+    # (low volume).
+    command: ["sh", "-c", "for t in library.public.books library.public.patrons library.public.loans outbox.event.book outbox.event.patron outbox.event.loan; do kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic $$t --partitions 4 --replication-factor 1; done && echo 'Topics ready'"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    profiles:
+      - cdc
+
   debezium-init:
     image: curlimages/curl:latest
     container_name: clean_arch_debezium_init
@@ -335,6 +350,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     profiles:
       - cdc
 
@@ -352,7 +369,10 @@ services:
 
   es-sync:
     build: .
-    container_name: clean_arch_es_sync
+    # No container_name: this service scales horizontally. Instances share
+    # the consumer group; Kafka spreads partitions across them.
+    deploy:
+      replicas: 2
     env_file: .env.docker
     command: ["python", "scripts/run_es_sync.py"]
     environment:
@@ -373,7 +393,11 @@ services:
 
   event-worker:
     build: .
-    container_name: clean_arch_event_worker
+    # No container_name: this service scales horizontally. Instances share
+    # the consumer group; Kafka spreads partitions across them, and per-book
+    # ordering survives because events are keyed by aggregate id.
+    deploy:
+      replicas: 2
     env_file: .env.docker
     command: ["python", "scripts/run_event_worker.py"]
     environment:

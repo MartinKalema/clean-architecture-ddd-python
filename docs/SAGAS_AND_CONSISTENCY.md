@@ -316,24 +316,34 @@ We lose only one thing: the order *between* different books ("did A's
 borrow happen before B's?"). Nothing in this system depends on that, so
 it costs nothing.
 
-### Why "not yet" instead of "now"
+### How this system does it
 
-- **The measurement says no.** Under normal traffic the lag is zero. The
-  queue only grew when a load test deliberately flooded it — and even
-  then the real cause was a broken handler, not a slow clerk.
-- **It is not free.** Partition count is chosen when a topic is created,
-  extra workers are extra containers to run, and Kafka reassigns lines
-  when workers join or crash ("rebalancing") — one more behavior to
-  understand and monitor.
-- **We will know exactly when.** The trigger is already built in:
-  **consumer lag that grows during normal traffic**, or lag that
-  regularly approaches the reservation TTL. The worker logs lag every
-  minute precisely so this decision is a measurement, not a guess.
+This is implemented here — a load test found the ceiling, so the ceiling
+was removed:
 
-The door is already built (events carry the right keys), the doorknob is
-known (partition count + worker count), and the sign that says it is
-time to open it is on the wall (sustained lag). Until then, one careful
-clerk is the simplest system that does the job.
+- **Four lines per topic.** The `kafka-init` service in
+  `docker-compose.yaml` creates every data topic with 4 partitions
+  before Debezium can auto-create them with 1.
+- **Two clerks per worker.** The `event-worker` and `es-sync` services
+  run 2 replicas each (`deploy.replicas`). They join the same consumer
+  group and Kafka spreads the lines across them automatically — no code
+  changes were needed, because the consumer was already group-based.
+- **Ordering survives.** Debezium keys every message by the aggregate's
+  ID, so all events for one book land in one line, always.
+
+### Tuning it
+
+- **Partitions are the ceiling on clerks**: with 4 partitions, at most 4
+  workers per topic can do useful work. Choose partition count above the
+  worker count you expect to ever need (partitions are cheap; changing
+  them later on a busy topic momentarily blurs key ordering — do it when
+  lag is zero).
+- **Workers are the dial you actually turn**: scale replicas up or down
+  freely; Kafka rebalances the lines within seconds.
+- **Consumer lag is the meter**: the worker logs it every minute. Lag
+  that grows during normal traffic means add workers; lag near the
+  reservation TTL (section 5) means add them urgently, because a slow
+  queue starts making the reaper cancel healthy reservations.
 
 ---
 
