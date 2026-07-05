@@ -267,6 +267,7 @@ pytest --cov=src --cov-report=html
 - [Event Storming](docs/EVENT_STORMING.md) - Domain event flows
 - [Ubiquitous Language](docs/UBIQUITOUS_LANGUAGE.md) - Domain terminology
 - [Sagas & Consistency](docs/SAGAS_AND_CONSISTENCY.md) - Sagas, compensation, semantic locks, and apologies in simple English
+- [Control Planes](docs/CONTROL_PLANES.md) - Who creates the topics: from auto-create to self-service platforms, in simple English
 
 ## Code Conventions
 
