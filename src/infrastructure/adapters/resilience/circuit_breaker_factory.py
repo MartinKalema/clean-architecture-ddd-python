@@ -45,6 +45,7 @@ class CircuitBreakerFactory:
         minimum_calls: int = 10,
         half_open_max_calls: int = 1,
         call_timeout: float | None = None,
+        excluded_exceptions: tuple = (),
     ) -> CircuitBreaker:
         """
         Create and register a circuit breaker.
@@ -61,6 +62,9 @@ class CircuitBreakerFactory:
             minimum_calls: Outcomes required before the rate is evaluated
             half_open_max_calls: Concurrent probes admitted in half-open
             call_timeout: Seconds before an in-flight call counts as failed
+            excluded_exceptions: Exception types that do not count as
+                                 failures (request-level rejections that
+                                 say nothing about service health)
 
         Returns:
             Configured and registered CircuitBreaker instance
@@ -75,6 +79,7 @@ class CircuitBreakerFactory:
             minimum_calls=minimum_calls,
             half_open_max_calls=half_open_max_calls,
             call_timeout=call_timeout,
+            excluded_exceptions=excluded_exceptions,
             logger=logger,
         )
 

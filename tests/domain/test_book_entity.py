@@ -93,6 +93,28 @@ def test_release_returns_reservation_to_available():
     assert events[0].reason == "loan creation failed"
 
 
+def test_mark_borrowed_claims_available_book():
+    book = _book()
+    borrowed_at = datetime(2026, 7, 4, 12, 0)
+    due = datetime(2026, 7, 18, 12, 0)
+
+    book.mark_borrowed("borrower@example.com", borrowed_at, due)
+
+    assert book.status == BookStatus.BORROWED
+    assert book.borrowed_at == borrowed_at
+    assert book.return_due_date == due
+    events = book.get_domain_events()
+    assert isinstance(events[0], CatalogBookBorrowed)
+
+
+def test_mark_borrowed_rejects_non_available_book():
+    book = _book()
+    book.reserve("first@example.com", datetime.now())
+
+    with pytest.raises(BookAlreadyBorrowedException):
+        book.mark_borrowed("second@example.com", datetime.now(), datetime.now())
+
+
 def test_release_requires_reservation():
     book = _book()
     book.reserve("borrower@example.com", datetime.now())

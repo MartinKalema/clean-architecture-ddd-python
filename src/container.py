@@ -44,6 +44,7 @@ from src.application.query_handlers.list_patron_loans import \
 from src.application.query_handlers.list_patrons import ListPatronsHandler
 from src.domain.catalog import CatalogBookReserved
 from src.domain.lending import LoanCreated
+from src.domain.shared_kernel import EmailDeliveryException
 from src.infrastructure.adapters.cache import CacheAdapter
 from src.infrastructure.adapters.catalog import (BookQueryRepository,
                                                  CatalogUnitOfWork)
@@ -179,6 +180,9 @@ class Container(containers.DeclarativeContainer):
         minimum_calls=configurations.circuit_breakers.sendgrid.minimum_calls,
         half_open_max_calls=configurations.circuit_breakers.sendgrid.half_open_max_calls,
         call_timeout=configurations.circuit_breakers.sendgrid.call_timeout,
+        # 4xx rejections mean SendGrid is up and answering: they are
+        # permanent request failures, not service-health signals
+        excluded_exceptions=(EmailDeliveryException,),
         logger=logger,
     )
 

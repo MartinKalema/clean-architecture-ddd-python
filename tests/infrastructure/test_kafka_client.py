@@ -35,11 +35,14 @@ def _record(value=None):
 
 
 def _client(max_retries=2) -> KafkaClient:
-    return KafkaClient(
+    client = KafkaClient(
         consumer_max_retries=max_retries,
         retry_backoff_seconds=0.001,
         logger=MagicMock(),
     )
+    # Topic creation talks to a real broker; stub it for unit tests
+    client._ensure_topic = AsyncMock()
+    return client
 
 
 async def _drain(client, handler):
@@ -91,6 +94,28 @@ async def test_poison_message_goes_to_dlq_then_commits():
     assert dlq_message["offset"] == 42
     assert "poison" in dlq_message["error"]
     client._consumer.commit.assert_awaited_once()  # parked, then committed
+
+
+@pytest.mark.asyncio
+async def test_dlq_topic_is_created_before_first_use():
+    """The broker runs without auto-create; the DLQ owner creates its topic."""
+    client = _client(max_retries=0)
+    client._consumer = FakeConsumer([_record()])
+    client.send = AsyncMock(return_value=True)
+
+    handler = AsyncMock(side_effect=RuntimeError("poison"))
+    await _drain(client, handler)
+
+    client._ensure_topic.assert_awaited_once_with("library.public.books.dlq")
+
+
+@pytest.mark.asyncio
+async def test_ensure_topic_is_cached_after_success():
+    client = KafkaClient(logger=MagicMock())
+    client._ensured_topics.add("already.done.dlq")
+
+    # Cached topics never touch the admin client (would raise on connect)
+    await client._ensure_topic("already.done.dlq")
 
 
 @pytest.mark.asyncio

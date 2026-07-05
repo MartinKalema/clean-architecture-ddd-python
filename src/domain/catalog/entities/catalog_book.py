@@ -92,6 +92,32 @@ class Book(AggregateRoot):
             borrower_email=borrower_email
         ))
 
+    def mark_borrowed(
+        self, borrower_email: str, borrowed_at: datetime, return_due_date: datetime
+    ):
+        """
+        Claim an AVAILABLE book directly for an existing loan.
+
+        Used when a loan arrives without a prior reservation: the direct
+        loan API path, or a reservation the reaper released before the
+        loan event arrived. Brings the catalog back in line with the loan
+        instead of stranding a loan for a book marked available.
+        """
+        if self.status != BookStatus.AVAILABLE:
+            raise BookAlreadyBorrowedException(self.id.value)
+
+        self.status = BookStatus.BORROWED
+        self.borrowed_at = borrowed_at
+        self.return_due_date = return_due_date
+
+        self.add_event(CatalogBookBorrowed(
+            book_id=self.id.value,
+            title=self.title.value,
+            borrowed_at=borrowed_at,
+            return_due_date=return_due_date,
+            borrower_email=borrower_email
+        ))
+
     def release(self, reason: str):
         """Release the reservation without a borrow (compensation/expiry)."""
         if self.status != BookStatus.RESERVED:

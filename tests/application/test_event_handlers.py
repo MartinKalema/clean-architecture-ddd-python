@@ -12,9 +12,10 @@ from src.application.event_handlers import (
     CreateLoanOnBookReservedHandler,
     SendLoanConfirmationEmailHandler,
 )
-from src.domain.catalog import BookNotReservedException, CatalogBookReserved
+from src.domain.catalog import CatalogBookReserved
 from src.domain.lending import LoanCreated
 from src.domain.lending.exceptions import BookNotAvailableException
+from src.domain.shared_kernel import EmailDeliveryException
 
 
 def _book_reserved() -> CatalogBookReserved:
@@ -135,7 +136,7 @@ class TestCreateLoanOnBookReserved:
 
 class TestConfirmBorrowOnLoanCreated:
     @pytest.mark.asyncio
-    async def test_confirms_the_reservation(self):
+    async def test_confirms_with_the_loan_timestamps(self):
         confirm = AsyncMock()
         handler = ConfirmBorrowOnLoanCreatedHandler(confirm, logger=MagicMock())
 
@@ -144,27 +145,50 @@ class TestConfirmBorrowOnLoanCreated:
         command = confirm.handle.await_args.args[0]
         assert command.book_id == "book-1"
         assert command.borrower_email == "patron@example.com"
+        assert command.borrowed_at == datetime(2026, 7, 4, 12, 0)
+        assert command.return_due_date == datetime(2026, 7, 18, 12, 0)
 
     @pytest.mark.asyncio
-    async def test_expired_reservation_is_escalated_not_raised(self):
+    async def test_unexpected_failure_propagates_for_retry(self):
         confirm = AsyncMock()
-        confirm.handle.side_effect = BookNotReservedException("book-1", "available")
+        confirm.handle.side_effect = RuntimeError("db down")
         handler = ConfirmBorrowOnLoanCreatedHandler(confirm, logger=MagicMock())
 
-        await handler.handle(_loan_created())  # must not raise
+        with pytest.raises(RuntimeError):
+            await handler.handle(_loan_created())
+
+
+class TestSendLoanConfirmationEmail:
+    @pytest.mark.asyncio
+    async def test_loan_created_sends_confirmation_email(self):
+        email_service = AsyncMock()
+        handler = SendLoanConfirmationEmailHandler(email_service, logger=MagicMock())
+
+        await handler.handle(_loan_created())
+
+        email_service.send_email.assert_awaited_once()
+        kwargs = email_service.send_email.await_args.kwargs
+        assert kwargs["to_email"] == "patron@example.com"
+        assert "Domain-Driven Design" in kwargs["subject"]
+        assert "2026-07-18" in kwargs["content"]
+
+    @pytest.mark.asyncio
+    async def test_permanent_rejection_is_escalated_not_retried(self):
+        email_service = AsyncMock()
+        email_service.send_email.side_effect = EmailDeliveryException("401 Unauthorized")
+        handler = SendLoanConfirmationEmailHandler(email_service, logger=MagicMock())
+
+        # Must not raise: retrying a permanent rejection would head-of-line
+        # block the pipeline without ever succeeding
+        await handler.handle(_loan_created())
 
         handler.logger.error.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_transient_failure_propagates_for_retry(self):
+        email_service = AsyncMock()
+        email_service.send_email.side_effect = TimeoutError("slow SendGrid")
+        handler = SendLoanConfirmationEmailHandler(email_service, logger=MagicMock())
 
-@pytest.mark.asyncio
-async def test_loan_created_sends_confirmation_email():
-    email_service = AsyncMock()
-    handler = SendLoanConfirmationEmailHandler(email_service, logger=MagicMock())
-
-    await handler.handle(_loan_created())
-
-    email_service.send_email.assert_awaited_once()
-    kwargs = email_service.send_email.await_args.kwargs
-    assert kwargs["to_email"] == "patron@example.com"
-    assert "Domain-Driven Design" in kwargs["subject"]
-    assert "2026-07-18" in kwargs["content"]
+        with pytest.raises(TimeoutError):
+            await handler.handle(_loan_created())

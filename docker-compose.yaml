@@ -233,7 +233,11 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Off, as in production: topic shape is declared by the Debezium
+      # connectors (topic.creation.*) and DLQ topics are created by the
+      # messaging layer on first use. With auto-create on, any consumer
+      # metadata request races the connector and wins with 1 partition.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
       - kafka_data:/var/lib/kafka/data
     depends_on:
@@ -329,6 +333,10 @@ services:
     container_name: clean_arch_debezium_init
     volumes:
       - ./deploy/debezium:/config:ro
+    # Topic partitioning is declared by the connectors themselves
+    # (topic.creation.* in the register-*.json configs): the component
+    # that owns the topics declares their shape. DLQ topics are created
+    # by the messaging layer on first use (KafkaClient._ensure_topic).
     command: ["sh", "-c", "echo 'Registering Debezium PostgreSQL connector...' && curl -X POST -H 'Content-Type: application/json' --data @/config/register-connector.json http://debezium:8083/connectors && echo '' && echo 'Registering Debezium outbox connector...' && curl -X POST -H 'Content-Type: application/json' --data @/config/register-outbox-connector.json http://debezium:8083/connectors && echo '' && echo 'Connectors registered successfully!'"]
     depends_on:
       debezium:
@@ -352,7 +360,10 @@ services:
 
   es-sync:
     build: .
-    container_name: clean_arch_es_sync
+    # No container_name: this service scales horizontally. Instances share
+    # the consumer group; Kafka spreads partitions across them.
+    deploy:
+      replicas: 2
     env_file: .env.docker
     command: ["python", "scripts/run_es_sync.py"]
     environment:
@@ -373,7 +384,11 @@ services:
 
   event-worker:
     build: .
-    container_name: clean_arch_event_worker
+    # No container_name: this service scales horizontally. Instances share
+    # the consumer group; Kafka spreads partitions across them, and per-book
+    # ordering survives because events are keyed by aggregate id.
+    deploy:
+      replicas: 2
     env_file: .env.docker
     command: ["python", "scripts/run_event_worker.py"]
     environment:

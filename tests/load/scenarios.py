@@ -97,6 +97,25 @@ class BorrowerUser(BaseLibraryUser):
             self.get_book(random.choice(self._my_books))
 
     @task(3)
+    @tag("write", "saga")
+    def borrow_via_saga(self):
+        """
+        Borrow through the saga endpoint: reserve -> loan -> confirm.
+
+        Creates a fresh book so the reservation is uncontended; the loan
+        and confirmation happen asynchronously in the event worker.
+        """
+        if not self._patron:
+            return
+
+        book_id = self.create_book(
+            title=f"SagaBook_{uuid.uuid4().hex[:6]}",
+            author="Saga Author"
+        )
+        if book_id:
+            self.borrow_book(book_id, self._patron["email"])
+
+    @task(3)
     @tag("write", "loan")
     def create_new_loan(self):
         """Create a loan using the Loan API."""
