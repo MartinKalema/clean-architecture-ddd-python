@@ -33,9 +33,7 @@ from src.domain.lending.exceptions import BookNotAvailableException
 
 if TYPE_CHECKING:
     from src.domain.catalog import CatalogBookReserved
-    from src.domain.patron.interfaces.patron_query_repository import (
-        IPatronQueryRepository,
-    )
+    from src.application.query_handlers.interfaces import IPatronQueryRepository
     from src.domain.shared_kernel import ILogger
 
 
@@ -61,8 +59,8 @@ class CreateLoanOnBookReservedHandler:
                 event, f"no patron registered with email {event.borrower_email}"
             )
             return
-        if patron.get("is_suspended"):
-            await self._compensate(event, f"patron {patron['id']} is suspended")
+        if patron.is_suspended:
+            await self._compensate(event, f"patron {patron.id} is suspended")
             return
 
         # The catalog decided the due date; lending honors it instead of
@@ -70,7 +68,7 @@ class CreateLoanOnBookReservedHandler:
         loan_duration_days = max(1, (event.return_due_date - event.reserved_at).days)
 
         command = CreateLoanCommand(
-            patron_id=patron["id"],
+            patron_id=patron.id,
             patron_email=event.borrower_email,
             catalog_book_id=event.book_id,
             book_title=event.title,

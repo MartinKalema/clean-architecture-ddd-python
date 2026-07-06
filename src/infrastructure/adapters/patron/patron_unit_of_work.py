@@ -60,6 +60,7 @@ class PatronUnitOfWork:
         state change and its events commit (or roll back) atomically.
         Debezium picks the rows up from the WAL and publishes them to Kafka.
         """
+        assert self._session is not None
         for aggregate in self.identity_map.values():
             for event in aggregate.get_domain_events():
                 self._session.add(

@@ -39,7 +39,7 @@ from .exceptions import (
     LoanNotActiveException,
     LoanNotOverdueException,
 )
-from .interfaces import ILoanCommandRepository, ILoanQueryRepository, ILoanUnitOfWork
+from .interfaces import ILoanCommandRepository, ILoanUnitOfWork
 from .value_objects.lending_vo import DueDate, LoanId, LoanStatus
 
 __all__ = [
@@ -53,7 +53,6 @@ __all__ = [
     "LoanExtended",
     "BookOverdue",
     "ILoanCommandRepository",
-    "ILoanQueryRepository",
     "ILoanUnitOfWork",
     "InvalidLoanIdException",
     "LoanAlreadyReturnedException",

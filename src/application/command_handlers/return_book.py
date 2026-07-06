@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from src.domain.catalog import BookNotFoundException
 
 if TYPE_CHECKING:
-    from src.domain.catalog import UnitOfWork
+    from src.domain.catalog import ICatalogUnitOfWork
     from src.domain.shared_kernel import ILogger
 
 
@@ -36,7 +36,7 @@ class ReturnBookHandler:
     Emits BookReturned domain event for read model sync.
     """
 
-    def __init__(self, uow: UnitOfWork, logger: ILogger):
+    def __init__(self, uow: ICatalogUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

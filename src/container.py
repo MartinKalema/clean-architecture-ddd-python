@@ -59,7 +59,9 @@ from src.infrastructure.adapters.lending import (LoanQueryRepository,
 from src.infrastructure.adapters.logger import LoggerFactory
 from src.infrastructure.adapters.patron import (PatronQueryRepository,
                                                 PatronUnitOfWork)
-from src.infrastructure.adapters.resilience import CircuitBreakerFactory
+from src.infrastructure.adapters.resilience import (CircuitBreakerFactory,
+                                                    circuit_breaker_registry as
+                                                    breaker_registry)
 from src.infrastructure.external.elasticsearch_client import \
     ElasticsearchClient
 from src.infrastructure.external.etcd_client import EtcdClient
@@ -185,6 +187,8 @@ class Container(containers.DeclarativeContainer):
         excluded_exceptions=(EmailDeliveryException,),
         logger=logger,
     )
+
+    circuit_breaker_registry = providers.Object(breaker_registry)
 
     elasticsearch_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,

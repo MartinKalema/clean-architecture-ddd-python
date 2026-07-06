@@ -7,7 +7,6 @@ from typing import List, Optional
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
 
 from src.application.command_handlers.create_loan import (
     CreateLoanCommand,
@@ -109,8 +108,6 @@ async def create_loan(
         )
     except BookNotAvailableException as e:
         raise HTTPException(status_code=409, detail=str(e))
-    except IntegrityError:
-        raise HTTPException(status_code=409, detail=f"Book {loan.catalog_book_id} is no longer available")
     except LendingException as e:
         raise HTTPException(status_code=400, detail=str(e))
 

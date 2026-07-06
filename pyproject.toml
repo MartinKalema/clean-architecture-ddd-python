@@ -41,3 +41,17 @@ asyncio_default_fixture_loop_scope = "session"
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true
+exclude = ["tests/"]
+
+# SQLAlchemy's legacy Column() declarative style types instance attributes
+# as Column[...] rather than their values; silence value-vs-column noise in
+# the persistence adapters without losing import/name/annotation checking
+[[tool.mypy.overrides]]
+module = "src.infrastructure.adapters.*"
+disable_error_code = ["arg-type", "assignment", "return-value", "index", "attr-defined"]

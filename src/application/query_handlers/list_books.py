@@ -10,27 +10,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
+from .read_models import BookReadModel
+
 if TYPE_CHECKING:
-    from src.domain.catalog import BookQueryRepository
-    from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.cache import CacheAdapter
-
-
-@dataclass(frozen=True)
-class BookReadModel:
-    """
-    Read-optimized book representation.
-
-    This is a denormalized view optimized for display,
-    separate from the write model (domain aggregate).
-    """
-    id: str
-    title: str
-    author: str
-    is_borrowed: bool
-    status: str = "available"
-    borrowed_at: Optional[datetime] = None
-    return_due_date: Optional[datetime] = None
+    from src.application.query_handlers.interfaces import IBookQueryRepository
+    from src.domain.shared_kernel import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -63,8 +47,8 @@ class ListBooksHandler:
 
     def __init__(
         self,
-        query_repository: BookQueryRepository,
-        cache: CacheAdapter,
+        query_repository: IBookQueryRepository,
+        cache: ICache,
         logger: ILogger,
     ):
         self.query_repository = query_repository

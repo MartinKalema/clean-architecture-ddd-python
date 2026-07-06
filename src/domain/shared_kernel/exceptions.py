@@ -34,6 +34,6 @@ class EmailDeliveryException(Exception):
     from transient failures (timeouts, open circuit breaker), which
     propagate as other exception types and are worth retrying.
     """
-    def __init__(self, message: str, original_exception: Exception = None):
+    def __init__(self, message: str, original_exception: "Exception | None" = None):
         super().__init__(message)
         self.original_exception = original_exception

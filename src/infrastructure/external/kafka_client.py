@@ -110,6 +110,7 @@ class KafkaClient:
         """Send a message to a Kafka topic."""
         if not self._producer:
             await self.connect_producer()
+        assert self._producer is not None
 
         try:
             await self._producer.send_and_wait(topic, value=value, key=key)

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    name: mypy (dependency rule + type layer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e . mypy
+      - name: mypy
+        run: mypy src
+
+  test:
+    name: pytest (domain, application, infrastructure, integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e . pytest
+      - name: pytest
+        # e2e requires the full compose stack (etcd, Kafka, ES); everything
+        # else runs infrastructure-free since app composition moved into
+        # the create_app factory
+        run: pytest tests/domain tests/application tests/infrastructure tests/integration -q

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from src.domain.catalog import BookNotFoundException, BookStatus
 
 if TYPE_CHECKING:
-    from src.domain.catalog import UnitOfWork
+    from src.domain.catalog import ICatalogUnitOfWork
     from src.domain.shared_kernel import ILogger
 
 
@@ -26,7 +26,7 @@ class ReleaseBookReservationCommand:
 class ReleaseBookReservationHandler:
     """Handles the ReleaseBookReservationCommand."""
 
-    def __init__(self, uow: UnitOfWork, logger: ILogger):
+    def __init__(self, uow: ICatalogUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

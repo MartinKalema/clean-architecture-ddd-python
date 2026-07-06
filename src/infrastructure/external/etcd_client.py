@@ -55,7 +55,7 @@ class EtcdClient:
         """Ensure we have an active connection."""
         if self._client is None:
             self.connect()
-        return self._client  # type: ignore
+        return self._client
 
     def get(self, key: str) -> Optional[bytes]:
         """Get a value by key."""

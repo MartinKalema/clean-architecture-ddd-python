@@ -8,9 +8,16 @@ def _patron_repository(patron=...):
     """Stub patron read model for the borrow pre-flight check."""
     repo = AsyncMock()
     repo.find_by_email.return_value = (
-        {"id": "patron-uc-1", "is_suspended": False} if patron is ... else patron
+        PatronReadModel(
+            id="patron-uc-1", name="UC Patron", first_name="UC", last_name="Patron",
+            email="uc@example.com", membership_tier="regular",
+            is_suspended=False, suspended_reason=None,
+            registered_at=datetime(2026, 1, 1),
+        ) if patron is ... else patron
     )
     return repo
+
+from datetime import datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -23,6 +30,7 @@ from src.application.command_handlers import (
 )
 from src.domain.catalog import (BookAlreadyBorrowedException,
                                 BorrowerNotEligibleException)
+from src.application.query_handlers import PatronReadModel
 from src.infrastructure.adapters.catalog import CatalogUnitOfWork
 
 

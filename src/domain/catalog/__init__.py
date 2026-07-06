@@ -24,7 +24,7 @@ from .exceptions import (
     CatalogException,
     ConcurrentModificationException,
 )
-from .interfaces import IBookCommandRepository, IBookQueryRepository, ICatalogUnitOfWork
+from .interfaces import IBookCommandRepository, ICatalogUnitOfWork
 from .value_objects import ISBN, Author, BookId, BookStatus, Title
 
 __all__ = [
@@ -41,7 +41,6 @@ __all__ = [
     "CatalogBookReserved",
     "CatalogBookReturned",
     "IBookCommandRepository",
-    "IBookQueryRepository",
     "ICatalogUnitOfWork",
     "DomainException",
     "ValidationException",
