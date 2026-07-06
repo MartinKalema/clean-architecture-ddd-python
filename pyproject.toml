@@ -37,6 +37,14 @@ addopts = "-v"
 testpaths = ["tests"]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "session"
+filterwarnings = [
+    # etcd3 is unmaintained and ships protobuf code generated for the
+    # legacy descriptor API (the reason for the protobuf<4 pin). Its
+    # warnings are not actionable from this codebase; silencing them
+    # keeps deprecation warnings meaningful for our own code.
+    "ignore::DeprecationWarning:etcd3.*",
+    "ignore::DeprecationWarning:google.protobuf.*",
+]
 
 [build-system]
 requires = ["setuptools", "wheel"]

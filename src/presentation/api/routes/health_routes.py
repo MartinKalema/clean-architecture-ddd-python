@@ -6,7 +6,7 @@ Provides:
 - /health/ready - Readiness check with dependency verification
 - /health/circuits - Circuit breaker status for all external services
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from dependency_injector.wiring import Provide, inject
@@ -43,7 +43,7 @@ async def liveness():
     """
     return HealthStatus(
         status="healthy",
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=datetime.now(timezone.utc).isoformat()
     )
 
 
@@ -57,7 +57,7 @@ async def live():
     """
     return HealthStatus(
         status="healthy",
-        timestamp=datetime.utcnow().isoformat()
+        timestamp=datetime.now(timezone.utc).isoformat()
     )
 
 
@@ -101,7 +101,7 @@ async def readiness(
 
     response = HealthStatus(
         status=status,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         checks=checks
     )
 
@@ -134,7 +134,7 @@ async def circuit_breakers(
     unhealthy = registry.get_unhealthy()
 
     return CircuitBreakerStatus(
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         circuits=all_status,
         unhealthy=unhealthy
     )
