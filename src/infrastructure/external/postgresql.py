@@ -63,6 +63,13 @@ class PostgreSQL:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+    async def ping(self) -> None:
+        """Verify connectivity; raises if the database is unreachable."""
+        from sqlalchemy import text
+
+        async with self.session_factory() as session:
+            await session.execute(text("SELECT 1"))
+
     async def dispose(self):
         """Dispose of the connection pool."""
         await self.engine.dispose()

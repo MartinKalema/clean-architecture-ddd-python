@@ -12,11 +12,8 @@ from typing import Any, Dict, Optional
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import text
 
 from src.container import Container
-from src.infrastructure.adapters.resilience import circuit_breaker_registry
-from src.infrastructure.external.postgresql import PostgreSQL
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
@@ -67,7 +64,8 @@ async def live():
 @router.get("/ready", response_model=HealthStatus)
 @inject
 async def readiness(
-    postgresql: PostgreSQL = Depends(Provide[Container.postgresql])
+    postgresql=Depends(Provide[Container.postgresql]),
+    registry=Depends(Provide[Container.circuit_breaker_registry]),
 ):
     """
     Readiness check with dependency verification.
@@ -83,14 +81,13 @@ async def readiness(
     all_healthy = True
 
     try:
-        async with postgresql.session_factory() as session:
-            await session.execute(text("SELECT 1"))
+        await postgresql.ping()
         checks["postgresql"] = {"status": "healthy"}
     except Exception as e:
         checks["postgresql"] = {"status": "unhealthy", "error": str(e)}
         all_healthy = False
 
-    unhealthy_circuits = circuit_breaker_registry.get_unhealthy()
+    unhealthy_circuits = registry.get_unhealthy()
     if unhealthy_circuits:
         checks["circuit_breakers"] = {
             "status": "degraded",
@@ -115,7 +112,10 @@ async def readiness(
 
 
 @router.get("/circuits", response_model=CircuitBreakerStatus)
-async def circuit_breakers():
+@inject
+async def circuit_breakers(
+    registry=Depends(Provide[Container.circuit_breaker_registry]),
+):
     """
     Get detailed status of all circuit breakers.
 
@@ -130,8 +130,8 @@ async def circuit_breakers():
 
     Returns 200 always (this is informational only).
     """
-    all_status = circuit_breaker_registry.get_all_status()
-    unhealthy = circuit_breaker_registry.get_unhealthy()
+    all_status = registry.get_all_status()
+    unhealthy = registry.get_unhealthy()
 
     return CircuitBreakerStatus(
         timestamp=datetime.utcnow().isoformat(),

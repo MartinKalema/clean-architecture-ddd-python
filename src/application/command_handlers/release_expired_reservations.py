@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.domain.catalog import UnitOfWork
+    from src.domain.catalog import ICatalogUnitOfWork
     from src.domain.shared_kernel import ILogger
 
 
@@ -36,7 +36,7 @@ class ReleaseExpiredReservationsResult:
 class ReleaseExpiredReservationsHandler:
     """Handles the ReleaseExpiredReservationsCommand."""
 
-    def __init__(self, uow: UnitOfWork, logger: ILogger):
+    def __init__(self, uow: ICatalogUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

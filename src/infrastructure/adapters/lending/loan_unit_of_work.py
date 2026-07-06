@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, Optional
 
+from sqlalchemy.exc import IntegrityError
+
+from src.domain.lending.exceptions import BookNotAvailableException
 from src.infrastructure.adapters.lending.loan_command_repository import (
     LoanCommandRepository,
 )
@@ -50,7 +53,24 @@ class LoanUnitOfWork:
     async def commit(self):
         if self._session:
             self._stage_domain_events()
-            await self._session.commit()
+            try:
+                await self._session.commit()
+            except IntegrityError as e:
+                # Translate the framework exception at the boundary: the
+                # partial unique index (one active loan per book) losing a
+                # race is a domain fact, and callers must not need
+                # SQLAlchemy to understand it
+                await self.rollback()
+                if "ix_loans_active_book_unique" in str(e.orig):
+                    book_id = next(
+                        (
+                            loan.catalog_book_id
+                            for loan in self.identity_map.values()
+                        ),
+                        "unknown",
+                    )
+                    raise BookNotAvailableException(book_id) from e
+                raise
 
     def _stage_domain_events(self) -> None:
         """
@@ -60,6 +80,7 @@ class LoanUnitOfWork:
         state change and its events commit (or roll back) atomically.
         Debezium picks the rows up from the WAL and publishes them to Kafka.
         """
+        assert self._session is not None
         for aggregate in self.identity_map.values():
             for event in aggregate.get_domain_events():
                 self._session.add(

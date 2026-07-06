@@ -11,7 +11,7 @@ from src.domain.patron.value_objects import MembershipTier
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.patron import PatronUnitOfWork
+    from src.domain.patron import IPatronUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class UpgradePatronTierResult:
 class UpgradePatronTierHandler:
     """Handles patron tier upgrades."""
 
-    def __init__(self, uow: PatronUnitOfWork, logger: ILogger):
+    def __init__(self, uow: IPatronUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

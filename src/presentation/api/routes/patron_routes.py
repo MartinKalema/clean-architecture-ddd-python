@@ -198,6 +198,8 @@ async def suspend_patron(
         await handler.handle(command)
 
         patron = await get_handler.handle(GetPatronQuery(patron_id=patron_id))
+        if patron is None:
+            raise HTTPException(status_code=404, detail=f"Patron {patron_id} not found")
         return PatronResponse(
             id=patron.id,
             name=patron.name,
@@ -228,6 +230,8 @@ async def reinstate_patron(
         await handler.handle(command)
 
         patron = await get_handler.handle(GetPatronQuery(patron_id=patron_id))
+        if patron is None:
+            raise HTTPException(status_code=404, detail=f"Patron {patron_id} not found")
         return PatronResponse(
             id=patron.id,
             name=patron.name,
@@ -259,6 +263,8 @@ async def upgrade_patron_tier(
         await handler.handle(command)
 
         patron = await get_handler.handle(GetPatronQuery(patron_id=patron_id))
+        if patron is None:
+            raise HTTPException(status_code=404, detail=f"Patron {patron_id} not found")
         return PatronResponse(
             id=patron.id,
             name=patron.name,

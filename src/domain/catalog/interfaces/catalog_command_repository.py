@@ -1,6 +1,7 @@
 """
 Command Repository interface for Book aggregate.
 """
+from datetime import datetime
 from typing import List, Optional, Protocol
 
 from src.domain.catalog.entities import Book
@@ -15,6 +16,10 @@ class IBookCommandRepository(Protocol):
 
     async def get_by_id(self, book_id: str) -> Optional[Book]:
         """Find a book by its ID."""
+        ...
+
+    async def find_expired_reservations(self, cutoff: datetime) -> List[Book]:
+        """Find books whose reservation started before the cutoff."""
         ...
 
     async def get_all(self) -> List[Book]:

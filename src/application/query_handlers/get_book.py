@@ -8,12 +8,11 @@ from typing import TYPE_CHECKING
 
 from src.domain.catalog import BookNotFoundException
 
-from .list_books import BookReadModel
+from .read_models import BookReadModel
 
 if TYPE_CHECKING:
-    from src.domain.catalog import BookQueryRepository
-    from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.cache import CacheAdapter
+    from src.application.query_handlers.interfaces import IBookQueryRepository
+    from src.domain.shared_kernel import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -33,8 +32,8 @@ class GetBookHandler:
 
     def __init__(
         self,
-        query_repository: BookQueryRepository,
-        cache: CacheAdapter,
+        query_repository: IBookQueryRepository,
+        cache: ICache,
         logger: ILogger,
     ):
         self.query_repository = query_repository

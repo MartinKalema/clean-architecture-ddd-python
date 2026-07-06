@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.application.command_handlers.create_loan import CreateLoanResult
+from src.application.query_handlers import PatronReadModel
 from src.application.event_handlers import (
     ConfirmBorrowOnLoanCreatedHandler,
     CreateLoanOnBookReservedHandler,
@@ -16,6 +17,15 @@ from src.domain.catalog import CatalogBookReserved
 from src.domain.lending import LoanCreated
 from src.domain.lending.exceptions import BookNotAvailableException
 from src.domain.shared_kernel import EmailDeliveryException
+
+
+def _patron_read_model(patron_id="patron-1", is_suspended=False):
+    return PatronReadModel(
+        id=patron_id, name="Test Patron", first_name="Test", last_name="Patron",
+        email="patron@example.com", membership_tier="regular",
+        is_suspended=is_suspended, suspended_reason=None,
+        registered_at=datetime(2026, 1, 1),
+    )
 
 
 def _book_reserved() -> CatalogBookReserved:
@@ -53,7 +63,7 @@ def _reserved_handler(patron=...):
     release_handler = AsyncMock()
     patron_repository = AsyncMock()
     patron_repository.find_by_email.return_value = (
-        {"id": "patron-1", "is_suspended": False} if patron is ... else patron
+        _patron_read_model() if patron is ... else patron
     )
     handler = CreateLoanOnBookReservedHandler(
         create_loan_handler=create_loan_handler,
@@ -93,7 +103,7 @@ class TestCreateLoanOnBookReserved:
     @pytest.mark.asyncio
     async def test_suspended_patron_compensates_by_releasing_reservation(self):
         handler, create_loan, release = _reserved_handler(
-            patron={"id": "patron-1", "is_suspended": True}
+            patron=_patron_read_model(is_suspended=True)
         )
 
         await handler.handle(_book_reserved())

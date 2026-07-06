@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.application.query_handlers.read_models import PatronReadModel
 from src.infrastructure.adapters.patron.patron_model import PatronModel
 from src.infrastructure.exceptions import (
     CircuitBreakerOpenException,
@@ -52,7 +53,7 @@ class PatronQueryRepository:
         self._circuit_breaker = circuit_breaker
         self._logger = logger
 
-    async def find_by_id(self, patron_id: str) -> Optional[dict]:
+    async def find_by_id(self, patron_id: str) -> Optional[PatronReadModel]:
         """Find a patron by ID (uses PostgreSQL for consistency)."""
         async with self._session_factory() as session:
             result = await session.execute(
@@ -63,7 +64,7 @@ class PatronQueryRepository:
                 return None
             return self._to_read_model_from_db(patron)
 
-    async def find_by_email(self, email: str) -> Optional[dict]:
+    async def find_by_email(self, email: str) -> Optional[PatronReadModel]:
         """Find a patron by email (uses PostgreSQL for consistency)."""
         async with self._session_factory() as session:
             result = await session.execute(
@@ -80,7 +81,7 @@ class PatronQueryRepository:
         membership_tier: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[dict]:
+    ) -> List[PatronReadModel]:
         """Find patrons with optional filters (uses Elasticsearch for search)."""
         query = self._build_es_query(
             only_suspended=only_suspended,
@@ -135,7 +136,7 @@ class PatronQueryRepository:
         membership_tier: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[dict]:
+    ) -> List[PatronReadModel]:
         """PostgreSQL fallback for find_all."""
         stmt = select(PatronModel)
 
@@ -179,30 +180,30 @@ class PatronQueryRepository:
             return {"bool": {"filter": filter_clauses}}
         return {"match_all": {}}
 
-    def _to_read_model_from_db(self, patron: PatronModel) -> dict:
+    def _to_read_model_from_db(self, patron: PatronModel) -> PatronReadModel:
         """Convert database row to read model."""
-        return {
-            "id": patron.id,
-            "first_name": patron.first_name,
-            "last_name": patron.last_name,
-            "name": f"{patron.first_name} {patron.last_name}",
-            "email": patron.email,
-            "membership_tier": patron.membership_tier,
-            "is_suspended": patron.is_suspended,
-            "suspended_reason": patron.suspended_reason,
-            "registered_at": patron.registered_at,
-        }
+        return PatronReadModel(
+            id=patron.id,
+            first_name=patron.first_name,
+            last_name=patron.last_name,
+            name=f"{patron.first_name} {patron.last_name}",
+            email=patron.email,
+            membership_tier=patron.membership_tier,
+            is_suspended=patron.is_suspended,
+            suspended_reason=patron.suspended_reason,
+            registered_at=patron.registered_at,
+        )
 
-    def _to_read_model_from_es(self, hit: dict[str, Any]) -> dict:
+    def _to_read_model_from_es(self, hit: dict[str, Any]) -> PatronReadModel:
         """Convert Elasticsearch hit to read model."""
-        return {
-            "id": hit["id"],
-            "first_name": hit.get("first_name", ""),
-            "last_name": hit.get("last_name", ""),
-            "name": hit.get("full_name", ""),
-            "email": hit.get("email", ""),
-            "membership_tier": hit.get("membership_tier"),
-            "is_suspended": hit.get("is_suspended", False),
-            "suspended_reason": hit.get("suspended_reason"),
-            "registered_at": hit.get("registered_at"),
-        }
+        return PatronReadModel(
+            id=hit["id"],
+            first_name=hit.get("first_name", ""),
+            last_name=hit.get("last_name", ""),
+            name=hit.get("full_name", ""),
+            email=hit.get("email", ""),
+            membership_tier=hit.get("membership_tier"),
+            is_suspended=hit.get("is_suspended", False),
+            suspended_reason=hit.get("suspended_reason"),
+            registered_at=hit.get("registered_at"),
+        )

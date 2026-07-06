@@ -10,7 +10,7 @@ from src.domain.patron.exceptions import PatronNotFoundException
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.patron import PatronUnitOfWork
+    from src.domain.patron import IPatronUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class ReinstatePatronResult:
 class ReinstatePatronHandler:
     """Handles patron reinstatement."""
 
-    def __init__(self, uow: PatronUnitOfWork, logger: ILogger):
+    def __init__(self, uow: IPatronUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

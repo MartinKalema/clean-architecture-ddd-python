@@ -7,7 +7,6 @@ coordination between all teams that use it.
 """
 from .aggregate_root import AggregateRoot
 from .domain_event import DomainEvent
-from .email_template import EmailTemplate
 from .exceptions import (
     DomainException,
     EmailDeliveryException,
@@ -22,7 +21,6 @@ from .interfaces import (
     IEventDispatcher,
     IEventHandler,
     ILogger,
-    ITemplateRenderer,
 )
 from .value_objects import EmailAddress
 
@@ -36,8 +34,6 @@ __all__ = [
     "IEventDispatcher",
     "IEventHandler",
     "ILogger",
-    "ITemplateRenderer",
-    "EmailTemplate",
     "DomainException",
     "EmailDeliveryException",
     "ValidationException",

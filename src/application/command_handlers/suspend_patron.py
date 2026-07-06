@@ -10,7 +10,7 @@ from src.domain.patron.exceptions import PatronNotFoundException
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.patron import PatronUnitOfWork
+    from src.domain.patron import IPatronUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -25,13 +25,13 @@ class SuspendPatronResult:
     """Result of suspending a patron."""
     id: str
     is_suspended: bool
-    reason: str
+    reason: "str | None"
 
 
 class SuspendPatronHandler:
     """Handles patron suspension."""
 
-    def __init__(self, uow: PatronUnitOfWork, logger: ILogger):
+    def __init__(self, uow: IPatronUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 

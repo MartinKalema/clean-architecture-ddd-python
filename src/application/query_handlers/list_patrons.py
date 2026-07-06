@@ -7,24 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
+from .read_models import PatronReadModel
+
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.cache import CacheAdapter
-    from src.infrastructure.adapters.patron import PatronQueryRepository
-
-
-@dataclass(frozen=True)
-class PatronReadModel:
-    """Read model for Patron."""
-    id: str
-    name: str
-    first_name: str
-    last_name: str
-    email: str
-    membership_tier: str
-    is_suspended: bool
-    suspended_reason: Optional[str]
-    registered_at: datetime
+    from src.application.query_handlers.interfaces import IPatronQueryRepository
+    from src.domain.shared_kernel import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -43,8 +30,8 @@ class ListPatronsHandler:
 
     def __init__(
         self,
-        query_repository: PatronQueryRepository,
-        cache: CacheAdapter,
+        query_repository: IPatronQueryRepository,
+        cache: ICache,
         logger: ILogger,
     ):
         self.query_repository = query_repository
@@ -72,5 +59,5 @@ class ListPatronsHandler:
             offset=query.offset,
         )
 
-        await self.cache.set(cache_key, results)
-        return [PatronReadModel(**r) for r in results]
+        await self.cache.set(cache_key, [r.__dict__ for r in results])
+        return results

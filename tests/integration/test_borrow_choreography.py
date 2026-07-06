@@ -32,6 +32,7 @@ from src.application.command_handlers.release_expired_reservations import (
     ReleaseExpiredReservationsCommand,
     ReleaseExpiredReservationsHandler,
 )
+from src.application.query_handlers import PatronReadModel
 from src.application.event_handlers import (
     ConfirmBorrowOnLoanCreatedHandler,
     CreateLoanOnBookReservedHandler,
@@ -42,6 +43,15 @@ from src.infrastructure.adapters.catalog import CatalogUnitOfWork
 from src.infrastructure.adapters.events import deserialize_event
 from src.infrastructure.adapters.lending import LoanUnitOfWork
 from src.infrastructure.adapters.outbox import OutboxMessageModel
+
+
+def _patron_read_model(patron_id):
+    return PatronReadModel(
+        id=patron_id, name="Choreo Patron", first_name="Choreo", last_name="Patron",
+        email="choreo@example.com", membership_tier="regular",
+        is_suspended=False, suspended_reason=None,
+        registered_at=datetime(2026, 1, 1),
+    )
 
 
 async def _outbox_event(session_factory, event_type, aggregate_id):
@@ -67,9 +77,7 @@ async def _reserve_and_capture_event(test_db, title: str, email: str):
     # Pre-flight check passes (the read-model guess says the patron is
     # fine); the lending-side reaction remains the authority
     preflight_patron_repository = AsyncMock()
-    preflight_patron_repository.find_by_email.return_value = {
-        "id": "patron-guess", "is_suspended": False,
-    }
+    preflight_patron_repository.find_by_email.return_value = _patron_read_model("patron-guess")
     reserved = await BorrowBookHandler(
         catalog_uow,
         patron_query_repository=preflight_patron_repository,
@@ -108,7 +116,7 @@ async def test_full_saga_reserve_loan_confirm(test_db):
 
     # Step 2: lending reacts to the reservation
     await _lending_reaction(
-        session_factory, catalog_uow, patron={"id": "patron-choreo-1", "is_suspended": False}
+        session_factory, catalog_uow, patron=_patron_read_model("patron-choreo-1")
     ).handle(event)
 
     loan_uow = LoanUnitOfWork(session_factory)

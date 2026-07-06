@@ -6,7 +6,7 @@ It wraps the RedisClient and provides a clean interface for the application laye
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, TypeVar
 
 if TYPE_CHECKING:
     from src.infrastructure.external.redis_client import RedisClient
@@ -42,7 +42,7 @@ class CacheAdapter:
     async def get_or_set(
         self,
         key: str,
-        factory: Callable[[], T],
+        factory: Callable[[], Awaitable[T]],
         ttl: Optional[int] = None,
     ) -> T:
         """
@@ -86,19 +86,16 @@ class CacheAdapter:
         """Check if caching is enabled."""
         return self._client.is_enabled
 
-    @staticmethod
-    def build_key(*parts: Any) -> str:
+    def build_key(self, *parts: Any) -> str:
         """Build a cache key from parts."""
         return ":".join(str(p) for p in parts)
 
-    @staticmethod
-    def build_list_key(entity_type: str, **filters: Any) -> str:
+    def build_list_key(self, entity_type: str, **filters: Any) -> str:
         """Build a cache key for list queries."""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()))
         return f"{entity_type}:list:{filter_str}"
 
-    @staticmethod
-    def build_count_key(entity_type: str, **filters: Any) -> str:
+    def build_count_key(self, entity_type: str, **filters: Any) -> str:
         """Build a cache key for count queries."""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()))
         return f"{entity_type}:count:{filter_str}"

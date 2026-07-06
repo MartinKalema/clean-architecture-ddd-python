@@ -31,7 +31,7 @@ from .exceptions import (
     PatronAlreadySuspendedException,
     PatronNotSuspendedException,
 )
-from .interfaces import IPatronCommandRepository, IPatronQueryRepository, IPatronUnitOfWork
+from .interfaces import IPatronCommandRepository, IPatronUnitOfWork
 from .value_objects.patron_info import MembershipTier, PatronId, PatronName
 
 __all__ = [
@@ -43,7 +43,6 @@ __all__ = [
     "PatronSuspended",
     "PatronReinstated",
     "IPatronCommandRepository",
-    "IPatronQueryRepository",
     "IPatronUnitOfWork",
     "InvalidPatronIdException",
     "InvalidPatronNameException",

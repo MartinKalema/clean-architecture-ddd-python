@@ -11,7 +11,7 @@ from src.domain.lending.exceptions import LoanNotFoundException
 
 if TYPE_CHECKING:
     from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.lending import LoanUnitOfWork
+    from src.domain.lending import ILoanUnitOfWork
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,7 @@ class ReturnLoanResult:
 class ReturnLoanHandler:
     """Handles loan returns."""
 
-    def __init__(self, uow: LoanUnitOfWork, logger: ILogger):
+    def __init__(self, uow: ILoanUnitOfWork, logger: ILogger):
         self.uow = uow
         self.logger = logger
 
@@ -44,6 +44,7 @@ class ReturnLoanHandler:
             returned_at = datetime.now()
             was_overdue = loan.due_date.is_overdue_as_of(returned_at)
             loan.return_book(returned_at)
+            assert loan.returned_at is not None
 
             await self.uow.loans.update(loan)
             await self.uow.commit()

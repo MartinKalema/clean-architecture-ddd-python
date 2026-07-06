@@ -80,6 +80,8 @@ class Book(AggregateRoot):
         """Confirm the reservation into a final borrow (loan created)."""
         if self.status != BookStatus.RESERVED:
             raise BookNotReservedException(self.id.value, self.status.value)
+        # reserve() always sets these; RESERVED status guarantees them
+        assert self.borrowed_at is not None and self.return_due_date is not None
 
         self.status = BookStatus.BORROWED
         self.reserved_at = None

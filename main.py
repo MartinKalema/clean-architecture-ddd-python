@@ -6,4 +6,4 @@ if __name__ == "__main__":
     # keeps circuit breaker state and /health/circuits coherent — with
     # multiple workers, each process holds its own breaker registry and
     # health checks sample a random one.
-    uvicorn.run("src.presentation.api.main:app", host="0.0.0.0", port=8000, workers=1, backlog=8192, limit_concurrency=10000)
+    uvicorn.run("src.presentation.api.main:create_app", factory=True, host="0.0.0.0", port=8000, workers=1, backlog=8192, limit_concurrency=10000)

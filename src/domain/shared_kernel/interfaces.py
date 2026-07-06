@@ -57,11 +57,6 @@ class IEmailService(Protocol):
         ...
 
 
-class ITemplateRenderer(Protocol):
-    def render(self, template: Any, context: Dict[str, Any]) -> str:
-        ...
-
-
 class IConfigurationProvider(Protocol):
     def get(self, key: str, default: Any = None) -> Any:
         ...
@@ -77,21 +72,30 @@ class IConfigurationProvider(Protocol):
 
 
 class ICache(Protocol):
-    def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Optional[Any]:
         ...
 
-    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         ...
 
-    def delete(self, key: str) -> bool:
+    async def delete(self, key: str) -> bool:
         ...
 
-    def invalidate_entity(self, entity_type: str, entity_id: str) -> None:
+    async def invalidate_entity(self, entity_type: str, entity_id: str) -> None:
         ...
 
-    def invalidate_all(self, entity_type: str) -> None:
+    async def invalidate_all(self, entity_type: str) -> None:
         ...
 
     @property
     def is_enabled(self) -> bool:
+        ...
+
+    def build_key(self, *parts: Any) -> str:
+        ...
+
+    def build_list_key(self, entity_type: str, **filters: Any) -> str:
+        ...
+
+    def build_count_key(self, entity_type: str, **filters: Any) -> str:
         ...

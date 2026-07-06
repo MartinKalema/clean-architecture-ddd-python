@@ -3,7 +3,7 @@ Elasticsearch Client - External service wrapper for Elasticsearch.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, NoReturn, Optional
 
 from elasticsearch import AsyncElasticsearch, NotFoundError
 
@@ -85,9 +85,10 @@ class ElasticsearchClient:
                 # Connection failures must honor the typed-exception contract
                 # too, or they bypass the circuit breaker and PG fallback
                 self._raise("connect", e)
+        assert self._client is not None
         return self._client
 
-    def _raise(self, operation: str, error: Exception) -> None:
+    def _raise(self, operation: str, error: Exception) -> NoReturn:
         if self._logger:
             self._logger.error(f"Elasticsearch {operation} error: {error}")
         raise SearchEngineException(

@@ -10,10 +10,8 @@ from typing import TYPE_CHECKING, Optional
 from src.domain.catalog import BookNotFoundException, BorrowerNotEligibleException
 
 if TYPE_CHECKING:
-    from src.domain.catalog import UnitOfWork
-    from src.domain.patron.interfaces.patron_query_repository import (
-        IPatronQueryRepository,
-    )
+    from src.domain.catalog import ICatalogUnitOfWork
+    from src.application.query_handlers.interfaces import IPatronQueryRepository
     from src.domain.shared_kernel import ILogger
 
 
@@ -46,7 +44,7 @@ class BorrowBookHandler:
 
     def __init__(
         self,
-        uow: UnitOfWork,
+        uow: ICatalogUnitOfWork,
         patron_query_repository: IPatronQueryRepository,
         logger: ILogger,
     ):
@@ -65,7 +63,7 @@ class BorrowBookHandler:
             raise BorrowerNotEligibleException(
                 command.borrower_email, "no patron registered with this email"
             )
-        if patron.get("is_suspended"):
+        if patron.is_suspended:
             raise BorrowerNotEligibleException(
                 command.borrower_email, "patron is suspended"
             )

@@ -7,24 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
+from .read_models import LoanReadModel
+
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
-    from src.infrastructure.adapters.cache import CacheAdapter
-    from src.infrastructure.adapters.lending import LoanQueryRepository
-
-
-@dataclass(frozen=True)
-class LoanReadModel:
-    """Read model for Loan."""
-    id: str
-    patron_id: str
-    patron_email: str
-    catalog_book_id: str
-    book_title: str
-    borrowed_at: datetime
-    due_date: datetime
-    returned_at: Optional[datetime]
-    status: str
+    from src.application.query_handlers.interfaces import ILoanQueryRepository
+    from src.domain.shared_kernel import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -40,8 +27,8 @@ class GetLoanHandler:
 
     def __init__(
         self,
-        query_repository: LoanQueryRepository,
-        cache: CacheAdapter,
+        query_repository: ILoanQueryRepository,
+        cache: ICache,
         logger: ILogger,
     ):
         self.query_repository = query_repository
@@ -60,5 +47,5 @@ class GetLoanHandler:
         if not result:
             return None
 
-        await self.cache.set(cache_key, result)
-        return LoanReadModel(**result)
+        await self.cache.set(cache_key, result.__dict__)
+        return result
