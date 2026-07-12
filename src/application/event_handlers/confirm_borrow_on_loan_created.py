@@ -15,16 +15,14 @@ from typing import TYPE_CHECKING
 
 from src.application.command_handlers.confirm_book_borrow import (
     ConfirmBookBorrowCommand,
-    ConfirmBookBorrowHandler,
 )
 from src.application.command_handlers.cancel_loan import (
     CancelLoanCommand,
-    CancelLoanHandler,
 )
 from src.domain.catalog import StaleReservationException
 
 if TYPE_CHECKING:
-    from src.application.ports import ILogger
+    from src.application.ports import ICommandHandler, ILogger
     from src.domain.lending import LoanCreated
 
 
@@ -35,17 +33,19 @@ class ConfirmBorrowOnLoanCreatedHandler:
 
     def __init__(
         self,
-        confirm_book_borrow_handler: ConfirmBookBorrowHandler,
-        cancel_loan_handler: CancelLoanHandler,
+        confirm_book_borrow_operation: ICommandHandler[
+            ConfirmBookBorrowCommand, bool
+        ],
+        cancel_loan_operation: ICommandHandler[CancelLoanCommand, bool],
         logger: ILogger,
     ):
-        self.confirm_book_borrow_handler = confirm_book_borrow_handler
-        self.cancel_loan_handler = cancel_loan_handler
+        self._confirm_book_borrow = confirm_book_borrow_operation
+        self._cancel_loan = cancel_loan_operation
         self.logger = logger
 
     async def handle(self, event: LoanCreated) -> None:
         try:
-            await self.confirm_book_borrow_handler.handle(
+            await self._confirm_book_borrow.handle(
                 ConfirmBookBorrowCommand(
                     book_id=event.book_id,
                     reservation_id=event.reservation_id,
@@ -64,7 +64,7 @@ class ConfirmBorrowOnLoanCreatedHandler:
                 f"Loan {event.loan_id} targets stale reservation "
                 f"{event.reservation_id}; cancelling the tentative loan"
             )
-            await self.cancel_loan_handler.handle(
+            await self._cancel_loan.handle(
                 CancelLoanCommand(
                     reservation_id=event.reservation_id,
                     reservation_generation=event.reservation_generation,

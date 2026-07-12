@@ -22,6 +22,8 @@ async def test_lifespan_closes_every_process_owned_client():
     projection_freshness.close = AsyncMock()
     etcd = MagicMock()
     logger = MagicMock()
+    configurations = MagicMock()
+    configurations.elasticsearch.enabled.return_value = True
     container = SimpleNamespace(
         postgresql=MagicMock(return_value=database),
         redis_client=MagicMock(return_value=redis),
@@ -29,6 +31,7 @@ async def test_lifespan_closes_every_process_owned_client():
         projection_freshness=MagicMock(return_value=projection_freshness),
         etcd_adapter=MagicMock(return_value=etcd),
         logger=MagicMock(return_value=logger),
+        configurations=configurations,
         sendgrid_circuit_breaker=MagicMock(),
         elasticsearch_circuit_breaker=MagicMock(),
     )
@@ -42,6 +45,43 @@ async def test_lifespan_closes_every_process_owned_client():
     projection_freshness.close.assert_awaited_once()
     database.dispose.assert_awaited_once()
     etcd.close.assert_called_once()
+    container.sendgrid_circuit_breaker.assert_not_called()
+    container.elasticsearch_circuit_breaker.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_closes_every_resource_when_schema_verification_fails():
+    database = MagicMock()
+    database.verify_schema_current = AsyncMock(side_effect=RuntimeError("bad schema"))
+    database.dispose = AsyncMock()
+    redis = MagicMock(close=AsyncMock())
+    elasticsearch = MagicMock(close=AsyncMock())
+    projection_freshness = MagicMock(close=AsyncMock())
+    etcd = MagicMock()
+    logger = MagicMock()
+    configurations = MagicMock()
+    configurations.elasticsearch.enabled.return_value = True
+    container = SimpleNamespace(
+        postgresql=MagicMock(return_value=database),
+        redis_client=MagicMock(return_value=redis),
+        elasticsearch_client=MagicMock(return_value=elasticsearch),
+        projection_freshness=MagicMock(return_value=projection_freshness),
+        etcd_adapter=MagicMock(return_value=etcd),
+        logger=MagicMock(return_value=logger),
+        configurations=configurations,
+        elasticsearch_circuit_breaker=MagicMock(),
+    )
+
+    with pytest.raises(RuntimeError, match="bad schema"):
+        async with lifespan(SimpleNamespace(container=container)):
+            pytest.fail("startup must not yield")
+
+    projection_freshness.close.assert_awaited_once()
+    elasticsearch.close.assert_awaited_once()
+    redis.close.assert_awaited_once()
+    database.dispose.assert_awaited_once()
+    etcd.close.assert_called_once()
+    container.elasticsearch_circuit_breaker.assert_not_called()
 
 
 @pytest.mark.asyncio

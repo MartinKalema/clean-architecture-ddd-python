@@ -15,7 +15,6 @@ from .circuit_breaker import (
     CircuitBreakerMetrics,
     CircuitBreakerRegistry,
     CircuitState,
-    circuit_breaker_registry,
 )
 from .circuit_breaker_factory import CircuitBreakerFactory
 
@@ -26,5 +25,4 @@ __all__ = [
     "CircuitState",
     "CircuitBreakerMetrics",
     "CircuitBreakerRegistry",
-    "circuit_breaker_registry",
 ]

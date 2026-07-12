@@ -17,7 +17,10 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import database_resources
+from src.composition.runtime_config import ProcessRole
+from src.container import MaintenanceContainer
 from src.infrastructure.adapters.outbox import OutboxRetentionService
 
 
@@ -42,14 +45,10 @@ async def main() -> None:
     if args.retention_hours < 1:
         parser.error("--retention-hours must be positive")
 
-    container = Container()
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
-
-    database = container.postgresql()
+    container = MaintenanceContainer()
+    bootstrap_container(container, ProcessRole.MAINTENANCE)
     logger = container.logger()
-    try:
+    async with database_resources(container) as database:
         deleted = await OutboxRetentionService(database.session_factory).prune(
             retention_hours=args.retention_hours,
             batch_size=args.batch_size,
@@ -61,9 +60,6 @@ async def main() -> None:
             f"Pruned {deleted} outbox row(s) using the database-owned "
             f"{args.retention_hours}h retention clock"
         )
-    finally:
-        await database.dispose()
-        etcd_adapter.close()
 
 
 if __name__ == "__main__":

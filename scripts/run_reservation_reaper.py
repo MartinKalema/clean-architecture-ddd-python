@@ -26,17 +26,20 @@ sys.path.insert(0, PROJECT_ROOT)
 from src.application.command_handlers.release_expired_reservations import (
     ReleaseExpiredReservationsCommand,
 )
-from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import database_resources
+from src.composition.runtime_config import ProcessRole
+from src.container import ReaperContainer
 
 
-async def release_all_expired(handler_factory, command) -> int:
+async def release_all_expired(operation_factory, command) -> int:
     """Drain one sweep while preserving post-commit decoration per batch."""
     released_count = 0
     while True:
         # The production factory returns the cache-invalidating decorator.
         # Constructing and invoking it once per batch guarantees that a later
         # batch failure cannot skip invalidation for an earlier commit.
-        result = await handler_factory().handle(command)
+        result = await operation_factory().handle(command)
         released_count += result.released_count
         if not result.batch_full:
             return released_count
@@ -44,24 +47,18 @@ async def release_all_expired(handler_factory, command) -> int:
 
 async def main() -> None:
     """Main entry point."""
-    container = Container()
-
-    # Load configuration from etcd
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
+    container = ReaperContainer()
+    settings = bootstrap_container(container, ProcessRole.REAPER)
 
     logger = container.logger()
-    ttl_seconds = int(container.configurations.catalog.reservation_ttl_seconds())
-    interval_seconds = int(container.configurations.catalog.reaper_interval_seconds())
+    ttl_seconds = settings.catalog.reservation_ttl_seconds
+    interval_seconds = settings.catalog.reaper_interval_seconds
 
     logger.info(
         f"Starting Reservation Reaper (ttl={ttl_seconds}s, "
         f"interval={interval_seconds}s)"
     )
 
-    database = container.postgresql()
-    await database.verify_schema_current()
     stopping = asyncio.Event()
 
     def signal_handler() -> None:
@@ -79,28 +76,28 @@ async def main() -> None:
             "/tmp/reservation-reaper-heartbeat",
         )
     )
-    try:
-        while not stopping.is_set():
-            try:
-                released_count = await release_all_expired(
-                    container.release_expired_reservations_handler,
-                    command,
-                )
-                if released_count:
-                    logger.info(
-                        f"Reaper released {released_count} reservation(s)"
+    async with database_resources(container):
+        try:
+            while not stopping.is_set():
+                try:
+                    released_count = await release_all_expired(
+                        container.release_expired_reservations,
+                        command,
                     )
-                heartbeat_path.touch()
-            except Exception as e:
-                logger.error(f"Reaper sweep failed: {e}")
+                    if released_count:
+                        logger.info(
+                            f"Reaper released {released_count} reservation(s)"
+                        )
+                    heartbeat_path.touch()
+                except Exception as error:
+                    logger.error("Reaper sweep failed", exception=error)
 
-            try:
-                await asyncio.wait_for(stopping.wait(), timeout=interval_seconds)
-            except asyncio.TimeoutError:
-                pass
-    finally:
-        await database.dispose()
-        logger.info("Reservation reaper stopped")
+                try:
+                    await asyncio.wait_for(stopping.wait(), timeout=interval_seconds)
+                except asyncio.TimeoutError:
+                    pass
+        finally:
+            logger.info("Reservation reaper stopped")
 
 
 if __name__ == "__main__":

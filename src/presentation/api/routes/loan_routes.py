@@ -10,12 +10,13 @@ from pydantic import BaseModel, Field
 
 from src.application.command_handlers.extend_loan import (
     ExtendLoanCommand,
-    ExtendLoanHandler,
+    ExtendLoanResult,
 )
 from src.application.command_handlers.return_loan import (
     ReturnLoanCommand,
-    ReturnLoanHandler,
+    ReturnLoanResult,
 )
+from src.application.ports import ICommandHandler
 from src.application.query_handlers.get_loan import (
     GetLoanHandler,
     GetLoanQuery,
@@ -133,7 +134,9 @@ async def extend_loan(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: ExtendLoanHandler = Depends(Provide[Container.extend_loan_handler]),
+    operation: ICommandHandler[ExtendLoanCommand, ExtendLoanResult] = Depends(
+        Provide[Container.extend_loan]
+    ),
 ):
     """Extend a loan."""
     command = ExtendLoanCommand(
@@ -141,7 +144,7 @@ async def extend_loan(
         days=request.days,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     return ExtendLoanResponse(
         id=result.id,
         new_due_date=result.new_due_date,
@@ -156,14 +159,16 @@ async def return_loan(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: ReturnLoanHandler = Depends(Provide[Container.return_loan_handler]),
+    operation: ICommandHandler[ReturnLoanCommand, ReturnLoanResult] = Depends(
+        Provide[Container.return_loan]
+    ),
 ):
     """Return a loan."""
     command = ReturnLoanCommand(
         loan_id=loan_id,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     return ReturnLoanResponse(
         id=result.id,
         returned_at=result.returned_at,

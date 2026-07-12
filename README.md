@@ -16,7 +16,7 @@ Load tested with production-like traffic distribution (93% reads, 7% writes):
 - **Maximum stable load**: 3k users (~358 RPS, 0% errors)
 - **Bottleneck**: Elasticsearch GC at higher loads
 
-**Infrastructure**: 8 API instances, PgBouncer (300 pool), Redis cache (120s TTL), single-node Elasticsearch (4GB heap)
+**Infrastructure**: 8 API instances, role-bounded application pools, PgBouncer, Redis cache, and a single-node Elasticsearch read model
 
 ## Quick Start
 
@@ -93,7 +93,7 @@ Client → Nginx (LB) → API (x8) → PgBouncer → PostgreSQL
 | Component | Purpose |
 |-----------|---------|
 | **Nginx** | Load balancer across 8 API instances |
-| **PgBouncer** | Connection pooling (300 pool, 10k max connections) |
+| **PgBouncer** | Transaction pooling with a bounded 200-connection backend pool |
 | **Redis** | Cache layer with TTL-based expiry (120s) |
 | **etcd** | Centralized configuration |
 | **PostgreSQL** | Primary database (write model) |
@@ -245,6 +245,10 @@ Configuration is managed through etcd with environment variable overrides:
 ```bash
 # Core services
 DATABASE_URL=postgresql+asyncpg://user:pass@pgbouncer:6432/db
+DATABASE_API_POOL_SIZE=20
+DATABASE_API_MAX_OVERFLOW=10
+DATABASE_WORKFLOW_POOL_SIZE=5
+DATABASE_WORKFLOW_MAX_OVERFLOW=5
 REDIS_URL=redis://redis:6379/0
 REDIS_ENABLED=true
 KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -253,6 +257,11 @@ KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 CB_SENDGRID_FAILURE_THRESHOLD=3
 CB_SENDGRID_TIMEOUT=60.0
 ```
+
+Configuration is validated as one immutable startup snapshot before any
+database, Kafka, Redis, Elasticsearch, or SendGrid client is constructed.
+Unknown or missing keys fail startup without logging secret values. Updating
+etcd requires a process restart; running clients are never mutated in place.
 
 ### Database Migrations
 

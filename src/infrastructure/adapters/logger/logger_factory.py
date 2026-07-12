@@ -6,6 +6,7 @@ based on configuration. Keeps the container free of creation logic.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Dict, Union
 
 from .json_logger import JsonLogger
@@ -37,7 +38,9 @@ class LoggerFactory:
             Logger instance (JsonLogger or StandardLogger)
         """
         log_format = config.get("logging", {}).get("format", "json")
+        level_name = config.get("logging", {}).get("level", "INFO")
+        level = getattr(logging, level_name, logging.INFO)
 
         if log_format == "json":
-            return JsonLogger()
-        return StandardLogger()
+            return JsonLogger(level=level)
+        return StandardLogger(level=level)

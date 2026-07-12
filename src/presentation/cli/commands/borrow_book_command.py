@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
 
 import click
 from dependency_injector.wiring import Provide, inject
 
-from src.application.command_handlers import BorrowBookCommand
-from src.container import Container
-
-if TYPE_CHECKING:
-    from src.application.command_handlers import BorrowBookHandler
-
+from src.application.command_handlers import BorrowBookCommand, BorrowBookResult
+from src.application.ports import ICommandHandler
+from src.container import CliContainer
 
 @click.command()
 @click.argument("book_id")
@@ -20,12 +16,14 @@ if TYPE_CHECKING:
 def borrow(
     book_id: str,
     borrower_email: str,
-    handler: BorrowBookHandler = Provide[Container.borrow_book_handler]
+    operation: ICommandHandler[BorrowBookCommand, BorrowBookResult] = Provide[
+        CliContainer.borrow_book
+    ]
 ):
     """Borrow a book from the catalog."""
     try:
         command = BorrowBookCommand(book_id=book_id, borrower_email=borrower_email)
-        result = asyncio.run(handler.handle(command))
+        result = asyncio.run(operation.handle(command))
         click.echo(
             f"Borrow requested: {result.title} "
             f"(reservation {result.reservation_id})"

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.container import Container
+from src.container import NotificationContainer, WorkflowContainer
 from src.domain.catalog import CatalogBookBorrowed
 from src.domain.lending import LoanCancelled, LoanCompleted, LoanCreated
 from src.infrastructure.adapters.events import (
@@ -42,22 +42,31 @@ def _loan_created() -> LoanCreated:
 class TestEventDispatcher:
     def test_composition_root_isolates_optional_notifications(self):
         workflow_subscriptions = (
-            Container.event_dispatcher.kwargs["subscriptions"].kwargs
+            WorkflowContainer.event_dispatcher.kwargs["subscriptions"].kwargs
         )
         notification_subscriptions = (
-            Container.notification_event_dispatcher.kwargs["subscriptions"].kwargs
+            NotificationContainer.notification_event_dispatcher.kwargs[
+                "subscriptions"
+            ].kwargs
         )
 
         assert CatalogBookBorrowed not in workflow_subscriptions
         assert CatalogBookBorrowed in notification_subscriptions
-        assert Container.domain_event_consumer.kwargs["durable_delivery"] is True
         assert (
-            Container.notification_event_consumer.kwargs["durable_delivery"]
+            WorkflowContainer.domain_event_consumer.kwargs["durable_delivery"]
+            is True
+        )
+        assert (
+            NotificationContainer.notification_event_consumer.kwargs[
+                "durable_delivery"
+            ]
             is False
         )
         assert (
-            Container.domain_event_consumer.kwargs["kafka_client"]
-            is not Container.notification_event_consumer.kwargs["kafka_client"]
+            WorkflowContainer.domain_event_consumer.kwargs["kafka_client"]
+            is not NotificationContainer.notification_event_consumer.kwargs[
+                "kafka_client"
+            ]
         )
 
     @pytest.mark.asyncio

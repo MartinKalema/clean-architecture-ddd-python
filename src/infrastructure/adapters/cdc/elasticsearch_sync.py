@@ -5,6 +5,7 @@ Consumes CDC events from Debezium via Kafka and syncs them to Elasticsearch.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -46,6 +47,8 @@ class ElasticsearchSyncConsumer:
         self._cache = cache
         self._group_id = group_id
         self._running = False
+        self._closed = False
+        self._stop_lock = asyncio.Lock()
 
     def transform_book(self, data: dict[str, Any]) -> dict[str, Any]:
         """Transform book CDC event to ES document."""
@@ -189,6 +192,7 @@ class ElasticsearchSyncConsumer:
 
     async def start(self) -> None:
         """Start the consumer loop."""
+        self._closed = False
         self._logger.info("Connecting to Kafka and Elasticsearch...")
 
         await self._kafka.connect_consumer(
@@ -222,7 +226,11 @@ class ElasticsearchSyncConsumer:
 
     async def stop(self) -> None:
         """Stop the consumer."""
-        self._running = False
-        await self._kafka.close()
-        await self._elasticsearch.close()
-        self._logger.info("Consumer stopped")
+        async with self._stop_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._running = False
+            await self._kafka.close()
+            await self._elasticsearch.close()
+            self._logger.info("Consumer stopped")

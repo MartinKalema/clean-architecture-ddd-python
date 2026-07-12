@@ -23,7 +23,8 @@ if os.path.exists(env_file):
     from dotenv import load_dotenv
     load_dotenv(env_file)
 
-from src.container import Container
+from src.composition.runtime_config import EtcdBootstrapConfig, load_runtime_config
+from src.container import MaintenanceContainer
 
 
 def get_env(key: str, default: str = "") -> str:
@@ -47,10 +48,38 @@ def build_config() -> dict:
         },
         "database": {
             "url": get_env("DATABASE_URL", "postgresql+asyncpg://library:library_secret@localhost:5432/library_db"),
-            "pool_size": get_env_int("DATABASE_POOL_SIZE", 200),
-            "max_overflow": get_env_int("DATABASE_MAX_OVERFLOW", 100),
             "pool_timeout": get_env_int("DATABASE_POOL_TIMEOUT", 30),
             "pool_recycle": get_env_int("DATABASE_POOL_RECYCLE", 1800),
+            "pools": {
+                "api": {
+                    "pool_size": get_env_int("DATABASE_API_POOL_SIZE", 20),
+                    "max_overflow": get_env_int("DATABASE_API_MAX_OVERFLOW", 10),
+                },
+                "workflow": {
+                    "pool_size": get_env_int("DATABASE_WORKFLOW_POOL_SIZE", 5),
+                    "max_overflow": get_env_int("DATABASE_WORKFLOW_MAX_OVERFLOW", 5),
+                },
+                "notification": {
+                    "pool_size": get_env_int("DATABASE_NOTIFICATION_POOL_SIZE", 3),
+                    "max_overflow": get_env_int("DATABASE_NOTIFICATION_MAX_OVERFLOW", 2),
+                },
+                "reaper": {
+                    "pool_size": get_env_int("DATABASE_REAPER_POOL_SIZE", 2),
+                    "max_overflow": get_env_int("DATABASE_REAPER_MAX_OVERFLOW", 0),
+                },
+                "projection": {
+                    "pool_size": get_env_int("DATABASE_PROJECTION_POOL_SIZE", 2),
+                    "max_overflow": get_env_int("DATABASE_PROJECTION_MAX_OVERFLOW", 0),
+                },
+                "cli": {
+                    "pool_size": get_env_int("DATABASE_CLI_POOL_SIZE", 2),
+                    "max_overflow": get_env_int("DATABASE_CLI_MAX_OVERFLOW", 0),
+                },
+                "maintenance": {
+                    "pool_size": get_env_int("DATABASE_MAINTENANCE_POOL_SIZE", 5),
+                    "max_overflow": get_env_int("DATABASE_MAINTENANCE_MAX_OVERFLOW", 0),
+                },
+            },
         },
         "sendgrid": {
             "api_key": get_env("SENDGRID_API_KEY", "SG.placeholder"),
@@ -165,8 +194,9 @@ def flatten_config(config: dict, prefix: str = "") -> dict:
 
 
 def seed_config(client, config: dict, config_prefix: str = "/config/") -> None:
-    """Seed configuration into etcd."""
+    """Replace the current config keys without retaining obsolete fields."""
     flat_config = flatten_config(config)
+    desired_keys = {f"{config_prefix}{key}" for key in flat_config}
 
     for key, value in flat_config.items():
         full_key = f"{config_prefix}{key}"
@@ -174,11 +204,20 @@ def seed_config(client, config: dict, config_prefix: str = "/config/") -> None:
         client.put(full_key, json_value)
         print(f"  Set: {full_key}")
 
+    # Write the complete new snapshot before deleting stale keys. Readers may
+    # briefly observe an extra key and fail closed, but can never observe a
+    # partially missing current configuration.
+    for stale_key in sorted(set(client.get_prefix(config_prefix)) - desired_keys):
+        client.delete(stale_key)
+        print(f"  Removed obsolete key: {stale_key}")
+
 
 def main():
-    config_prefix = os.environ.get("ETCD_CONFIG_PREFIX", "/config/")
+    bootstrap = EtcdBootstrapConfig.from_environment()
+    config_prefix = bootstrap.prefix
 
-    container = Container()
+    container = MaintenanceContainer()
+    container.bootstrap.from_dict({"etcd": bootstrap.model_dump(mode="python")})
     client = container.etcd_client()
 
     print(f"Connecting to etcd...")
@@ -189,6 +228,8 @@ def main():
 
         print(f"\nSeeding configuration with prefix '{config_prefix}'...")
         config = build_config()
+        # Never publish a partial or malformed snapshot to the shared source.
+        load_runtime_config(config)
         seed_config(client, config, config_prefix)
 
         print("\nConfiguration seeded successfully!")

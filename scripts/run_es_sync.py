@@ -20,47 +20,39 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import projection_resources
+from src.composition.runtime_config import ProcessRole
+from src.container import ProjectionContainer
 
 
 async def main() -> None:
     """Main entry point."""
-    container = Container()
-
-    # Load configuration from etcd
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
+    container = ProjectionContainer()
+    settings = bootstrap_container(container, ProcessRole.PROJECTION)
 
     logger = container.logger()
     logger.info("Starting Elasticsearch Sync Consumer")
-    logger.info(f"Kafka: {container.configurations.kafka.bootstrap_servers()}")
-    logger.info(f"Elasticsearch: {container.configurations.elasticsearch.url()}")
+    logger.info(f"Kafka: {settings.kafka.bootstrap_servers}")
+    logger.info(f"Elasticsearch: {settings.elasticsearch.url}")
 
-    consumer = container.elasticsearch_sync_consumer()
+    async with projection_resources(container) as consumer:
+        loop = asyncio.get_running_loop()
 
-    loop = asyncio.get_running_loop()
+        def signal_handler() -> None:
+            logger.info("Received shutdown signal, stopping...")
+            asyncio.create_task(consumer.stop())
 
-    def signal_handler() -> None:
-        logger.info("Received shutdown signal, stopping...")
-        asyncio.create_task(consumer.stop())
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, signal_handler)
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, signal_handler)
-
-    try:
-        await consumer.start()
-    except asyncio.CancelledError:
-        logger.info("Consumer cancelled")
-    except Exception as e:
-        logger.error(f"Consumer error: {e}")
-        raise
-    finally:
-        # CDC cache invalidation can lazily open Redis independently of the API.
         try:
-            await container.redis_client().close()
-        finally:
-            container.etcd_adapter().close()
+            await consumer.start()
+        except asyncio.CancelledError:
+            logger.info("Consumer cancelled")
+        except Exception as error:
+            logger.error("Consumer failed", exception=error)
+            raise
 
 
 if __name__ == "__main__":

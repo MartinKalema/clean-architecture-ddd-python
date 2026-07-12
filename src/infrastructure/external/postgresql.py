@@ -17,8 +17,8 @@ class PostgreSQL:
     def __init__(
         self,
         db_url: str,
-        pool_size: int = 200,
-        max_overflow: int = 100,
+        pool_size: int = 20,
+        max_overflow: int = 10,
         pool_timeout: int = 30,
         pool_recycle: int = 1800,
     ):
@@ -27,12 +27,24 @@ class PostgreSQL:
 
         Args:
             db_url: Database connection URL
-            pool_size: Number of connections to keep in pool (default: 200)
-            max_overflow: Max connections beyond pool_size (default: 100)
-                          Total max connections = pool_size + max_overflow = 300
+            pool_size: Number of connections to keep in pool (default: 20)
+            max_overflow: Max connections beyond pool_size (default: 10)
             pool_timeout: Seconds to wait for available connection (default: 30)
             pool_recycle: Recycle connections after N seconds (default: 1800)
         """
+        if not isinstance(db_url, str) or not db_url.strip():
+            raise ValueError("db_url must be a non-blank string")
+        if isinstance(pool_size, bool) or not 1 <= pool_size <= 100:
+            raise ValueError("pool_size must be between 1 and 100")
+        if isinstance(max_overflow, bool) or not 0 <= max_overflow <= 100:
+            raise ValueError("max_overflow must be between 0 and 100")
+        if pool_size + max_overflow > 100:
+            raise ValueError("pool_size + max_overflow must not exceed 100")
+        if isinstance(pool_timeout, bool) or not 1 <= pool_timeout <= 300:
+            raise ValueError("pool_timeout must be between 1 and 300 seconds")
+        if isinstance(pool_recycle, bool) or not 0 <= pool_recycle <= 86_400:
+            raise ValueError("pool_recycle must be between 0 and 86400 seconds")
+
         self.db_url = self._to_async_url(db_url)
 
         engine_kwargs: Dict[str, Any] = {

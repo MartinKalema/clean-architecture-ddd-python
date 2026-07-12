@@ -109,8 +109,8 @@ def _reserved_handler():
     )
     release_handler = AsyncMock()
     handler = CreateLoanOnBookReservedHandler(
-        create_loan_handler=create_loan_handler,
-        release_book_reservation_handler=release_handler,
+        create_loan_operation=create_loan_handler,
+        release_book_reservation_operation=release_handler,
         logger=MagicMock(),
     )
     return handler, create_loan_handler, release_handler

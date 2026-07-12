@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, Header, Query, Response
 
 from src.application.command_handlers import (
     AddBookCommand,
-    AddBookHandler,
+    AddBookResult,
     BorrowBookCommand,
-    BorrowBookHandler,
+    BorrowBookResult,
 )
+from src.application.ports import ICommandHandler
 from src.application.query_handlers import (
     GetBookHandler,
     GetBookQuery,
@@ -38,7 +39,9 @@ async def create_book(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: AddBookHandler = Depends(Provide[Container.add_book_handler])
+    operation: ICommandHandler[AddBookCommand, AddBookResult] = Depends(
+        Provide[Container.add_book]
+    )
 ):
     """Create a new book (Command)."""
     command = AddBookCommand(
@@ -46,7 +49,7 @@ async def create_book(
         author=book.author,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     return BookResponse(
         id=result.id,
         title=result.title,
@@ -70,7 +73,9 @@ async def borrow_book(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: BorrowBookHandler = Depends(Provide[Container.borrow_book_handler])
+    operation: ICommandHandler[BorrowBookCommand, BorrowBookResult] = Depends(
+        Provide[Container.borrow_book]
+    )
 ):
     """Borrow a book (Command)."""
     command = BorrowBookCommand(
@@ -78,7 +83,7 @@ async def borrow_book(
         borrower_email=borrow_request.borrower_email,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     response.headers["Location"] = f"/borrow-operations/{result.operation_id}"
     return BorrowBookResponse(
         id=result.id,

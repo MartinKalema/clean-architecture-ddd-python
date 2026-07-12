@@ -73,6 +73,12 @@ Create `.env.docker` for Docker or `.env` for local development:
 ```bash
 # Database
 DATABASE_URL=postgresql+asyncpg://library:library_secret@pgbouncer:6432/library_db
+DATABASE_API_POOL_SIZE=20
+DATABASE_API_MAX_OVERFLOW=10
+DATABASE_WORKFLOW_POOL_SIZE=5
+DATABASE_WORKFLOW_MAX_OVERFLOW=5
+DATABASE_NOTIFICATION_POOL_SIZE=3
+DATABASE_NOTIFICATION_MAX_OVERFLOW=2
 
 # etcd Configuration
 ETCD_HOST=etcd
@@ -177,9 +183,9 @@ Configuration: `deploy/nginx/nginx.conf`
 |---------|-------|---------|
 | `POOL_MODE` | transaction | Release connections after each transaction |
 | `MAX_CLIENT_CONN` | 10000 | Maximum client connections |
-| `MAX_DB_CONNECTIONS` | 400 | Maximum PostgreSQL connections |
-| `DEFAULT_POOL_SIZE` | 300 | Connections per pool |
-| `MIN_POOL_SIZE` | 50 | Minimum idle connections |
+| `MAX_DB_CONNECTIONS` | 300 | Maximum PostgreSQL connections |
+| `DEFAULT_POOL_SIZE` | 200 | Backend connections available to the database/user pool |
+| `MIN_POOL_SIZE` | 20 | Minimum idle connections |
 
 ### PostgreSQL
 
@@ -209,6 +215,17 @@ Centralized configuration management. Keys are stored under `/config/` prefix:
 /config/redis/enabled
 /config/circuit_breakers/sendgrid/timeout
 ```
+
+The config seeder validates the complete document before publishing it and
+removes obsolete keys. Each process validates an immutable startup snapshot
+before constructing external clients. Configuration changes take effect after
+a controlled process restart; live mutation of existing singleton clients is
+not supported.
+
+Database pools are budgeted per process role. Capacity planning must multiply
+each role's `pool_size + max_overflow` by its replica count and keep the total
+within PgBouncer and PostgreSQL limits. Do not increase one role independently
+without recalculating that deployment-wide budget.
 
 ## Production Deployment
 
@@ -384,7 +401,7 @@ At 10,000 concurrent users:
 |----------|---------|
 | `GET /health` | Basic liveness check |
 | `GET /health/ready` | Readiness with dependencies |
-| `GET /health/circuit-breakers` | Circuit breaker status |
+| `GET /health/circuits` | API-local circuit breaker status |
 
 ### Key Metrics
 
@@ -405,9 +422,11 @@ At 10,000 concurrent users:
 
 ### Connection Errors
 
-1. Increase `DEFAULT_POOL_SIZE` in PgBouncer
-2. Check `max_connections` in PostgreSQL
-3. Verify network connectivity between services
+1. Check each role's application-pool utilization and replica count
+2. Check PgBouncer pool utilization and wait queues
+3. Check `max_connections` and reserved capacity in PostgreSQL
+4. Change a pool only after recalculating the deployment-wide budget
+5. Verify network connectivity between services
 
 ### 502 Bad Gateway
 

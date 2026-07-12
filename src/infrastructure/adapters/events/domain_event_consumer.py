@@ -14,6 +14,7 @@ restart, so all subscribed handlers must be idempotent.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from typing import TYPE_CHECKING, Optional
@@ -81,6 +82,8 @@ class DomainEventConsumer:
         self._group_id = group_id
         self._durable_delivery = durable_delivery
         self._running = False
+        self._closed = False
+        self._stop_lock = asyncio.Lock()
 
     async def _process_message(
         self, topic: str, key: dict | str | None, value: dict | None
@@ -143,6 +146,7 @@ class DomainEventConsumer:
 
     async def start(self) -> None:
         """Start the consumer loop."""
+        self._closed = False
         self._logger.info(f"Connecting to Kafka, topics: {self._topics}")
 
         await self._kafka.connect_consumer(
@@ -165,9 +169,13 @@ class DomainEventConsumer:
 
     async def stop(self) -> None:
         """Stop the consumer."""
-        self._running = False
-        await self._kafka.close()
-        self._logger.info("Domain event consumer stopped")
+        async with self._stop_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._running = False
+            await self._kafka.close()
+            self._logger.info("Domain event consumer stopped")
 
 
 def _delivery_identity(value: dict) -> EventDeliveryIdentity:

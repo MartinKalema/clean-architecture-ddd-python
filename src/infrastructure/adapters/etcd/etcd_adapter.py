@@ -1,8 +1,9 @@
 """
-etcd Adapter - Real-time configuration from etcd.
+etcd adapter for loading a validated startup configuration snapshot.
 
-This adapter loads configuration from etcd and supports real-time
-updates via etcd's watch mechanism.
+Application processes load once, validate, and remain immutable until restart.
+The watch API is retained for explicit administrative tooling only; composition
+roots never mutate already-constructed singleton clients in place.
 """
 from __future__ import annotations
 
@@ -115,10 +116,10 @@ class EtcdAdapter:
 
     def start_watching(self) -> None:
         """
-        Start watching all config keys for changes.
+        Start watching all config keys for administrative tooling.
 
-        When any config key changes, the internal config is updated
-        and all registered callbacks are notified.
+        This does not reconfigure dependency-injection singletons. Runtime
+        processes intentionally do not call this method.
         """
         def on_change(key: str, value: str) -> None:
             key_path = key.replace(self._config_prefix, "").strip("/")

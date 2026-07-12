@@ -10,7 +10,10 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import database_resources
+from src.composition.runtime_config import ProcessRole
+from src.container import MaintenanceContainer
 from src.infrastructure.adapters.maintenance import DurableStateRetentionService
 
 
@@ -24,12 +27,9 @@ async def main() -> None:
     parser.add_argument("--max-batches", type=int, default=20)
     args = parser.parse_args()
 
-    container = Container()
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
-    database = container.postgresql()
-    try:
+    container = MaintenanceContainer()
+    bootstrap_container(container, ProcessRole.MAINTENANCE)
+    async with database_resources(container) as database:
         deleted = await DurableStateRetentionService(
             database.session_factory
         ).prune(
@@ -41,9 +41,6 @@ async def main() -> None:
             max_batches_per_table=args.max_batches,
         )
         container.logger().info(f"Durable-state retention deleted: {deleted}")
-    finally:
-        await database.dispose()
-        etcd_adapter.close()
 
 
 if __name__ == "__main__":
