@@ -58,7 +58,6 @@ A Context Map is a DDD strategic pattern that visually documents:
 
 **Key Concepts:**
 - `Loan` - A book being borrowed by a patron
-- `LoanableBook` - Lending's view of a book (availability focused)
 - `DueDate` - When the book must be returned
 - `BorrowerInfo` - Lending's view of a patron (ACL translation)
 - `BookReference` - Lending's view of catalog data (ACL translation)
@@ -150,17 +149,19 @@ A Context Map is a DDD strategic pattern that visually documents:
 ### 1. Published Language (Catalog → Lending)
 **Pattern:** Open Host Service with Published Language
 
-The Catalog context publishes events (`BookAddedToCatalog`, `BookRemovedFromCatalog`) that other contexts can subscribe to. The event schema is the "published language" - a contract that Catalog commits to maintaining.
+Catalog publishes versioned reservation facts. Lending creates exactly one
+loan for that reservation, and publishes the resulting loan identity back to
+Catalog. The event envelope is the published language; neither context keeps a
+second mutable copy of the other's availability state.
 
 ```python
 # Catalog publishes this event
 @dataclass(frozen=True)
-class BookAddedToCatalog(DomainEvent):
+class CatalogBookReserved(DomainEvent):
     book_id: str
-    title: str
-    author: str
-
-# Lending subscribes and creates its own LoanableBook
+    reservation_id: str
+    reservation_generation: int
+    patron_id: str
 ```
 
 ### 2. Customer-Supplier (Patron → Lending)
@@ -175,12 +176,13 @@ class Patron:
     name: PatronName
     membership_tier: MembershipTier
 
-# Lending's view (via ACL)
+# Lending's application-boundary view (via ACL)
 @dataclass
-class BorrowerInfo:
-    name: str
-    borrowing_limit: int
-    loan_duration_days: int
+class BorrowerProfile:
+    patron_id: str
+    email: str
+    is_eligible: bool
+    membership_tier: str
 ```
 
 ### 3. Anti-Corruption Layer (Lending)
@@ -189,29 +191,26 @@ class BorrowerInfo:
 Lending uses an Anti-Corruption Layer to protect itself from changes in upstream contexts. If Catalog or Patron change their models, only the ACL implementation needs updating.
 
 ```python
-# ACL Interface (in domain)
-class PatronACL(Protocol):
-    async def get_borrower_info(self, patron_id: str) -> Optional[BorrowerInfo]:
+# ACL port (in application)
+class BorrowerDirectory(Protocol):
+    async def get_by_id(self, patron_id: str) -> BorrowerProfile | None:
         ...
 
 # ACL Implementation (in infrastructure)
-class PatronACLAdapter:
-    def __init__(self, patron_repository: PatronRepository):
-        self.patron_repo = patron_repository
-
-    async def get_borrower_info(self, patron_id: str) -> Optional[BorrowerInfo]:
-        patron = await self.patron_repo.get_by_id(patron_id)
-        if not patron:
+class PatronBorrowerDirectoryAdapter:
+    async def get_by_id(self, patron_id: str) -> BorrowerProfile | None:
+        row = await self.authoritative_patron_row(patron_id)
+        if not row:
             return None
-        # Translate Patron's model to Lending's BorrowerInfo
-        return BorrowerInfo(
-            patron_id=patron.id.value,
-            email=patron.email.value,
-            name=patron.name.full_name,
-            can_borrow=patron.can_borrow(current_loans),
-            borrowing_limit=patron.membership_tier.borrowing_limit,
-            loan_duration_days=patron.membership_tier.loan_duration_days,
+        return BorrowerProfile(
+            patron_id=row.id,
+            email=row.email,
+            is_eligible=not row.is_suspended,
+            membership_tier=row.membership_tier,
         )
+
+# Lending maps the upstream fact to its own local policy.
+terms = LendingPolicy.for_membership_tier(profile.membership_tier)
 ```
 
 ### 4. Shared Kernel

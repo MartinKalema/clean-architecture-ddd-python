@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -7,13 +7,13 @@ from src.domain.catalog import (
     Book,
     BookAlreadyBorrowedException,
     BookId,
-    BookNotBorrowedException,
-    BookNotReservedException,
     BookStatus,
     CatalogBookBorrowed,
     CatalogBookReleased,
     CatalogBookReserved,
     CatalogBookReturned,
+    LoanCorrelationMismatchException,
+    StaleReservationException,
     Title,
 )
 
@@ -26,121 +26,262 @@ def _book() -> Book:
     )
 
 
+def _reserve(
+    book: Book,
+    *,
+    patron_id: str = "patron-123",
+    email: str = "borrower@example.com",
+):
+    token = book.reserve(patron_id, email, datetime.now(timezone.utc))
+    return token, book.reservation_generation
+
+
+def _return(book: Book, loan_id: str) -> bool:
+    assert book.reservation_id is not None
+    assert book.reserved_patron_id is not None
+    return book.return_book(
+        loan_id,
+        book.reservation_id,
+        book.reservation_generation,
+        book.reserved_patron_id,
+    )
+
+
+def _confirm(
+    book: Book,
+    token,
+    generation: int,
+    patron_id: str = "patron-123",
+    loan_id: str = "loan-123",
+) -> bool:
+    assert book.reserved_at is not None
+    borrowed_at = book.reserved_at
+    return book.confirm_borrow(
+        token,
+        generation,
+        patron_id,
+        loan_id,
+        borrowed_at,
+        borrowed_at + timedelta(days=14),
+    )
+
+
 def test_book_creation():
     book = _book()
     assert book.title.value == "Clean Architecture"
     assert book.status == BookStatus.AVAILABLE
     assert book.is_borrowed is False
+    assert book.reservation_generation == 0
 
 
-def test_reserve_holds_the_book_and_raises_event():
+def test_reserve_creates_identity_increments_fence_and_raises_event():
     book = _book()
-    reserved_at = datetime.now()
+    reserved_at = datetime.now(timezone.utc)
 
-    book.reserve("borrower@example.com", reserved_at)
+    token = book.reserve("patron-123", "borrower@example.com", reserved_at)
 
     assert book.status == BookStatus.RESERVED
-    assert book.is_borrowed is True  # withheld from other borrowers
+    assert book.is_borrowed is False
+    assert book.is_unavailable is True
     assert book.reserved_at == reserved_at
+    assert book.reservation_id == token
+    assert book.reservation_generation == 1
+    assert book.reserved_patron_id == "patron-123"
     events = book.get_domain_events()
     assert len(events) == 1
     assert isinstance(events[0], CatalogBookReserved)
-    assert events[0].book_id == book.id.value
+    assert events[0].reservation_id == token.value
+    assert events[0].reservation_generation == 1
+    assert events[0].patron_id == "patron-123"
     assert events[0].borrower_email == "borrower@example.com"
+
+
+def test_reserve_leaves_loan_dates_to_lending():
+    book = _book()
+    reserved_at = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+
+    book.reserve("premium-patron", "premium@example.com", reserved_at)
+
+    assert book.borrowed_at is None
+    assert book.return_due_date is None
+    assert not hasattr(book.get_domain_events()[0], "return_due_date")
 
 
 def test_reserve_rejects_non_available_book():
     book = _book()
-    book.reserve("first@example.com", datetime.now())
+    _reserve(book)
 
-    # Semantic lock: only one saga can hold the book
     with pytest.raises(BookAlreadyBorrowedException):
-        book.reserve("second@example.com", datetime.now())
+        book.reserve(
+            "patron-456",
+            "second@example.com",
+            datetime.now(timezone.utc),
+        )
 
 
-def test_confirm_borrow_finalizes_reservation():
+def test_each_new_reservation_increments_generation():
     book = _book()
-    book.reserve("borrower@example.com", datetime.now())
+    first, first_generation = _reserve(book)
+    book.release(first, first_generation, "patron-123", "rejected")
+
+    second, second_generation = _reserve(book, patron_id="patron-456")
+
+    assert second != first
+    assert second_generation == first_generation + 1
+
+
+def test_confirm_borrow_requires_exact_reservation_and_records_loan():
+    book = _book()
+    token, generation = _reserve(book)
     book.clear_events()
 
-    book.confirm_borrow("borrower@example.com")
+    changed = _confirm(book, token, generation)
 
+    assert changed is True
     assert book.status == BookStatus.BORROWED
+    assert book.current_loan_id == "loan-123"
     assert book.reserved_at is None
     events = book.get_domain_events()
     assert len(events) == 1
     assert isinstance(events[0], CatalogBookBorrowed)
+    assert events[0].reservation_id == token.value
+    assert events[0].reservation_generation == generation
+    assert events[0].patron_id == "patron-123"
+    assert events[0].loan_id == "loan-123"
+    assert events[0].borrower_email == "borrower@example.com"
 
 
-def test_confirm_borrow_requires_reservation():
-    with pytest.raises(BookNotReservedException):
-        _book().confirm_borrow("borrower@example.com")
-
-
-def test_release_returns_reservation_to_available():
+def test_confirm_borrow_exact_redelivery_is_idempotent():
     book = _book()
-    book.reserve("borrower@example.com", datetime.now())
+    token, generation = _reserve(book)
+    _confirm(book, token, generation)
     book.clear_events()
 
-    book.release("loan creation failed")
+    assert book.borrowed_at is not None
+    changed = book.confirm_borrow(
+        token,
+        generation,
+        "patron-123",
+        "loan-123",
+        book.borrowed_at,
+        book.return_due_date,
+    )
+
+    assert changed is False
+    assert book.get_domain_events() == []
+
+
+def test_delayed_confirmation_cannot_claim_a_newer_reservation():
+    book = _book()
+    old_token, old_generation = _reserve(book)
+    book.release(old_token, old_generation, "patron-123", "timed out")
+    new_token, new_generation = _reserve(book, patron_id="patron-456")
+
+    with pytest.raises(StaleReservationException):
+        book.confirm_borrow(
+            old_token,
+            old_generation,
+            "patron-123",
+            "stale-loan",
+            datetime.now(timezone.utc),
+            datetime.now(timezone.utc) + timedelta(days=14),
+        )
+
+    assert book.status == BookStatus.RESERVED
+    assert book.reservation_id == new_token
+    assert book.reservation_generation == new_generation
+    assert book.reserved_patron_id == "patron-456"
+
+
+def test_release_requires_exact_reservation_and_is_idempotent():
+    book = _book()
+    token, generation = _reserve(book)
+    book.clear_events()
+
+    changed = book.release(token, generation, "patron-123", "loan rejected")
+
+    assert changed is True
+    assert book.status == BookStatus.AVAILABLE
+    assert book.return_due_date is None
+    event = book.get_domain_events()[0]
+    assert isinstance(event, CatalogBookReleased)
+    assert event.reservation_id == token.value
+    assert event.patron_id == "patron-123"
+
+    book.clear_events()
+    assert (
+        book.release(token, generation, "patron-123", "redelivery") is False
+    )
+    assert book.get_domain_events() == []
+
+
+def test_delayed_release_cannot_release_a_newer_reservation():
+    book = _book()
+    old_token, old_generation = _reserve(book)
+    book.release(old_token, old_generation, "patron-123", "first failure")
+    new_token, _ = _reserve(book, patron_id="patron-456")
+
+    with pytest.raises(StaleReservationException):
+        book.release(old_token, old_generation, "patron-123", "delayed")
+
+    assert book.status == BookStatus.RESERVED
+    assert book.reservation_id == new_token
+
+
+def test_return_requires_current_loan_and_exact_duplicate_is_idempotent():
+    book = _book()
+    token, generation = _reserve(book)
+    _confirm(book, token, generation)
+    book.clear_events()
+
+    assert _return(book, "loan-123") is True
 
     assert book.status == BookStatus.AVAILABLE
-    assert book.is_borrowed is False
-    assert book.reserved_at is None
-    assert book.return_due_date is None
-    events = book.get_domain_events()
-    assert isinstance(events[0], CatalogBookReleased)
-    assert events[0].reason == "loan creation failed"
+    assert book.current_loan_id is None
+    assert book.last_completed_loan_id == "loan-123"
+    event = book.get_domain_events()[0]
+    assert isinstance(event, CatalogBookReturned)
+    assert event.loan_id == "loan-123"
+
+    book.clear_events()
+    assert _return(book, "loan-123") is False
+    assert book.get_domain_events() == []
 
 
-def test_mark_borrowed_claims_available_book():
+def test_wrong_loan_cannot_return_book():
     book = _book()
-    borrowed_at = datetime(2026, 7, 4, 12, 0)
-    due = datetime(2026, 7, 18, 12, 0)
+    token, generation = _reserve(book)
+    _confirm(book, token, generation)
 
-    book.mark_borrowed("borrower@example.com", borrowed_at, due)
+    with pytest.raises(LoanCorrelationMismatchException):
+        _return(book, "loan-456")
 
     assert book.status == BookStatus.BORROWED
-    assert book.borrowed_at == borrowed_at
-    assert book.return_due_date == due
-    events = book.get_domain_events()
-    assert isinstance(events[0], CatalogBookBorrowed)
+    assert book.current_loan_id == "loan-123"
 
 
-def test_mark_borrowed_rejects_non_available_book():
+@pytest.mark.parametrize(
+    ("reservation_id", "generation", "patron_id"),
+    [
+        ("11111111-1111-4111-8111-111111111111", 1, "patron-123"),
+        (None, 999, "patron-123"),
+        (None, 1, "different-patron"),
+    ],
+)
+def test_return_requires_exact_reservation_owner_and_generation(
+    reservation_id, generation, patron_id
+):
     book = _book()
-    book.reserve("first@example.com", datetime.now())
+    token, current_generation = _reserve(book)
+    _confirm(book, token, current_generation)
 
-    with pytest.raises(BookAlreadyBorrowedException):
-        book.mark_borrowed("second@example.com", datetime.now(), datetime.now())
+    with pytest.raises(LoanCorrelationMismatchException):
+        book.return_book(
+            "loan-123",
+            reservation_id or token,
+            generation,
+            patron_id,
+        )
 
-
-def test_release_requires_reservation():
-    book = _book()
-    book.reserve("borrower@example.com", datetime.now())
-    book.confirm_borrow("borrower@example.com")
-
-    # A confirmed borrow is returned, not released
-    with pytest.raises(BookNotReservedException):
-        book.release("too late")
-
-
-def test_return_book_after_confirmed_borrow():
-    book = _book()
-    book.reserve("borrower@example.com", datetime.now())
-    book.confirm_borrow("borrower@example.com")
-    book.clear_events()
-
-    book.return_book()
-
-    assert book.status == BookStatus.AVAILABLE
-    assert isinstance(book.get_domain_events()[0], CatalogBookReturned)
-
-
-def test_return_book_requires_confirmed_borrow():
-    book = _book()
-    book.reserve("borrower@example.com", datetime.now())
-
-    # RESERVED is tentative: it is released, never returned
-    with pytest.raises(BookNotBorrowedException):
-        book.return_book()
+    assert book.status == BookStatus.BORROWED
+    assert book.current_loan_id == "loan-123"

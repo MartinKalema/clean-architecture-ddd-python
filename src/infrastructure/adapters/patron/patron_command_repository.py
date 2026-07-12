@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.patron import Patron
+from src.domain.shared_kernel import EmailAddress
 from src.domain.patron.exceptions import ConcurrentModificationException
 from src.infrastructure.adapters.patron.patron_model import PatronModel
 from src.infrastructure.exceptions import DatabaseException
@@ -18,15 +19,22 @@ from src.infrastructure.exceptions import DatabaseException
 class PatronCommandRepository:
     """Repository implementation for Patron aggregate."""
 
-    def __init__(self, session: AsyncSession, identity_map: Optional[Dict[str, Patron]] = None):
+    def __init__(
+        self,
+        session: AsyncSession,
+        identity_map: Optional[Dict[str, Patron]] = None,
+        dirty_ids: Optional[set[str]] = None,
+    ):
         self.session = session
         self.identity_map = identity_map if identity_map is not None else {}
+        self.dirty_ids = dirty_ids if dirty_ids is not None else set()
 
     async def add(self, patron: Patron) -> Patron:
         try:
             db_patron = PatronModel.from_entity(patron)
             self.session.add(db_patron)
             self.identity_map[patron.id.value] = patron
+            self.dirty_ids.add(patron.id.value)
             return patron
         except SQLAlchemyError as e:
             raise DatabaseException(f"Error adding patron: {str(e)}", original_exception=e)
@@ -49,6 +57,7 @@ class PatronCommandRepository:
             raise DatabaseException(f"Error retrieving patron {patron_id}: {str(e)}", original_exception=e)
 
     async def get_by_email(self, email: str) -> Optional[Patron]:
+        email = EmailAddress(email).value
         try:
             result = await self.session.execute(
                 select(PatronModel).where(PatronModel.email == email)
@@ -88,7 +97,7 @@ class PatronCommandRepository:
             result = await self.session.execute(
                 update(PatronModel)
                 .where(PatronModel.id == patron.id.value)
-                .where(PatronModel.version == str(expected_version))
+                .where(PatronModel.version == expected_version)
                 .values(
                     first_name=patron.name.first_name,
                     last_name=patron.name.last_name,
@@ -96,7 +105,7 @@ class PatronCommandRepository:
                     membership_tier=patron.membership_tier.value,
                     is_suspended=patron.is_suspended,
                     suspended_reason=patron.suspended_reason,
-                    version=str(new_version),
+                    version=new_version,
                 )
             )
 
@@ -111,6 +120,7 @@ class PatronCommandRepository:
 
             patron._version = new_version
             self.identity_map[patron.id.value] = patron
+            self.dirty_ids.add(patron.id.value)
 
         except ConcurrentModificationException:
             raise

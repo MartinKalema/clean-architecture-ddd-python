@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -51,10 +51,82 @@ async def test_repository_update(test_db):
         await session.commit()
 
         # Update
-        book.reserve("test@example.com", datetime.now())
+        reservation = book.reserve(
+            "patron-integration",
+            "test@example.com",
+            datetime.now(timezone.utc),
+        )
         await repo.update(book)
         await session.commit()
 
-        # Verify
-        fetched_book = await repo.get_by_id(book.id.value)
-        assert fetched_book.is_borrowed is True
+    # Verify through a fresh repository so every correlation field makes a
+    # real persistence round trip rather than hitting the identity map.
+    async with session_factory() as session:
+        fetched_book = await BookCommandRepository(session).get_by_id(book.id.value)
+        assert fetched_book is not None
+        assert fetched_book.is_borrowed is False
+        assert fetched_book.is_unavailable is True
+        assert fetched_book.reservation_id == reservation
+        assert fetched_book.reservation_generation == 1
+        assert fetched_book.reserved_patron_id == "patron-integration"
+        assert fetched_book.reserved_patron_email == "test@example.com"
+
+
+@pytest.mark.asyncio
+async def test_repository_round_trips_exact_loan_return_correlation(test_db):
+    session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
+    book = Book(
+        id=BookId.next_id(),
+        title=Title("Return Correlation Persistence"),
+        author=Author("Tester"),
+    )
+
+    async with session_factory() as session:
+        repository = BookCommandRepository(session)
+        await repository.add(book)
+        await session.commit()
+
+        reserved_at = datetime.now(timezone.utc)
+        reservation = book.reserve(
+            "patron-return-correlation",
+            "return-correlation@example.com",
+            reserved_at,
+        )
+        generation = book.reservation_generation
+        await repository.update(book)
+        await session.commit()
+
+        book.confirm_borrow(
+            reservation,
+            generation,
+            "patron-return-correlation",
+            "loan-return-correlation",
+            reserved_at,
+            reserved_at + timedelta(days=14),
+        )
+        await repository.update(book)
+        await session.commit()
+
+    async with session_factory() as session:
+        reloaded = await BookCommandRepository(session).get_by_id(book.id.value)
+        assert reloaded is not None
+        assert reloaded.current_loan_id == "loan-return-correlation"
+        assert reloaded.reservation_id == reservation
+        assert reloaded.reservation_generation == generation
+
+        reloaded.return_book(
+            "loan-return-correlation",
+            reservation,
+            generation,
+            "patron-return-correlation",
+        )
+        repository = BookCommandRepository(session)
+        await repository.update(reloaded)
+        await session.commit()
+
+    async with session_factory() as session:
+        returned = await BookCommandRepository(session).get_by_id(book.id.value)
+        assert returned is not None
+        assert returned.status.value == "available"
+        assert returned.current_loan_id is None
+        assert returned.last_completed_loan_id == "loan-return-correlation"

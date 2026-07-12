@@ -29,7 +29,6 @@ class BaseLibraryUser(HttpUser):
         super().__init__(*args, **kwargs)
         # Per-user state - NOT shared across users
         self._my_books: list[str] = []
-        self._borrowed_books: list[str] = []
         self._my_patrons: list[dict] = []  # {id, email}
         self._my_loans: list[str] = []
         self._test_run_id = str(uuid.uuid4())[:8]
@@ -39,18 +38,26 @@ class BaseLibraryUser(HttpUser):
         """Unique prefix for this user's test data."""
         return f"{TEST_DATA_PREFIX}_{self._test_run_id}"
 
+    @staticmethod
+    def _command_headers(scope: str) -> dict[str, str]:
+        return {"Idempotency-Key": f"load-{scope}-{uuid.uuid4()}"}
+
     def create_book(self, title: str, author: str) -> Optional[str]:
         """
         Create a book and track it for cleanup.
 
         Returns book ID if successful, None otherwise.
         """
-        response = self.client.post("/books", json={
-            "title": f"{self.test_prefix}_{title}",
-            "author": author,
-        })
+        response = self.client.post(
+            "/books",
+            json={
+                "title": f"{self.test_prefix}_{title}",
+                "author": author,
+            },
+            headers=self._command_headers("add-book"),
+        )
 
-        if response.status_code == 200:
+        if response.status_code == 201:
             book_id = response.json()["id"]
             self._my_books.append(book_id)
             return book_id
@@ -65,11 +72,11 @@ class BaseLibraryUser(HttpUser):
         with self.client.post(
             f"/books/{book_id}/borrow",
             json={"borrower_email": email},
+            headers=self._command_headers("borrow-book"),
             catch_response=True,
             name="/books/{id}/borrow",  # Group in stats
         ) as response:
-            if response.status_code == 200:
-                self._borrowed_books.append(book_id)
+            if response.status_code == 202:
                 response.success()
                 return True
             elif response.status_code == 409:
@@ -78,26 +85,6 @@ class BaseLibraryUser(HttpUser):
                 return False
             elif response.status_code == 404:
                 response.failure("Book not found")
-                return False
-            else:
-                response.failure(f"Unexpected: {response.status_code}")
-                return False
-
-    def return_book(self, book_id: str) -> bool:
-        """Return a borrowed book."""
-        with self.client.post(
-            f"/books/{book_id}/return",
-            catch_response=True,
-            name="/books/{id}/return",
-        ) as response:
-            if response.status_code == 200:
-                if book_id in self._borrowed_books:
-                    self._borrowed_books.remove(book_id)
-                response.success()
-                return True
-            elif response.status_code == 400:
-                # Not borrowed - expected race condition
-                response.success()
                 return False
             else:
                 response.failure(f"Unexpected: {response.status_code}")
@@ -127,11 +114,15 @@ class BaseLibraryUser(HttpUser):
 
         Returns patron dict {id, email} if successful, None otherwise.
         """
-        response = self.client.post("/patrons", json={
-            "first_name": f"{self.test_prefix}_{first_name}",
-            "last_name": last_name,
-            "email": email,
-        })
+        response = self.client.post(
+            "/patrons",
+            json={
+                "first_name": f"{self.test_prefix}_{first_name}",
+                "last_name": last_name,
+                "email": email,
+            },
+            headers=self._command_headers("register-patron"),
+        )
 
         if response.status_code == 201:
             data = response.json()
@@ -165,37 +156,6 @@ class BaseLibraryUser(HttpUser):
         return []
 
     # Loan methods
-    def create_loan(self, patron_id: str, patron_email: str, book_id: str, book_title: str) -> Optional[str]:
-        """
-        Create a loan and track it.
-
-        Returns loan ID if successful, None otherwise.
-        """
-        with self.client.post(
-            "/loans",
-            json={
-                "patron_id": patron_id,
-                "patron_email": patron_email,
-                "catalog_book_id": book_id,
-                "book_title": book_title,
-                "loan_duration_days": 14,
-            },
-            catch_response=True,
-            name="/loans",
-        ) as response:
-            if response.status_code == 201:
-                loan_id = response.json()["id"]
-                self._my_loans.append(loan_id)
-                response.success()
-                return loan_id
-            elif response.status_code == 409:
-                # Book already borrowed - expected in concurrent tests
-                response.success()
-                return None
-            else:
-                response.failure(f"Unexpected: {response.status_code}")
-                return None
-
     def get_loan(self, loan_id: str) -> bool:
         """Get loan details."""
         with self.client.get(
@@ -221,8 +181,14 @@ class BaseLibraryUser(HttpUser):
             name="/loans/patron/{id}",
         ) as response:
             if response.status_code == 200:
+                loans = response.json()
+                self._my_loans = [
+                    loan["id"]
+                    for loan in loans
+                    if loan.get("status") not in ("returned", "cancelled")
+                ]
                 response.success()
-                return response.json()
+                return loans
             else:
                 response.failure(f"Unexpected: {response.status_code}")
                 return []
@@ -232,6 +198,7 @@ class BaseLibraryUser(HttpUser):
         with self.client.post(
             f"/loans/{loan_id}/extend",
             json={"days": days},
+            headers=self._command_headers("extend-loan"),
             catch_response=True,
             name="/loans/{id}/extend",
         ) as response:
@@ -250,6 +217,7 @@ class BaseLibraryUser(HttpUser):
         """Return a loan."""
         with self.client.post(
             f"/loans/{loan_id}/return",
+            headers=self._command_headers("return-loan"),
             catch_response=True,
             name="/loans/{id}/return",
         ) as response:
@@ -267,11 +235,11 @@ class BaseLibraryUser(HttpUser):
                 return False
 
     def on_stop(self):
-        """Cleanup when user stops - return loans and borrowed books."""
+        """Settle this user's outstanding loans through the authoritative flow."""
+        for patron in self._my_patrons:
+            self.list_patron_loans(patron["id"])
         for loan_id in list(self._my_loans):
             self.return_loan(loan_id)
-        for book_id in list(self._borrowed_books):
-            self.return_book(book_id)
 
 
 # Custom metrics tracking

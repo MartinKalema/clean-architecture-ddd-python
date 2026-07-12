@@ -22,9 +22,10 @@ Recovery is probe-limited: in HALF_OPEN at most half_open_max_calls
 requests are admitted concurrently, so a barely-recovered service is not
 hit with the full request volume as its recovery test.
 
-Calls can be bounded with call_timeout so a hanging downstream (which
-raises nothing) still counts as a failure. Sync callables run in the
-default executor so they cannot block the event loop.
+Async calls can be bounded with call_timeout so a hanging downstream counts
+as a failure. Sync callables run in the default executor and must enforce
+timeouts at the client/socket layer: cancelling an executor future does not
+stop its underlying side effect and can otherwise create duplicates.
 
 Usage:
     circuit_breaker = CircuitBreaker(
@@ -57,7 +58,7 @@ from typing import TYPE_CHECKING, Any, Callable, Deque, Optional, Tuple
 from src.infrastructure.exceptions import CircuitBreakerOpenException
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
+    from src.application.ports import ILogger
 
 
 class CircuitState(Enum):
@@ -116,7 +117,7 @@ class CircuitBreaker:
     - Thread-safe with asyncio locks
     - Consecutive-failure AND sliding-window failure-rate tripping
     - Probe-limited recovery testing (half-open admits few calls)
-    - Per-call timeout so hanging calls count as failures
+    - Per-call timeout for cancellable async calls
     - Sync callables dispatched to the executor (never block the loop)
     - Metrics for observability
     - Decorator and context manager support
@@ -133,8 +134,8 @@ class CircuitBreaker:
         minimum_calls: Outcomes required in the window before the failure
                        rate is evaluated (default: 10)
         half_open_max_calls: Concurrent probes admitted in half-open (default: 1)
-        call_timeout: Seconds before an in-flight call counts as failed
-                      (default: None = unbounded)
+        call_timeout: Seconds before a cancellable async call counts as
+                      failed. Sync clients require transport-level timeouts.
         excluded_exceptions: Exceptions that don't count as failures
         fallback: Optional function to call when circuit is open
         logger: Optional logger for observability
@@ -341,9 +342,10 @@ class CircuitBreaker:
         """
         Execute a function with circuit breaker protection.
 
-        Sync functions run in the default executor so they cannot block
-        the event loop. With call_timeout set, a call that exceeds it
-        raises asyncio.TimeoutError and counts as a failure.
+        Sync functions run in the default executor so they cannot block the
+        event loop. They are not wrapped in an asyncio timeout because that
+        cannot stop the underlying side effect; sync clients must enforce a
+        transport-level timeout.
 
         Args:
             func: Function to execute (async or sync)
@@ -388,14 +390,19 @@ class CircuitBreaker:
         """Run the protected call, off-loop for sync functions, with timeout."""
         if asyncio.iscoroutinefunction(func):
             awaitable = func(*args, **kwargs)
-        else:
-            loop = asyncio.get_running_loop()
-            awaitable = loop.run_in_executor(
-                None, functools.partial(func, *args, **kwargs)
-            )
+            if self.call_timeout:
+                return await asyncio.wait_for(
+                    awaitable, timeout=self.call_timeout
+                )
+            return await awaitable
 
-        if self.call_timeout:
-            return await asyncio.wait_for(awaitable, timeout=self.call_timeout)
+        loop = asyncio.get_running_loop()
+        awaitable = loop.run_in_executor(
+            None, functools.partial(func, *args, **kwargs)
+        )
+        # asyncio cannot cancel work that has already started in an executor.
+        # Returning a timeout while it may still succeed would let a message
+        # retry duplicate the side effect.
         return await awaitable
 
     def __call__(self, func: Callable) -> Callable:

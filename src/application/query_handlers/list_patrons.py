@@ -4,14 +4,14 @@ List Patrons Query Handler.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
+from .pagination import QueryPage, validate_pagination
 from .read_models import PatronReadModel
 
 if TYPE_CHECKING:
     from src.application.query_handlers.interfaces import IPatronQueryRepository
-    from src.domain.shared_kernel import ICache, ILogger
+    from src.application.ports import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class ListPatronsQuery:
     membership_tier: Optional[str] = None
     limit: int = 20
     offset: int = 0
+    cursor: Optional[str] = None
 
 
 class ListPatronsHandler:
@@ -39,25 +40,38 @@ class ListPatronsHandler:
         self.logger = logger
 
     async def handle(self, query: ListPatronsQuery) -> List[PatronReadModel]:
+        return (await self.handle_page(query)).items
+
+    async def handle_page(self, query: ListPatronsQuery) -> QueryPage[PatronReadModel]:
+        validate_pagination(
+            limit=query.limit, offset=query.offset, cursor=query.cursor
+        )
         cache_key = self.cache.build_list_key(
             self.CACHE_PREFIX,
             only_suspended=query.only_suspended,
             membership_tier=query.membership_tier,
             limit=query.limit,
             offset=query.offset,
+            cursor=query.cursor,
         )
 
-        cached = await self.cache.get(cache_key)
-        if cached is not None:
-            self.logger.debug(f"Cache hit for {cache_key}")
-            return [PatronReadModel(**item) for item in cached]
+        async def load() -> dict:
+            page = await self.query_repository.find_page(
+                only_suspended=query.only_suspended,
+                membership_tier=query.membership_tier,
+                limit=query.limit,
+                offset=query.offset,
+                cursor=query.cursor,
+            )
+            return {
+                "items": [item.__dict__ for item in page.items],
+                "next_cursor": page.next_cursor,
+                "total": page.total,
+            }
 
-        results = await self.query_repository.find_all(
-            only_suspended=query.only_suspended,
-            membership_tier=query.membership_tier,
-            limit=query.limit,
-            offset=query.offset,
+        payload = await self.cache.get_or_set(cache_key, load)
+        return QueryPage(
+            items=[PatronReadModel.from_mapping(item) for item in payload["items"]],
+            next_cursor=payload.get("next_cursor"),
+            total=payload.get("total"),
         )
-
-        await self.cache.set(cache_key, [r.__dict__ for r in results])
-        return results

@@ -702,6 +702,23 @@ class TestCircuitBreakerSyncExecution:
         assert result == "done"
         assert loop_ticks >= 5
 
+    @pytest.mark.asyncio
+    async def test_sync_side_effect_is_not_abandoned_on_async_timeout(self):
+        import time as time_module
+
+        cb = CircuitBreaker(name="test", call_timeout=0.01)
+        completed = False
+
+        def slow_side_effect():
+            nonlocal completed
+            time_module.sleep(0.03)
+            completed = True
+            return "sent"
+
+        assert await cb.execute(slow_side_effect) == "sent"
+        assert completed is True
+        assert cb.metrics.successful_requests == 1
+
 
 class TestCircuitBreakerConcurrency:
     """Tests for circuit breaker under concurrent access."""

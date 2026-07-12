@@ -37,8 +37,30 @@ class InvalidPatronIdException(PatronException):
 
 class InvalidPatronNameException(PatronException):
     """Raised when a patron name is invalid."""
-    def __init__(self, field: str):
-        super().__init__(f"{field} cannot be empty")
+    def __init__(self, field: str, detail: str = "cannot be empty"):
+        super().__init__(f"{field} {detail}")
+
+
+class InvalidSuspensionReasonException(PatronException):
+    """Raised when a suspension reason is blank or unbounded."""
+
+    def __init__(self):
+        super().__init__("Suspension reason must be between 1 and 500 characters")
+
+
+class InvalidPatronStateException(PatronException):
+    """Raised when construction/rehydration violates Patron invariants."""
+
+    def __init__(self, detail: str):
+        super().__init__(f"Invalid patron state: {detail}")
+
+
+class PatronEmailAlreadyRegisteredException(PatronException):
+    """Raised when normalized patron email uniqueness is violated."""
+
+    def __init__(self, email: str):
+        self.email = email
+        super().__init__(f"A patron with email {email} is already registered")
 
 
 class PatronNotFoundException(PatronException):

@@ -17,12 +17,20 @@ class ILoanCommandRepository(Protocol):
         """Find a loan by ID."""
         ...
 
+    async def get_by_reservation_id(self, reservation_id: str) -> Optional[Loan]:
+        """Find the one loan created for a reservation, if it exists."""
+        ...
+
     async def get_active_loans_for_patron(self, patron_id: str) -> List[Loan]:
-        """Get all active loans for a patron."""
+        """Get all outstanding loans (active, overdue, or lost) for a patron."""
         ...
 
     async def get_active_loan_for_book(self, catalog_book_id: str) -> Optional[Loan]:
-        """Get the active loan for a book, if any."""
+        """Get the outstanding loan for a book, if any."""
+        ...
+
+    async def count_outstanding_for_patron(self, patron_id: str) -> int:
+        """Count non-terminal loans for a patron."""
         ...
 
     async def update(self, loan: Loan) -> None:

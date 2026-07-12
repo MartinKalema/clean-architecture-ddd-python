@@ -17,6 +17,7 @@ import asyncio
 import os
 import signal
 import sys
+from pathlib import Path
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,6 +27,19 @@ from src.application.command_handlers.release_expired_reservations import (
     ReleaseExpiredReservationsCommand,
 )
 from src.container import Container
+
+
+async def release_all_expired(handler_factory, command) -> int:
+    """Drain one sweep while preserving post-commit decoration per batch."""
+    released_count = 0
+    while True:
+        # The production factory returns the cache-invalidating decorator.
+        # Constructing and invoking it once per batch guarantees that a later
+        # batch failure cannot skip invalidation for an earlier commit.
+        result = await handler_factory().handle(command)
+        released_count += result.released_count
+        if not result.batch_full:
+            return released_count
 
 
 async def main() -> None:
@@ -46,6 +60,8 @@ async def main() -> None:
         f"interval={interval_seconds}s)"
     )
 
+    database = container.postgresql()
+    await database.verify_schema_current()
     stopping = asyncio.Event()
 
     def signal_handler() -> None:
@@ -57,22 +73,34 @@ async def main() -> None:
         loop.add_signal_handler(sig, signal_handler)
 
     command = ReleaseExpiredReservationsCommand(ttl_seconds=ttl_seconds)
-    while not stopping.is_set():
-        try:
-            handler = container.release_expired_reservations_handler()
-            result = await handler.handle(command)
-            if result.released_count:
-                logger.info(f"Reaper released {result.released_count} reservation(s)")
-        except Exception as e:
-            logger.error(f"Reaper sweep failed: {e}")
+    heartbeat_path = Path(
+        os.environ.get(
+            "RESERVATION_REAPER_HEARTBEAT_PATH",
+            "/tmp/reservation-reaper-heartbeat",
+        )
+    )
+    try:
+        while not stopping.is_set():
+            try:
+                released_count = await release_all_expired(
+                    container.release_expired_reservations_handler,
+                    command,
+                )
+                if released_count:
+                    logger.info(
+                        f"Reaper released {released_count} reservation(s)"
+                    )
+                heartbeat_path.touch()
+            except Exception as e:
+                logger.error(f"Reaper sweep failed: {e}")
 
-        try:
-            await asyncio.wait_for(stopping.wait(), timeout=interval_seconds)
-        except asyncio.TimeoutError:
-            pass
-
-    await container.postgresql().dispose()
-    logger.info("Reservation reaper stopped")
+            try:
+                await asyncio.wait_for(stopping.wait(), timeout=interval_seconds)
+            except asyncio.TimeoutError:
+                pass
+    finally:
+        await database.dispose()
+        logger.info("Reservation reaper stopped")
 
 
 if __name__ == "__main__":

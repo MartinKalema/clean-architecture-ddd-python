@@ -12,7 +12,7 @@ from .json_logger import JsonLogger
 from .standard_logger import StandardLogger
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
+    from src.application.ports import ILogger
 
 
 class LoggerFactory:

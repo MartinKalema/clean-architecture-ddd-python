@@ -15,11 +15,14 @@ class LoanCreated(DomainEvent):
     """
     Published when a loan is created.
 
-    This is an integration event that Notification context subscribes to
-    in order to send confirmation emails.
+    Catalog consumes this tentative fact to confirm the exact reservation.
+    Notifications wait for ``CatalogBookBorrowed`` so a loan that must be
+    compensated can never produce a false confirmation email.
     """
 
     loan_id: str
+    reservation_id: str
+    reservation_generation: int
     patron_id: str
     patron_email: str
     book_id: str
@@ -33,10 +36,29 @@ class LoanCompleted(DomainEvent):
     """Published when a loan is completed (book returned)."""
 
     loan_id: str
+    reservation_id: str
+    reservation_generation: int
     patron_id: str
     book_id: str
     returned_at: datetime
     was_overdue: bool
+
+
+@dataclass(frozen=True)
+class LoanCancelled(DomainEvent):
+    """
+    Published when a tentative loan cannot be confirmed by Catalog.
+
+    Cancellation is compensation, not a return: it frees the outstanding-loan
+    uniqueness slot without claiming the patron possessed and returned a book.
+    """
+
+    loan_id: str
+    reservation_id: str
+    reservation_generation: int
+    patron_id: str
+    book_id: str
+    reason: str
 
 
 @dataclass(frozen=True)

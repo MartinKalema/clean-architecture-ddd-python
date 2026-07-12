@@ -37,8 +37,8 @@
       "status": {
         "type": "keyword"
       },
-      "is_overdue": {
-        "type": "boolean"
+      "version": {
+        "type": "long"
       }
     }
   },

@@ -23,13 +23,21 @@ from .exceptions import (
     BorrowerNotEligibleException,
     CatalogException,
     ConcurrentModificationException,
+    InvalidBorrowPeriodException,
+    InvalidCatalogReferenceException,
+    InvalidCatalogStateException,
+    InvalidReservationReasonException,
+    LoanCorrelationMismatchException,
+    StaleLoanCompletionException,
+    StaleReservationException,
 )
-from .interfaces import IBookCommandRepository, ICatalogUnitOfWork
-from .value_objects import ISBN, Author, BookId, BookStatus, Title
+from .interfaces import IBookCommandRepository
+from .value_objects import ISBN, Author, BookId, BookStatus, ReservationId, Title
 
 __all__ = [
     "Book",
     "BookId",
+    "ReservationId",
     "BookStatus",
     "Title",
     "Author",
@@ -41,7 +49,6 @@ __all__ = [
     "CatalogBookReserved",
     "CatalogBookReturned",
     "IBookCommandRepository",
-    "ICatalogUnitOfWork",
     "DomainException",
     "ValidationException",
     "CatalogException",
@@ -52,4 +59,11 @@ __all__ = [
     "BorrowerEmailRequiredException",
     "BorrowerNotEligibleException",
     "ConcurrentModificationException",
+    "StaleReservationException",
+    "LoanCorrelationMismatchException",
+    "StaleLoanCompletionException",
+    "InvalidBorrowPeriodException",
+    "InvalidCatalogReferenceException",
+    "InvalidCatalogStateException",
+    "InvalidReservationReasonException",
 ]

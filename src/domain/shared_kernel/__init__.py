@@ -5,38 +5,26 @@ In DDD, a Shared Kernel is a subset of the domain model that two or more
 bounded contexts agree to share. Changes to the shared kernel require
 coordination between all teams that use it.
 """
-from .aggregate_root import AggregateRoot
-from .domain_event import DomainEvent
+from .aggregate_root import AggregateRoot, aggregate_transition
+from .domain_event import DomainEvent, caused_by
 from .exceptions import (
     DomainException,
-    EmailDeliveryException,
     EmptyValueException,
     InvalidEmailException,
     ValidationException,
 )
-from .interfaces import (
-    ICache,
-    IConfigurationProvider,
-    IEmailService,
-    IEventDispatcher,
-    IEventHandler,
-    ILogger,
-)
 from .value_objects import EmailAddress
+from .time import require_utc_datetime
 
 __all__ = [
     "AggregateRoot",
+    "aggregate_transition",
     "DomainEvent",
+    "caused_by",
     "EmailAddress",
-    "ICache",
-    "IConfigurationProvider",
-    "IEmailService",
-    "IEventDispatcher",
-    "IEventHandler",
-    "ILogger",
     "DomainException",
-    "EmailDeliveryException",
     "ValidationException",
     "InvalidEmailException",
     "EmptyValueException",
+    "require_utc_datetime",
 ]

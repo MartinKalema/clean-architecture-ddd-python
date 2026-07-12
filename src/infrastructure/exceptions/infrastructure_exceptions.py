@@ -26,6 +26,14 @@ class MessageBrokerException(InfrastructureException):
         self.original_exception = original_exception
 
 
+class UnrecoverableMessageException(MessageBrokerException):
+    """Raised when retry cannot make a malformed message processable."""
+
+
+class DurableMessageHandlingException(MessageBrokerException):
+    """Raised when a state transition must retry until it converges."""
+
+
 class SearchEngineException(InfrastructureException):
     """Raised when a search engine operation fails."""
     def __init__(self, message: str, original_exception: Optional[Exception] = None):

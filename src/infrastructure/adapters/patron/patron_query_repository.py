@@ -11,11 +11,21 @@ unavailable (or the circuit is open) searches degrade to PostgreSQL.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.application.query_handlers.pagination import (
+    InvalidPaginationError,
+    QueryPage,
+    cursor_string,
+    cursor_scope,
+    decode_cursor_with_backend,
+    encode_cursor,
+    validate_pagination,
+)
 from src.application.query_handlers.read_models import PatronReadModel
 from src.infrastructure.adapters.patron.patron_model import PatronModel
 from src.infrastructure.exceptions import (
@@ -24,7 +34,10 @@ from src.infrastructure.exceptions import (
 )
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
+    from src.application.ports import ILogger
+    from src.infrastructure.adapters.cdc.kafka_projection_freshness import (
+        KafkaProjectionFreshness,
+    )
     from src.infrastructure.adapters.resilience import CircuitBreaker
     from src.infrastructure.external.elasticsearch_client import ElasticsearchClient
 
@@ -40,6 +53,16 @@ class PatronQueryRepository:
     """
 
     ES_INDEX = "patrons"
+    ES_SORT: list[dict[str, Any]] = [
+        {
+            "registered_at": {
+                "order": "asc",
+                "missing": "_last",
+                "format": "strict_date_time_nanos",
+            }
+        },
+        {"id": {"order": "asc"}},
+    ]
 
     def __init__(
         self,
@@ -47,11 +70,15 @@ class PatronQueryRepository:
         elasticsearch_client: ElasticsearchClient,
         circuit_breaker: CircuitBreaker,
         logger: ILogger,
+        search_enabled: bool = True,
+        projection_freshness: KafkaProjectionFreshness | None = None,
     ):
         self._session_factory = session_factory
         self._es_client = elasticsearch_client
         self._circuit_breaker = circuit_breaker
         self._logger = logger
+        self._search_enabled = search_enabled
+        self._projection_freshness = projection_freshness
 
     async def find_by_id(self, patron_id: str) -> Optional[PatronReadModel]:
         """Find a patron by ID (uses PostgreSQL for consistency)."""
@@ -83,10 +110,65 @@ class PatronQueryRepository:
         offset: int = 0,
     ) -> List[PatronReadModel]:
         """Find patrons with optional filters (uses Elasticsearch for search)."""
+        page = await self.find_page(
+            only_suspended=only_suspended,
+            membership_tier=membership_tier,
+            limit=limit,
+            offset=offset,
+        )
+        return page.items
+
+    async def find_page(
+        self,
+        only_suspended: bool = False,
+        membership_tier: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        cursor: str | None = None,
+    ) -> QueryPage[PatronReadModel]:
+        validate_pagination(limit=limit, offset=offset, cursor=cursor)
+        scope = cursor_scope(
+            "patrons",
+            {
+                "only_suspended": only_suspended,
+                "membership_tier": membership_tier,
+            },
+        )
+        cursor_backend = None
+        search_after = None
+        if cursor:
+            search_after, cursor_backend = decode_cursor_with_backend(
+                cursor, expected_scope=scope, expected_values=2
+            )
+        if search_after is not None:
+            search_after = [
+                _cursor_datetime(search_after[0]).isoformat(),
+                cursor_string(
+                    search_after[1],
+                    field="patron id",
+                    max_length=64,
+                    pattern=r"[A-Za-z0-9][A-Za-z0-9_-]*",
+                ),
+            ]
         query = self._build_es_query(
             only_suspended=only_suspended,
             membership_tier=membership_tier,
         )
+
+        search_fresh = await self._search_is_fresh()
+        if not search_fresh or cursor_backend == "postgresql":
+            if cursor_backend == "elasticsearch":
+                raise SearchEngineException(
+                    "This page cursor is pinned to Elasticsearch, which is disabled or lagging"
+                )
+            return await self._find_page_from_db(
+                only_suspended=only_suspended,
+                membership_tier=membership_tier,
+                limit=limit,
+                offset=offset,
+                cursor_values=search_after,
+                cursor_scope_value=scope,
+            )
 
         try:
             result = await self._circuit_breaker.execute(
@@ -95,27 +177,62 @@ class PatronQueryRepository:
                 query=query,
                 size=limit,
                 from_=offset,
+                sort=self.ES_SORT,
+                search_after=search_after,
             )
         except (SearchEngineException, CircuitBreakerOpenException) as e:
+            if cursor_backend == "elasticsearch":
+                raise
             self._logger.warning(
                 f"Elasticsearch unavailable for patron search, "
                 f"falling back to PostgreSQL: {e}"
             )
-            return await self._find_all_from_db(
+            return await self._find_page_from_db(
                 only_suspended=only_suspended,
                 membership_tier=membership_tier,
                 limit=limit,
                 offset=offset,
+                cursor_values=search_after,
+                cursor_scope_value=scope,
             )
 
-        return [
-            self._to_read_model_from_es(hit)
-            for hit in result["hits"]
-        ]
+        hits = result["hits"]
+        try:
+            items = [self._to_read_model_from_es(hit) for hit in hits]
+        except (KeyError, TypeError, ValueError) as e:
+            if cursor_backend == "elasticsearch":
+                raise SearchEngineException(
+                    "Elasticsearch returned an invalid document for a pinned cursor",
+                    original_exception=e,
+                ) from e
+            self._logger.warning(
+                f"Invalid Elasticsearch patron document; falling back to PostgreSQL: {e}"
+            )
+            return await self._find_page_from_db(
+                only_suspended=only_suspended,
+                membership_tier=membership_tier,
+                limit=limit,
+                offset=offset,
+                cursor_values=search_after,
+                cursor_scope_value=scope,
+            )
+        next_cursor = None
+        if len(hits) == limit and hits:
+            sort_values = hits[-1].get("_sort") or [
+                items[-1].registered_at,
+                items[-1].id,
+            ]
+            next_cursor = encode_cursor(
+                scope, sort_values, backend="elasticsearch"
+            )
+        return QueryPage(items=items, next_cursor=next_cursor, total=result.get("total"))
 
     async def count(self, only_suspended: bool = False) -> int:
         """Count patrons matching criteria (uses Elasticsearch)."""
         query = self._build_es_query(only_suspended=only_suspended)
+
+        if not await self._search_is_fresh():
+            return await self._count_from_db(only_suspended=only_suspended)
 
         try:
             return await self._circuit_breaker.execute(
@@ -130,6 +247,13 @@ class PatronQueryRepository:
             )
             return await self._count_from_db(only_suspended=only_suspended)
 
+    async def _search_is_fresh(self) -> bool:
+        if not self._search_enabled:
+            return False
+        if self._projection_freshness is None:
+            return True
+        return await self._projection_freshness.is_fresh()
+
     async def _find_all_from_db(
         self,
         only_suspended: bool = False,
@@ -138,6 +262,32 @@ class PatronQueryRepository:
         offset: int = 0,
     ) -> List[PatronReadModel]:
         """PostgreSQL fallback for find_all."""
+        page = await self._find_page_from_db(
+            only_suspended=only_suspended,
+            membership_tier=membership_tier,
+            limit=limit,
+            offset=offset,
+            cursor_values=None,
+            cursor_scope_value=cursor_scope(
+                "patrons",
+                {
+                    "only_suspended": only_suspended,
+                    "membership_tier": membership_tier,
+                },
+            ),
+        )
+        return page.items
+
+    async def _find_page_from_db(
+        self,
+        *,
+        only_suspended: bool,
+        membership_tier: Optional[str],
+        limit: int,
+        offset: int,
+        cursor_values: list[Any] | None,
+        cursor_scope_value: str,
+    ) -> QueryPage[PatronReadModel]:
         stmt = select(PatronModel)
 
         if only_suspended:
@@ -145,11 +295,36 @@ class PatronQueryRepository:
         if membership_tier:
             stmt = stmt.where(PatronModel.membership_tier == membership_tier)
 
-        stmt = stmt.order_by(PatronModel.registered_at).limit(limit).offset(offset)
+        if cursor_values is not None:
+            registered_at = _cursor_datetime(cursor_values[0])
+            patron_id = str(cursor_values[1])
+            stmt = stmt.where(
+                or_(
+                    PatronModel.registered_at > registered_at,
+                    and_(
+                        PatronModel.registered_at == registered_at,
+                        PatronModel.id > patron_id,
+                    ),
+                )
+            )
+
+        stmt = (
+            stmt.order_by(PatronModel.registered_at, PatronModel.id)
+            .limit(limit)
+            .offset(offset)
+        )
 
         async with self._session_factory() as session:
             result = await session.execute(stmt)
-            return [self._to_read_model_from_db(row) for row in result.scalars().all()]
+            items = [self._to_read_model_from_db(row) for row in result.scalars().all()]
+        next_cursor = None
+        if len(items) == limit and items:
+            next_cursor = encode_cursor(
+                cursor_scope_value,
+                [items[-1].registered_at, items[-1].id],
+                backend="postgresql",
+            )
+        return QueryPage(items=items, next_cursor=next_cursor)
 
     async def _count_from_db(self, only_suspended: bool = False) -> int:
         """PostgreSQL fallback for count."""
@@ -196,14 +371,25 @@ class PatronQueryRepository:
 
     def _to_read_model_from_es(self, hit: dict[str, Any]) -> PatronReadModel:
         """Convert Elasticsearch hit to read model."""
-        return PatronReadModel(
-            id=hit["id"],
-            first_name=hit.get("first_name", ""),
-            last_name=hit.get("last_name", ""),
-            name=hit.get("full_name", ""),
-            email=hit.get("email", ""),
-            membership_tier=hit.get("membership_tier"),
-            is_suspended=hit.get("is_suspended", False),
-            suspended_reason=hit.get("suspended_reason"),
-            registered_at=hit.get("registered_at"),
-        )
+        return PatronReadModel.from_mapping(hit)
+
+
+def _cursor_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if result.tzinfo is None:
+                return result.replace(tzinfo=timezone.utc)
+            return result.astimezone(timezone.utc)
+        except ValueError as exc:
+            raise InvalidPaginationError("cursor contains an invalid datetime") from exc
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value / 1_000, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError) as exc:
+            raise InvalidPaginationError(
+                "cursor contains an invalid datetime"
+            ) from exc
+    raise InvalidPaginationError("cursor contains an invalid datetime")

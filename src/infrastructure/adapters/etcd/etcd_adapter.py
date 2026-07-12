@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 from src.infrastructure.external.etcd_client import EtcdClient
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
+    from src.application.ports import ILogger
 
 
 class EtcdAdapter:

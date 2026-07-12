@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.container import Container
@@ -66,6 +67,7 @@ async def live():
 async def readiness(
     postgresql=Depends(Provide[Container.postgresql]),
     registry=Depends(Provide[Container.circuit_breaker_registry]),
+    logger=Depends(Provide[Container.logger]),
 ):
     """
     Readiness check with dependency verification.
@@ -84,7 +86,11 @@ async def readiness(
         await postgresql.ping()
         checks["postgresql"] = {"status": "healthy"}
     except Exception as e:
-        checks["postgresql"] = {"status": "unhealthy", "error": str(e)}
+        logger.error("PostgreSQL readiness check failed", exception=e)
+        checks["postgresql"] = {
+            "status": "unhealthy",
+            "error": "dependency unavailable",
+        }
         all_healthy = False
 
     unhealthy_circuits = registry.get_unhealthy()
@@ -106,7 +112,10 @@ async def readiness(
     )
 
     if not all_healthy:
-        raise HTTPException(status_code=503, detail=response.model_dump())
+        # Returning the response directly preserves the redacted dependency
+        # checks. Raising HTTPException would route the structured detail
+        # through the generic error envelope and discard the useful checks.
+        return JSONResponse(status_code=503, content=response.model_dump())
 
     return response
 

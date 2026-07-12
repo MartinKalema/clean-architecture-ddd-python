@@ -10,13 +10,11 @@ Responsibilities:
 - Enforcing borrowing rules and limits
 - Managing holds and reservations
 
-Key Aggregates:
-- Loan: Represents an active or completed book loan
-- LoanableBook: The Lending context's view of a book (focused on availability)
+Key Aggregate:
+- Loan: Represents an active, terminal, overdue, or lost book loan
 
 Ubiquitous Language:
 - Loan: The act of lending a book to a patron
-- LoanableBook: A book that can be borrowed (references Catalog's book)
 - DueDate: When the book must be returned
 - Overdue: A book not returned by its due date
 
@@ -30,33 +28,77 @@ The ACL protects this context from changes in upstream contexts. If Catalog
 or Patron change their models, only the ACL needs to be updated.
 """
 from .entities.loan import Loan
-from .entities.loanable_book import LoanableBook
-from .events.lending_events import BookOverdue, LoanCompleted, LoanCreated, LoanExtended
+from .events.lending_events import (
+    BookOverdue,
+    LoanCancelled,
+    LoanCompleted,
+    LoanCreated,
+    LoanExtended,
+)
 from .exceptions import (
+    BookNotAvailableException,
     CannotExtendOverdueLoanException,
+    ConcurrentLoanCreationException,
+    ConcurrentModificationException,
+    InvalidLoanDurationException,
+    InvalidLoanExtensionException,
     InvalidLoanIdException,
+    InvalidLoanReferenceException,
+    InvalidLoanReturnDateException,
+    InvalidLoanStateException,
+    InvalidCancellationReasonException,
+    InvalidReservationIdException,
+    InvalidReservationGenerationException,
     LoanAlreadyReturnedException,
     LoanNotActiveException,
     LoanNotOverdueException,
+    LoanNotFoundException,
+    PatronBorrowingLimitReachedException,
+    PatronNotEligibleForLoanException,
+    ReservationCorrelationMismatchException,
 )
-from .interfaces import ILoanCommandRepository, ILoanUnitOfWork
-from .value_objects.lending_vo import DueDate, LoanId, LoanStatus
+from .interfaces import ILoanCommandRepository
+from .value_objects import (
+    BorrowingTerms,
+    DueDate,
+    LendingPolicy,
+    LoanId,
+    LoanStatus,
+    ReservationId,
+)
 
 __all__ = [
     "Loan",
-    "LoanableBook",
     "LoanId",
+    "ReservationId",
     "DueDate",
     "LoanStatus",
+    "BorrowingTerms",
+    "LendingPolicy",
     "LoanCreated",
     "LoanCompleted",
+    "LoanCancelled",
     "LoanExtended",
     "BookOverdue",
     "ILoanCommandRepository",
-    "ILoanUnitOfWork",
     "InvalidLoanIdException",
+    "InvalidLoanDurationException",
+    "InvalidLoanExtensionException",
+    "InvalidLoanReferenceException",
+    "InvalidLoanReturnDateException",
+    "InvalidLoanStateException",
+    "InvalidCancellationReasonException",
+    "InvalidReservationIdException",
+    "InvalidReservationGenerationException",
     "LoanAlreadyReturnedException",
     "LoanNotActiveException",
     "LoanNotOverdueException",
     "CannotExtendOverdueLoanException",
+    "ConcurrentLoanCreationException",
+    "ConcurrentModificationException",
+    "PatronBorrowingLimitReachedException",
+    "PatronNotEligibleForLoanException",
+    "ReservationCorrelationMismatchException",
+    "BookNotAvailableException",
+    "LoanNotFoundException",
 ]

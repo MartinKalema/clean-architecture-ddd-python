@@ -57,10 +57,11 @@ class BrowserUser(BaseLibraryUser):
 
 class BorrowerUser(BaseLibraryUser):
     """
-    Active patron - creates loans and returns books.
+    Active patron - borrows and returns books through the public saga.
 
     Represents 30% of typical library traffic.
-    Uses the new Loan API instead of book borrow/return.
+    Loan creation is internal; public clients reserve a catalog book and
+    observe the resulting loan.
     """
 
     weight = 30
@@ -96,7 +97,7 @@ class BorrowerUser(BaseLibraryUser):
         if self._my_books:
             self.get_book(random.choice(self._my_books))
 
-    @task(3)
+    @task(6)
     @tag("write", "saga")
     def borrow_via_saga(self):
         """
@@ -114,26 +115,6 @@ class BorrowerUser(BaseLibraryUser):
         )
         if book_id:
             self.borrow_book(book_id, self._patron["email"])
-
-    @task(3)
-    @tag("write", "loan")
-    def create_new_loan(self):
-        """Create a loan using the Loan API."""
-        if not self._patron:
-            return
-
-        response = self.client.get("/books", name="/books (for loan)")
-        if response.status_code == 200:
-            books = response.json()
-            available = [b for b in books if not b.get("is_borrowed", False)]
-            if available:
-                book = random.choice(available)
-                self.create_loan(
-                    patron_id=self._patron["id"],
-                    patron_email=self._patron["email"],
-                    book_id=book["id"],
-                    book_title=book["title"]
-                )
 
     @task(2)
     @tag("read", "loan")
@@ -266,7 +247,7 @@ class StressTestUser(BaseLibraryUser):
 
     @task(3)
     def rapid_create_and_loan(self):
-        """Rapid create book and loan cycle."""
+        """Rapid create-and-reserve cycle through the public borrow workflow."""
         if not self._patron:
             return
 
@@ -275,15 +256,7 @@ class StressTestUser(BaseLibraryUser):
             author="StressBot"
         )
         if book_id:
-            response = self.client.get(f"/books/{book_id}")
-            if response.status_code == 200:
-                book = response.json()
-                self.create_loan(
-                    patron_id=self._patron["id"],
-                    patron_email=self._patron["email"],
-                    book_id=book_id,
-                    book_title=book["title"]
-                )
+            self.borrow_book(book_id, self._patron["email"])
 
     @task(2)
     def health_spam(self):

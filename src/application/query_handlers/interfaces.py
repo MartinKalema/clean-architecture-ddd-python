@@ -16,6 +16,7 @@ from src.application.query_handlers.read_models import (
     LoanReadModel,
     PatronReadModel,
 )
+from src.application.query_handlers.pagination import QueryPage
 
 
 class IBookQueryRepository(Protocol):
@@ -33,6 +34,18 @@ class IBookQueryRepository(Protocol):
         limit: int = 100,
         offset: int = 0,
     ) -> List[BookReadModel]:
+        ...
+
+    async def find_page(
+        self,
+        only_available: bool = False,
+        only_borrowed: bool = False,
+        author_contains: Optional[str] = None,
+        title_contains: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        cursor: Optional[str] = None,
+    ) -> QueryPage[BookReadModel]:
         ...
 
     async def count(
@@ -61,6 +74,16 @@ class IPatronQueryRepository(Protocol):
     ) -> List[PatronReadModel]:
         ...
 
+    async def find_page(
+        self,
+        only_suspended: bool = False,
+        membership_tier: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        cursor: Optional[str] = None,
+    ) -> QueryPage[PatronReadModel]:
+        ...
+
     async def count(self, only_suspended: bool = False) -> int:
         ...
 
@@ -78,6 +101,16 @@ class ILoanQueryRepository(Protocol):
         limit: int = 100,
         offset: int = 0,
     ) -> List[LoanReadModel]:
+        ...
+
+    async def find_by_patron_page(
+        self,
+        patron_id: str,
+        only_active: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+        cursor: Optional[str] = None,
+    ) -> QueryPage[LoanReadModel]:
         ...
 
     async def find_overdue(self, limit: int = 100) -> List[LoanReadModel]:

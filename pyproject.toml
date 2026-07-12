@@ -26,6 +26,9 @@ dependencies = [
     "etcd3",
     "protobuf>=3.19.0,<4.0.0",
     "python-dotenv",
+    # Alembic must validate and apply the operator-declared IANA timezone even
+    # on minimal containers or hosts without a system timezone database.
+    "tzdata>=2024.1",
     "redis",
     "aiokafka",
     "aiohttp",

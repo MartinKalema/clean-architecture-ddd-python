@@ -1,7 +1,16 @@
+from pathlib import Path
 from typing import Any, Dict
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
+
+
+class DatabaseSchemaMismatchError(RuntimeError):
+    """Raised when the database was not migrated to this release's schema."""
 
 
 class PostgreSQL:
@@ -56,17 +65,62 @@ class PostgreSQL:
         if url.startswith("sqlite://"):
             return url.replace("sqlite://", "sqlite+aiosqlite://")
         elif url.startswith("postgresql://") or url.startswith("postgres://"):
-            return url.replace("postgres://", "postgresql+asyncpg://").replace("postgresql://", "postgresql+asyncpg://")
+            return url.replace("postgres://", "postgresql+asyncpg://").replace(
+                "postgresql://", "postgresql+asyncpg://"
+            )
         return url
 
-    async def init_models(self):
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    async def verify_schema_current(
+        self,
+        alembic_config_path: str | Path | None = None,
+    ) -> None:
+        """Fail unless the database revision exactly matches Alembic head.
+
+        Application instances never migrate the database themselves. The
+        deployment migrator owns that control-plane operation; instances only
+        enforce its postcondition before accepting traffic.
+        """
+        project_root = Path(__file__).resolve().parents[3]
+        config_path = Path(alembic_config_path or project_root / "alembic.ini").resolve()
+        if not config_path.is_file():
+            raise DatabaseSchemaMismatchError(
+                f"Alembic configuration was not found at {config_path}"
+            )
+
+        alembic_config = Config(str(config_path))
+        # ``script_location`` in alembic.ini is intentionally relative for the
+        # CLI. Resolve it here so startup does not depend on its working dir.
+        script_location = alembic_config.get_main_option("script_location")
+        if not script_location:
+            raise DatabaseSchemaMismatchError("Alembic script_location is not configured")
+        script_path = Path(script_location)
+        if not script_path.is_absolute():
+            script_path = config_path.parent / script_path
+        alembic_config.set_main_option("script_location", str(script_path.resolve()))
+        repository_heads = set(ScriptDirectory.from_config(alembic_config).get_heads())
+        if not repository_heads:
+            raise DatabaseSchemaMismatchError("The Alembic repository has no head revision")
+
+        try:
+            async with self.engine.connect() as connection:
+                result = await connection.execute(text("SELECT version_num FROM alembic_version"))
+                database_heads = set(result.scalars().all())
+        except SQLAlchemyError as exc:
+            raise DatabaseSchemaMismatchError(
+                "Database schema is not initialized; run 'alembic upgrade head'"
+            ) from exc
+
+        if database_heads != repository_heads:
+            database_revision = ", ".join(sorted(database_heads)) or "<none>"
+            repository_revision = ", ".join(sorted(repository_heads))
+            raise DatabaseSchemaMismatchError(
+                "Database schema revision mismatch: "
+                f"database={database_revision}, repository={repository_revision}. "
+                "Run 'alembic upgrade head' before starting the application."
+            )
 
     async def ping(self) -> None:
         """Verify connectivity; raises if the database is unreachable."""
-        from sqlalchemy import text
-
         async with self.session_factory() as session:
             await session.execute(text("SELECT 1"))
 

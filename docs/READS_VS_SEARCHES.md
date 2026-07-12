@@ -174,3 +174,34 @@ SELECT * FROM books WHERE author_id = 'xyz';
 ## Key Takeaway
 
 Simple reads can stay on the write database, but complex searches benefit from a dedicated read model optimized for that access pattern. This is the essence of CQRS - use the right tool for each type of operation.
+
+## Pagination and Fallback Contract
+
+List queries have one stable order in both stores:
+
+| Read | Order |
+|---|---|
+| Books | `title ASC, id ASC` |
+| Patrons | `registered_at ASC, id ASC` |
+| Patron loans | `borrowed_at DESC, id ASC` |
+| Overdue loans | `due_date ASC, id ASC` |
+
+The ID tie-breaker is mandatory; sorting by a non-unique field alone can skip
+or duplicate rows between pages. Offset pagination is compatibility-only and
+is rejected when `offset + limit > 10,000`. New clients use the opaque,
+filter-scoped cursor returned in `X-Next-Cursor`. The cursor is also pinned to
+the backend that produced its sort tuple. A first page can fall back from
+Elasticsearch to PostgreSQL, but an in-progress Elasticsearch page returns a
+temporary availability error if Elasticsearch disappears; it never applies an
+Elasticsearch sort tuple under a potentially different database collation.
+
+When Elasticsearch is unavailable, title/author substring search falls back
+to PostgreSQL `ILIKE` with user wildcard characters escaped. Migration 007
+adds `pg_trgm` GIN indexes for this exact operator shape; ordinary B-tree
+indexes do not accelerate a leading-wildcard predicate.
+
+"Overdue" is never stored as a durable boolean. It means `status NOT IN
+(returned, cancelled) AND due_date < now` and is evaluated at request time in
+both Elasticsearch and PostgreSQL, so a loan becomes overdue even when no
+row-change event occurs. Likewise, `only_active` means every outstanding loan,
+including records already classified as `overdue` or `lost`.

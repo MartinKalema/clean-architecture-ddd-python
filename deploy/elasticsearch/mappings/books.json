@@ -13,6 +13,12 @@
           ]
         }
       },
+      "normalizer": {
+        "sort_normalizer": {
+          "type": "custom",
+          "filter": ["lowercase"]
+        }
+      },
       "filter": {
         "autocomplete_filter": {
           "type": "edge_ngram",
@@ -38,6 +44,10 @@
           },
           "keyword": {
             "type": "keyword"
+          },
+          "sort": {
+            "type": "keyword",
+            "normalizer": "sort_normalizer"
           }
         }
       },
@@ -69,6 +79,9 @@
       },
       "reserved_at": {
         "type": "date"
+      },
+      "version": {
+        "type": "long"
       }
     }
   },

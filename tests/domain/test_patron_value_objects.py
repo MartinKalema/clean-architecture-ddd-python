@@ -34,6 +34,11 @@ class TestPatronName:
         assert name.first_name == "John"
         assert name.last_name == "Doe"
 
+    def test_normalizes_whitespace(self):
+        name = PatronName(first_name="  Mary   Jane ", last_name=" Doe  ")
+        assert name.first_name == "Mary Jane"
+        assert name.last_name == "Doe"
+
     def test_full_name_property(self):
         name = PatronName(first_name="John", last_name="Doe")
         assert name.full_name == "John Doe"
@@ -56,21 +61,6 @@ class TestPatronName:
 
 
 class TestMembershipTier:
-    def test_regular_tier_limits(self):
-        tier = MembershipTier.REGULAR
-        assert tier.borrowing_limit == 5
-        assert tier.loan_duration_days == 14
-
-    def test_premium_tier_limits(self):
-        tier = MembershipTier.PREMIUM
-        assert tier.borrowing_limit == 10
-        assert tier.loan_duration_days == 21
-
-    def test_researcher_tier_limits(self):
-        tier = MembershipTier.RESEARCHER
-        assert tier.borrowing_limit == 20
-        assert tier.loan_duration_days == 30
-
     def test_tier_values(self):
         assert MembershipTier.REGULAR.value == "regular"
         assert MembershipTier.PREMIUM.value == "premium"

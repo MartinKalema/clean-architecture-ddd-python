@@ -7,14 +7,14 @@ They never modify state and can be optimized independently from writes.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
+from .pagination import InvalidPaginationError, QueryPage, validate_pagination
 from .read_models import BookReadModel
 
 if TYPE_CHECKING:
     from src.application.query_handlers.interfaces import IBookQueryRepository
-    from src.domain.shared_kernel import ICache, ILogger
+    from src.application.ports import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,7 @@ class ListBooksQuery:
     title_contains: Optional[str] = None
     limit: int = 20
     offset: int = 0
+    cursor: Optional[str] = None
 
 
 class ListBooksHandler:
@@ -57,6 +58,16 @@ class ListBooksHandler:
 
     async def handle(self, query: ListBooksQuery) -> List[BookReadModel]:
         """Execute the query to list books."""
+        return (await self.handle_page(query)).items
+
+    async def handle_page(self, query: ListBooksQuery) -> QueryPage[BookReadModel]:
+        validate_pagination(
+            limit=query.limit, offset=query.offset, cursor=query.cursor
+        )
+        if query.only_available and query.only_borrowed:
+            raise InvalidPaginationError(
+                "only_available and only_borrowed are mutually exclusive"
+            )
         cache_key = self.cache.build_list_key(
             self.CACHE_PREFIX,
             only_available=query.only_available,
@@ -65,22 +76,30 @@ class ListBooksHandler:
             title_contains=query.title_contains,
             limit=query.limit,
             offset=query.offset,
+            cursor=query.cursor,
         )
 
-        cached = await self.cache.get(cache_key)
-        if cached is not None:
-            self.logger.debug(f"Cache hit for {cache_key}")
-            return [BookReadModel(**item) for item in cached]
+        async def load() -> dict:
+            page = await self.query_repository.find_page(
+                only_available=query.only_available,
+                only_borrowed=query.only_borrowed,
+                author_contains=query.author_contains,
+                title_contains=query.title_contains,
+                limit=query.limit,
+                offset=query.offset,
+                cursor=query.cursor,
+            )
+            return {
+                "items": [item.__dict__ for item in page.items],
+                "next_cursor": page.next_cursor,
+                "total": page.total,
+            }
 
-        books = await self.query_repository.find_all(
-            only_available=query.only_available,
-            only_borrowed=query.only_borrowed,
-            author_contains=query.author_contains,
-            title_contains=query.title_contains,
-            limit=query.limit,
-            offset=query.offset,
+        payload = await self.cache.get_or_set(cache_key, load)
+        items = [BookReadModel.from_mapping(item) for item in payload["items"]]
+        self.logger.info(f"Listed {len(items)} books (query side)")
+        return QueryPage(
+            items=items,
+            next_cursor=payload.get("next_cursor"),
+            total=payload.get("total"),
         )
-
-        await self.cache.set(cache_key, [b.__dict__ for b in books])
-        self.logger.info(f"Listed {len(books)} books (query side)")
-        return books

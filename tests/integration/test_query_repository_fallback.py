@@ -8,6 +8,7 @@ empty results.
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.infrastructure.adapters.catalog import BookQueryRepository
@@ -47,9 +48,13 @@ async def _seed_books(test_db):
         await session.commit()
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def seeded_books(test_db, clean_integration_tables):
+    await _seed_books(test_db)
+
+
 @pytest.mark.asyncio
 async def test_find_all_falls_back_to_postgresql(test_db):
-    await _seed_books(test_db)
     repository = _repository(test_db, _broken_es_client())
 
     books = await repository.find_all(title_contains="Fallback")

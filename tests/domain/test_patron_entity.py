@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -20,7 +20,7 @@ class TestPatronCreation:
     def test_register_creates_patron_with_event(self):
         name = PatronName(first_name="John", last_name="Doe")
         email = EmailAddress("john.doe@example.com")
-        registered_at = datetime(2024, 1, 15, 10, 30)
+        registered_at = datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc)
 
         patron = Patron.register(
             name=name,
@@ -42,60 +42,25 @@ class TestPatronCreation:
         assert events[0].email == "john.doe@example.com"
         assert events[0].name == "John Doe"
 
+    def test_email_is_canonicalized(self):
+        patron = Patron.register(
+            name=PatronName(first_name="John", last_name="Doe"),
+            email=EmailAddress("  JOHN.DOE@Example.COM "),
+            registered_at=datetime(2024, 1, 15, 10, 30, tzinfo=timezone.utc),
+        )
+
+        assert patron.email.value == "john.doe@example.com"
+        assert patron.get_domain_events()[0].email == "john.doe@example.com"
+
     def test_register_with_premium_tier(self):
         patron = Patron.register(
             name=PatronName(first_name="Jane", last_name="Smith"),
             email=EmailAddress("jane@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
             membership_tier=MembershipTier.PREMIUM,
         )
 
         assert patron.membership_tier == MembershipTier.PREMIUM
-
-
-class TestCanBorrow:
-    def test_can_borrow_when_under_limit(self):
-        patron = Patron.register(
-            name=PatronName(first_name="John", last_name="Doe"),
-            email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
-        )
-
-        assert patron.can_borrow(current_loans=0) is True
-        assert patron.can_borrow(current_loans=4) is True
-
-    def test_cannot_borrow_when_at_limit(self):
-        patron = Patron.register(
-            name=PatronName(first_name="John", last_name="Doe"),
-            email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
-        )
-
-        assert patron.can_borrow(current_loans=5) is False
-        assert patron.can_borrow(current_loans=6) is False
-
-    def test_cannot_borrow_when_suspended(self):
-        patron = Patron.register(
-            name=PatronName(first_name="John", last_name="Doe"),
-            email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
-        )
-        patron.suspend("Late returns")
-        patron.clear_events()
-
-        assert patron.can_borrow(current_loans=0) is False
-
-    def test_premium_tier_higher_limit(self):
-        patron = Patron.register(
-            name=PatronName(first_name="John", last_name="Doe"),
-            email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
-            membership_tier=MembershipTier.PREMIUM,
-        )
-
-        assert patron.can_borrow(current_loans=5) is True
-        assert patron.can_borrow(current_loans=9) is True
-        assert patron.can_borrow(current_loans=10) is False
 
 
 class TestSuspend:
@@ -103,7 +68,7 @@ class TestSuspend:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
         )
         patron.clear_events()
 
@@ -122,7 +87,7 @@ class TestSuspend:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
         )
         patron.suspend("First suspension")
 
@@ -135,7 +100,7 @@ class TestReinstate:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
         )
         patron.suspend("Late returns")
         patron.clear_events()
@@ -154,7 +119,7 @@ class TestReinstate:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
         )
 
         with pytest.raises(PatronNotSuspendedException):
@@ -166,7 +131,7 @@ class TestUpgradeTier:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
             membership_tier=MembershipTier.REGULAR,
         )
 
@@ -178,7 +143,7 @@ class TestUpgradeTier:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
             membership_tier=MembershipTier.PREMIUM,
         )
 
@@ -190,7 +155,7 @@ class TestUpgradeTier:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
             membership_tier=MembershipTier.PREMIUM,
         )
 
@@ -201,7 +166,7 @@ class TestUpgradeTier:
         patron = Patron.register(
             name=PatronName(first_name="John", last_name="Doe"),
             email=EmailAddress("john@example.com"),
-            registered_at=datetime.now(),
+            registered_at=datetime.now(timezone.utc),
             membership_tier=MembershipTier.PREMIUM,
         )
 

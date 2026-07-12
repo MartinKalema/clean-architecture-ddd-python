@@ -1,13 +1,12 @@
 """
 Patron API Routes.
 """
-import re
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Depends, Header, Query, Response
+from pydantic import BaseModel, Field, field_validator
 
 from src.application.command_handlers.register_patron import (
     RegisterPatronCommand,
@@ -34,30 +33,33 @@ from src.application.query_handlers.list_patrons import (
     ListPatronsQuery,
 )
 from src.container import Container
-from src.domain.patron.exceptions import (
-    PatronAlreadySuspendedException,
-    PatronException,
-    PatronNotFoundException,
-    PatronNotSuspendedException,
-)
+from src.presentation.api.pagination import set_page_headers
 
 router = APIRouter(prefix="/patrons", tags=["Patrons"])
 
 
 class PatronCreate(BaseModel):
     """Request model for creating a patron."""
-    first_name: str
-    last_name: str
-    email: str
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=254)
     membership_tier: str = "regular"
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
-        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if not re.match(email_pattern, v):
+        v = v.strip().lower()
+        if "@" not in v:
             raise ValueError("Invalid email address")
         return v
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("Name cannot be blank")
+        return value
 
     @field_validator("membership_tier")
     @classmethod
@@ -70,7 +72,15 @@ class PatronCreate(BaseModel):
 
 class SuspendRequest(BaseModel):
     """Request model for suspending a patron."""
-    reason: str
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("Reason cannot be blank")
+        return value
 
 
 class UpgradeTierRequest(BaseModel):
@@ -103,37 +113,33 @@ class PatronResponse(BaseModel):
 @inject
 async def register_patron(
     patron: PatronCreate,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: RegisterPatronHandler = Depends(Provide[Container.register_patron_handler]),
 ):
     """Register a new patron."""
-    try:
-        command = RegisterPatronCommand(
-            first_name=patron.first_name,
-            last_name=patron.last_name,
-            email=patron.email,
-            membership_tier=patron.membership_tier,
-        )
-        result = await handler.handle(command)
-        return PatronResponse(
-            id=result.id,
-            name=result.name,
-            first_name=patron.first_name,
-            last_name=patron.last_name,
-            email=result.email,
-            membership_tier=result.membership_tier,
-            is_suspended=False,
-        )
-    except PatronException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    command = RegisterPatronCommand(
+        first_name=patron.first_name,
+        last_name=patron.last_name,
+        email=patron.email,
+        membership_tier=patron.membership_tier,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    return PatronResponse(**result.__dict__)
 
 
 @router.get("", response_model=List[PatronResponse])
 @inject
 async def list_patrons(
+    response: Response,
     only_suspended: bool = Query(False),
-    membership_tier: Optional[str] = Query(None),
+    membership_tier: Optional[str] = Query(None, max_length=16),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    cursor: Optional[str] = Query(None, max_length=1024),
     handler: ListPatronsHandler = Depends(Provide[Container.list_patrons_handler]),
 ):
     """List patrons with optional filters."""
@@ -142,8 +148,14 @@ async def list_patrons(
         membership_tier=membership_tier,
         limit=limit,
         offset=offset,
+        cursor=cursor,
     )
-    results = await handler.handle(query)
+    page = await handler.handle_page(query)
+    set_page_headers(
+        response,
+        next_cursor=page.next_cursor,
+        total=page.total,
+    )
     return [
         PatronResponse(
             id=p.id,
@@ -156,7 +168,7 @@ async def list_patrons(
             suspended_reason=p.suspended_reason,
             registered_at=p.registered_at,
         )
-        for p in results
+        for p in page.items
     ]
 
 
@@ -169,8 +181,6 @@ async def get_patron(
     """Get a patron by ID."""
     query = GetPatronQuery(patron_id=patron_id)
     result = await handler.handle(query)
-    if not result:
-        raise HTTPException(status_code=404, detail=f"Patron {patron_id} not found")
     return PatronResponse(
         id=result.id,
         name=result.name,
@@ -189,64 +199,39 @@ async def get_patron(
 async def suspend_patron(
     patron_id: str,
     request: SuspendRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: SuspendPatronHandler = Depends(Provide[Container.suspend_patron_handler]),
-    get_handler: GetPatronHandler = Depends(Provide[Container.get_patron_handler]),
 ):
     """Suspend a patron's borrowing privileges."""
-    try:
-        command = SuspendPatronCommand(patron_id=patron_id, reason=request.reason)
-        await handler.handle(command)
-
-        patron = await get_handler.handle(GetPatronQuery(patron_id=patron_id))
-        if patron is None:
-            raise HTTPException(status_code=404, detail=f"Patron {patron_id} not found")
-        return PatronResponse(
-            id=patron.id,
-            name=patron.name,
-            first_name=patron.first_name,
-            last_name=patron.last_name,
-            email=patron.email,
-            membership_tier=patron.membership_tier,
-            is_suspended=patron.is_suspended,
-            suspended_reason=patron.suspended_reason,
-            registered_at=patron.registered_at,
-        )
-    except PatronNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PatronAlreadySuspendedException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    command = SuspendPatronCommand(
+        patron_id=patron_id,
+        reason=request.reason,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    return PatronResponse(**result.__dict__)
 
 
 @router.post("/{patron_id}/reinstate", response_model=PatronResponse)
 @inject
 async def reinstate_patron(
     patron_id: str,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: ReinstatePatronHandler = Depends(Provide[Container.reinstate_patron_handler]),
-    get_handler: GetPatronHandler = Depends(Provide[Container.get_patron_handler]),
 ):
     """Reinstate a suspended patron."""
-    try:
-        command = ReinstatePatronCommand(patron_id=patron_id)
-        await handler.handle(command)
-
-        patron = await get_handler.handle(GetPatronQuery(patron_id=patron_id))
-        if patron is None:
-            raise HTTPException(status_code=404, detail=f"Patron {patron_id} not found")
-        return PatronResponse(
-            id=patron.id,
-            name=patron.name,
-            first_name=patron.first_name,
-            last_name=patron.last_name,
-            email=patron.email,
-            membership_tier=patron.membership_tier,
-            is_suspended=patron.is_suspended,
-            suspended_reason=patron.suspended_reason,
-            registered_at=patron.registered_at,
-        )
-    except PatronNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PatronNotSuspendedException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    command = ReinstatePatronCommand(
+        patron_id=patron_id,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    return PatronResponse(**result.__dict__)
 
 
 @router.post("/{patron_id}/upgrade-tier", response_model=PatronResponse)
@@ -254,29 +239,17 @@ async def reinstate_patron(
 async def upgrade_patron_tier(
     patron_id: str,
     request: UpgradeTierRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: UpgradePatronTierHandler = Depends(Provide[Container.upgrade_patron_tier_handler]),
-    get_handler: GetPatronHandler = Depends(Provide[Container.get_patron_handler]),
 ):
     """Upgrade a patron's membership tier."""
-    try:
-        command = UpgradePatronTierCommand(patron_id=patron_id, new_tier=request.new_tier)
-        await handler.handle(command)
-
-        patron = await get_handler.handle(GetPatronQuery(patron_id=patron_id))
-        if patron is None:
-            raise HTTPException(status_code=404, detail=f"Patron {patron_id} not found")
-        return PatronResponse(
-            id=patron.id,
-            name=patron.name,
-            first_name=patron.first_name,
-            last_name=patron.last_name,
-            email=patron.email,
-            membership_tier=patron.membership_tier,
-            is_suspended=patron.is_suspended,
-            suspended_reason=patron.suspended_reason,
-            registered_at=patron.registered_at,
-        )
-    except PatronNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PatronException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    command = UpgradePatronTierCommand(
+        patron_id=patron_id,
+        new_tier=request.new_tier,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    return PatronResponse(**result.__dict__)

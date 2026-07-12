@@ -18,8 +18,10 @@ class IBookCommandRepository(Protocol):
         """Find a book by its ID."""
         ...
 
-    async def find_expired_reservations(self, cutoff: datetime) -> List[Book]:
-        """Find books whose reservation started before the cutoff."""
+    async def find_expired_reservations(
+        self, cutoff: datetime, limit: int = 100
+    ) -> List[Book]:
+        """Lock one bounded batch whose reservation predates the cutoff."""
         ...
 
     async def get_all(self) -> List[Book]:
