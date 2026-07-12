@@ -338,6 +338,10 @@ available, in `X-Total-Count`).
 
 ## Documentation
 
+- [Engineering Design System](docs/ENGINEERING_DESIGN_SYSTEM.md) - End-to-end method from outcomes and requirements to evidence and operations
+- [Design to Requirements](docs/DESIGN_TO_REQUIREMENTS.md) - Validating, specifying, testing, and tracing engineering requirements
+- [Invariant-Driven Architecture](docs/INVARIANT_DRIVEN_ARCHITECTURE.md) - Deriving the minimum architecture from truths that must survive concurrency and failure
+- [Formal Methods and Property-Based Testing](docs/FORMAL_METHODS_AND_PROPERTY_TESTING.md) - Choosing and applying generated, stateful, concurrency, and formal verification techniques
 - [Deployment Guide](docs/DEPLOYMENT.md) - Docker, Kubernetes, Cloud Run
 - [Strategic DDD Guide](docs/STRATEGIC_DDD_GUIDE.md) - Domain modeling approach
 - [Context Map](docs/CONTEXT_MAP.md) - Bounded context relationships
