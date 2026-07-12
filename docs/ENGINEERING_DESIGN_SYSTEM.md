@@ -4,7 +4,8 @@
 
 This document combines design to requirements, invariant-driven architecture,
 Domain-Driven Design, Clean Architecture, reliability engineering, and
-question-delete-optimize discipline into one method that engineering teams can
+question-delete-optimize discipline with engineering planning and execution
+management into one method that engineering teams and individual engineers can
 follow.
 
 The method is intentionally technology-neutral. It does not require
@@ -24,7 +25,8 @@ Understand the result people need
   -> identify the rules that must never be broken
   -> decide which model is the source of truth for each fact
   -> choose the simplest design that satisfies those rules
-  -> implement the design
+  -> discover and sequence the complete delivery work
+  -> execute while controlling time, quality, scope, and dependencies
   -> prove it works with tests and production measurements
   -> use what we learn to improve or simplify it
 ```
@@ -42,6 +44,10 @@ Each step prevents a different kind of failure:
 - If the team never asks whether a simpler design could satisfy the same
   requirements, unnecessary services, queues, workers, and processes will
   accumulate.
+- If the complete work, dependencies, and decisions are not exposed before a
+  deadline is accepted, the schedule is a date attached to an assumption.
+- If execution is not actively controlled, unresolved decisions, capacity
+  collisions, scope growth, and late transitions can defeat a good design.
 - If the team does not verify the result, it has confidence based on opinion
   instead of evidence.
 - If the team does not measure the system in production, it knows only that the
@@ -56,6 +62,9 @@ Each step prevents a different kind of failure:
 | Invariant-driven architecture | Which rules must still hold when requests overlap or components fail? | A written model of valid state and the mechanisms that protect it |
 | DDD | What does each business term mean, and which model is the source of truth? | Clear model boundaries and relationships between them |
 | Clean Architecture | Which business rules should not depend on a database, framework, or delivery method? | Dependencies that point toward business policy, with replaceable external adapters |
+| [Engineering planning and estimation](ENGINEERING_PLANNING_AND_ESTIMATION.md) | What must be understood, decided, built, verified, operated, and learned for the outcome to succeed? | Complete deliverables, dependencies, uncertainty, and a decision-useful forecast |
+| [Execution management](ENGINEERING_EXECUTION_MANAGEMENT.md) | How will the promised outcome reach its deadline without sacrificing mandatory quality? | Backward scheduling, capacity control, evidence-based milestones, variance response, and early communication |
+| [Delivery assurance](DELIVERY_ASSURANCE_GAPS.md) | What must happen beyond sound design for the change to reach users safely and remain supportable? | Risk-based release, migration, operational, security, data, and learning controls |
 | SRE | How reliable must the service be, and how will we know? | Measurable reliability targets, monitoring, capacity planning, and recovery evidence |
 | [Formal methods and property-based testing](FORMAL_METHODS_AND_PROPERTY_TESTING.md) | Which important combinations and event sequences are too numerous for a few example tests? | Systematic exploration of states and sequences that engineers may overlook |
 | Question-delete-optimize discipline | What real constraint requires this component? | Removal of requirements and components that have no valid justification |
@@ -87,8 +96,19 @@ code, and proving that the finished system behaves correctly.
 - An **architecture justification** explains which validated requirement a
   component satisfies, why a simpler design is insufficient, and how the team
   will verify the decision.
+- A **quality bar** is the minimum acceptable result for one component of the
+  complete outcome. Mandatory quality bars cannot be silently lowered to
+  preserve a date.
+- A **deadline** is the latest acceptable completion time imposed by a real
+  business, contractual, regulatory, market, or coordination need.
+- A **forecast** is the current predicted completion range based on evidence,
+  assumptions, dependencies, and observed execution. It should change when the
+  evidence changes.
+- A **transition** is a moment when work, ownership, state, or authority moves,
+  such as design to implementation, code to review, or one schema to another.
+  Transitions usually carry more risk than steady work.
 
-## The Seven-Stage Workflow
+## The Seven-Stage Design Workflow
 
 Each stage has required questions, documents, and an exit gate. An exit gate is
 a decision about whether the team understands the current stage well enough to
@@ -351,6 +371,115 @@ Verification evidence exists, operational signals cover the promises, recovery
 is understood, and follow-up assumptions have validation actions and expiry
 conditions.
 
+## The Execution Management Loop
+
+The seven stages establish what should be delivered and the evidence it needs.
+They do not manage the daily movement of work through time. Use
+[Engineering Planning and Estimation](ENGINEERING_PLANNING_AND_ESTIMATION.md)
+to discover and forecast the complete work, then use
+[Engineering Execution Management](ENGINEERING_EXECUTION_MANAGEMENT.md) to
+control delivery until client or user acceptance.
+
+Execution management runs across the design stages rather than appearing as an
+eighth stage after implementation. A decision can block design, a migration
+rehearsal can change architecture, and production evidence can send the team
+back to requirements.
+
+### Why time must be modeled
+
+Time changes the execution system in five ways:
+
+1. **Fixed events generate work backward.** A release or client-acceptance date
+   creates upstream dates for deployment, verification, integration,
+   implementation, decisions, and discovery.
+2. **State drifts.** Code, data, assumptions, dependencies, backlogs, costs,
+   priorities, and human capacity change while the project runs.
+3. **Parallel tracks collide.** Different tasks may need the same engineer,
+   reviewer, environment, repository area, client decision, or release window.
+   A freelancer experiences the same collision between roles.
+4. **Transitions concentrate risk.** Handoffs, integration, migrations,
+   deployment, and acceptance expose missing information and incompatible
+   assumptions.
+5. **Some moments carry more consequence.** An early authority decision, a
+   migration rehearsal, or the first production transaction can determine the
+   value of weeks of surrounding work.
+
+Treating time only as task due dates conceals these effects.
+
+### Standard execution chain
+
+```text
+Client or user acceptance at the committed date
+  <- production verification
+  <- safe release and migration
+  <- complete release evidence
+  <- integrated required scope
+  <- implemented vertical outcomes
+  <- blocking decisions
+  <- validated requirements and discovery
+```
+
+Build the schedule backward from acceptance. For every predecessor, identify
+its completion evidence, owner or role, dependency, expected duration,
+uncertainty, and latest useful completion time.
+
+### Standard control loop
+
+```text
+Observe completed evidence and current state
+  -> compare with quality bars, dependencies, and forecast
+  -> identify material variance
+  -> choose and own an intervention
+  -> execute and verify the effect
+  -> update the forecast
+  -> communicate while useful options remain
+```
+
+The loop applies to one person and to a team. A solo engineer may perform every
+role, but cannot perform every role at the same time. A team may create more
+parallel capacity, but it also creates handoffs, queues, and coordination.
+
+### Deadline integrity
+
+Before accepting a deadline, the engineer or team must validate that the
+essential scope and mandatory quality bars fit a credible plan. After accepting
+it, the team must protect those bars, control optional scope, monitor leading
+indicators, and escalate threats early.
+
+When a committed date is threatened, use this response order:
+
+1. verify the evidence;
+2. protect the essential outcome and mandatory quality bars;
+3. stop unapproved scope growth;
+4. remove the least valuable optional scope;
+5. resolve blocking decisions;
+6. resequence the controlling dependency chain;
+7. reduce work in progress and handoffs;
+8. simplify the design where requirements permit;
+9. add capacity only where it can become effective in time;
+10. change the rollout strategy or use an agreed fallback;
+11. reforecast and communicate; and
+12. renegotiate before the deadline when no valid plan can preserve the
+    original outcome.
+
+Hiding a likely miss or silently lowering a mandatory quality bar is not
+deadline integrity.
+
+### Execution evidence
+
+A material project should maintain, in a form proportional to its size:
+
+- the outcome, deadline, and acceptance conditions;
+- mandatory and optional scope;
+- component quality bars;
+- a backward dependency chain;
+- decision owners and latest responsible dates;
+- a person-by-time or role-by-time capacity view;
+- evidence-based milestones and transition gates;
+- leading indicators and interventions;
+- a current forecast and confidence; and
+- a client or stakeholder communication cadence.
+
 ## Required Artifacts by Risk
 
 The system should improve reasoning, not create paperwork. Scale artifacts by
@@ -358,10 +487,10 @@ risk.
 
 | Change risk | Minimum artifacts |
 |---|---|
-| Low: local, reversible, no data contract | Outcome, acceptance criteria, tests |
-| Medium: persistent state or shared API | Requirement records, invariant changes, decision note, migration/contract tests |
-| High: money, privacy, security, availability, cross-service workflow | Full trace matrix, failure model, authority/context review, architecture justification, rollout and recovery plan |
-| Critical: consensus, irreversible data, safety or major regulatory exposure | High-risk artifacts plus formal/property model, independent review, staged validation, exercised rollback/recovery |
+| Low: local, reversible, no data contract | Outcome, acceptance criteria, focused work list, tests, completion date |
+| Medium: persistent state or shared API | Requirement records, invariant changes, decision note, dependency and forecast view, migration/contract tests |
+| High: money, privacy, security, availability, cross-service workflow | Full trace matrix, failure model, authority/context review, architecture justification, execution baseline, rollout and recovery plan |
+| Critical: consensus, irreversible data, safety or major regulatory exposure | High-risk artifacts plus formal/property model, independent review, staged validation, exercised rollback/recovery, continuous execution control |
 
 ## Documentation Language Standard
 
@@ -393,8 +522,12 @@ For a material design, reviewers should receive:
 4. **Authority map** — authoritative models and context relationships.
 5. **Architecture justification** — minimum mechanisms and rejected alternatives.
 6. **Traceability matrix** — requirement to design to verification.
-7. **Operational plan** — SLOs, metrics, rollout, rollback, recovery.
-8. **Open assumptions** — validation action and expiry condition.
+7. **Planning and forecast record** — complete work, decisions, dependencies,
+   capacity, estimate range, deadline, and confidence.
+8. **Execution baseline** — quality bars, scope order, backward schedule,
+   milestones, transitions, control cadence, and escalation triggers.
+9. **Operational plan** — SLOs, metrics, rollout, rollback, recovery.
+10. **Open assumptions** — validation action and expiry condition.
 
 ## Standard Design Review Agenda
 
@@ -410,7 +543,11 @@ accepted:
 7. What constraint requires each architectural component?
 8. Is there a smaller design with the same proof?
 9. Does every requirement have verification evidence?
-10. Can the system be operated, recovered, and simplified later?
+10. Has the complete work been discovered and forecast from evidence?
+11. Can the outcome reach its deadline with the mandatory quality bars intact?
+12. Are dependencies, decisions, capacity collisions, and risky transitions
+    visible through time?
+13. Can the system be operated, recovered, and simplified later?
 
 ## Decision Outcomes
 
@@ -484,6 +621,18 @@ An eligible patron receives one loan for an available book.
 - notification failure-isolation test;
 - cache invalidation tests for composed availability reads.
 
+### 8. Execution
+
+- build backward from client acceptance and production verification;
+- complete authority and policy decisions before dependent implementation;
+- test the highest-risk migration and concurrency assumptions early;
+- deliver one complete vertical borrow path before opening optional work;
+- reserve explicit review, integration, release, and recovery capacity;
+- protect the loan, capacity, retry, migration, and authorization quality bars;
+- monitor decision age, blocked work, review queues, milestone evidence, scope
+  growth, and forecast movement; and
+- communicate any threatened commitment while scope and rollout options remain.
+
 ## Adoption Guide
 
 Teams do not need to rewrite everything before using this method.
@@ -544,11 +693,27 @@ Before releasing:
   result?
 - Has the team removed components that no current requirement justifies?
 
+During execution:
+
+- Is progress measured through completed evidence rather than activity or
+  percentages?
+- Are blocking decisions made before their latest useful dates?
+- Does the person-by-time or role-by-time plan expose capacity collisions?
+- Are high-risk transitions rehearsed before the deadline depends on them?
+- Is optional scope being controlled while mandatory quality remains protected?
+- Do leading indicators cause interventions and forecast updates?
+- Will the client or stakeholder hear about a material threat while meaningful
+  choices still exist?
+
 ## Related Guides
 
 - [Design to Requirements](DESIGN_TO_REQUIREMENTS.md)
 - [Invariant-Driven Architecture](INVARIANT_DRIVEN_ARCHITECTURE.md)
 - [Formal Methods and Property-Based Testing](FORMAL_METHODS_AND_PROPERTY_TESTING.md)
+- [Delivery Assurance Gaps and Extension Plan](DELIVERY_ASSURANCE_GAPS.md)
+- [Engineering Planning and Estimation](ENGINEERING_PLANNING_AND_ESTIMATION.md)
+- [Engineering Execution Management](ENGINEERING_EXECUTION_MANAGEMENT.md)
+- [Human-Centered Systems and Execution](HUMAN_CENTERED_SYSTEMS_AND_EXECUTION.md)
 - [Strategic DDD Guide](STRATEGIC_DDD_GUIDE.md)
 - [Context Map](CONTEXT_MAP.md)
 - [Sagas and Consistency](SAGAS_AND_CONSISTENCY.md)

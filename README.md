@@ -342,6 +342,10 @@ available, in `X-Total-Count`).
 - [Design to Requirements](docs/DESIGN_TO_REQUIREMENTS.md) - Validating, specifying, testing, and tracing engineering requirements
 - [Invariant-Driven Architecture](docs/INVARIANT_DRIVEN_ARCHITECTURE.md) - Deriving the minimum architecture from truths that must survive concurrency and failure
 - [Formal Methods and Property-Based Testing](docs/FORMAL_METHODS_AND_PROPERTY_TESTING.md) - Choosing and applying generated, stateful, concurrency, and formal verification techniques
+- [Delivery Assurance Gaps and Extension Plan](docs/DELIVERY_ASSURANCE_GAPS.md) - Extending sound design into safe delivery, operation, and production learning
+- [Engineering Planning and Estimation](docs/ENGINEERING_PLANNING_AND_ESTIMATION.md) - Discovering complete work and creating evidence-based forecasts
+- [Engineering Execution Management](docs/ENGINEERING_EXECUTION_MANAGEMENT.md) - Delivering client outcomes on time while controlling quality, scope, dependencies, and variance
+- [Human-Centered Systems and Execution](docs/HUMAN_CENTERED_SYSTEMS_AND_EXECUTION.md) - Protecting dignity, agency, health, and sustainable capacity inside delivery systems
 - [Deployment Guide](docs/DEPLOYMENT.md) - Docker, Kubernetes, Cloud Run
 - [Strategic DDD Guide](docs/STRATEGIC_DDD_GUIDE.md) - Domain modeling approach
 - [Context Map](docs/CONTEXT_MAP.md) - Bounded context relationships
