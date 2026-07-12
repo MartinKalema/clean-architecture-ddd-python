@@ -12,14 +12,12 @@ from .delivery_store import (
 from .event_dispatcher import EventDispatcher
 from .event_registry import (
     EVENT_CONTRACTS,
-    EVENT_TYPES,
     EventContract,
     EventContractError,
     InvalidEventEnvelopeError,
     UnsupportedEventContractError,
     contract_for_event,
     deserialize_event,
-    register_upcaster,
     outbox_type_for_event_class,
     serialize_event,
 )
@@ -36,7 +34,6 @@ __all__ = [
     "SqlAlchemyEventQuarantine",
     "SqlAlchemyHandlerInbox",
     "EVENT_CONTRACTS",
-    "EVENT_TYPES",
     "EventContract",
     "EventContractError",
     "InvalidEventEnvelopeError",
@@ -45,6 +42,5 @@ __all__ = [
     "contract_for_event",
     "outbox_type_for_event_class",
     "deserialize_event",
-    "register_upcaster",
     "serialize_event",
 ]

@@ -25,8 +25,6 @@ from src.infrastructure.adapters.outbox import OutboxMessageModel
 from src.infrastructure.adapters.application_state import (
     BorrowOperationModel,
     CommandReceiptModel,
-    LegacyEventMigrationAuditModel,
-    MigrationSafetyMarkerModel,
 )
 from src.infrastructure.adapters.events import InboxMessageModel, QuarantinedEventModel
 

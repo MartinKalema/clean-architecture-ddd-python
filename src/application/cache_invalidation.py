@@ -47,7 +47,7 @@ class CacheInvalidatingHandler(Generic[C, R]):
                 )
         except Exception as error:
             # The write has already committed. Reporting failure would invite
-            # a harmful retry (especially for non-idempotent legacy callers).
+            # a harmful retry after the command has already committed.
             if self._logger is not None:
                 self._logger.warning(
                     f"Cache invalidation failed for {self._entity_type}: "

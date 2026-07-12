@@ -66,7 +66,7 @@ def test_book_hydration_coerces_dates_and_reserved_is_not_borrowed():
             "title": "Title",
             "author": "Author",
             "status": "reserved",
-            "is_borrowed": True,  # stale legacy projection is ignored
+            "is_borrowed": True,  # stale projection data is ignored
             "borrowed_at": "2026-07-11T10:00:00Z",
         }
     )

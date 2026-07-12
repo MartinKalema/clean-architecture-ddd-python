@@ -1,8 +1,7 @@
-"""Stable, versioned wire contracts for domain-event delivery.
+"""Stable wire contracts for domain-event delivery.
 
-Python class names are an implementation detail.  Kafka payloads use an
-explicit namespace/name/version envelope, while this registry retains a
-bounded upcast path for flat payloads already waiting in the outbox.
+Python class names are implementation details. Kafka payloads use the one
+namespaced envelope and contract version supported by this pre-release system.
 """
 from __future__ import annotations
 
@@ -13,8 +12,6 @@ from datetime import datetime, timezone
 from types import UnionType
 from typing import (
     Any,
-    Callable,
-    Dict,
     Type,
     Union,
     get_args,
@@ -22,7 +19,6 @@ from typing import (
     get_type_hints,
 )
 
-from src.application.events import LegacyWorkflowCompensated
 from src.domain.catalog.events.catalog_events import (
     BookAddedToCatalog,
     BookRemovedFromCatalog,
@@ -111,48 +107,19 @@ def _contract(
 EVENT_CONTRACTS = (
     _contract("library.catalog", "book-added", BookAddedToCatalog),
     _contract("library.catalog", "book-removed", BookRemovedFromCatalog),
-    # v2 removes Catalog's precomputed return_due_date. Lending now derives
-    # duration from the authoritative patron tier and publishes the final due
-    # date in LoanCreated.
-    _contract("library.catalog", "book-reserved", CatalogBookReserved, version=2),
-    _contract("library.catalog", "book-borrowed", CatalogBookBorrowed, version=2),
-    _contract("library.catalog", "book-released", CatalogBookReleased, version=2),
-    _contract("library.catalog", "book-returned", CatalogBookReturned, version=2),
-    _contract("library.lending", "loan-created", LoanCreated, version=2),
-    _contract("library.lending", "loan-completed", LoanCompleted, version=2),
+    _contract("library.catalog", "book-reserved", CatalogBookReserved),
+    _contract("library.catalog", "book-borrowed", CatalogBookBorrowed),
+    _contract("library.catalog", "book-released", CatalogBookReleased),
+    _contract("library.catalog", "book-returned", CatalogBookReturned),
+    _contract("library.lending", "loan-created", LoanCreated),
+    _contract("library.lending", "loan-completed", LoanCompleted),
     _contract("library.lending", "loan-cancelled", LoanCancelled),
     _contract("library.lending", "loan-extended", LoanExtended),
     _contract("library.lending", "book-overdue", BookOverdue),
     _contract("library.patron", "patron-registered", PatronRegistered),
     _contract("library.patron", "patron-suspended", PatronSuspended),
     _contract("library.patron", "patron-reinstated", PatronReinstated),
-    _contract(
-        "library.migration",
-        "workflow-compensated",
-        LegacyWorkflowCompensated,
-    ),
 )
-
-EVENT_TYPES: Dict[str, Type[DomainEvent]] = {
-    # Immutable aliases for payloads persisted before namespaced contracts.
-    # Never regenerate these from implementation class names: a Python rename
-    # must not strand an old outbox or DLQ record.
-    "BookAddedToCatalog": BookAddedToCatalog,
-    "BookRemovedFromCatalog": BookRemovedFromCatalog,
-    "CatalogBookReserved": CatalogBookReserved,
-    "CatalogBookBorrowed": CatalogBookBorrowed,
-    "CatalogBookReleased": CatalogBookReleased,
-    "CatalogBookReturned": CatalogBookReturned,
-    "LoanCreated": LoanCreated,
-    "LoanCompleted": LoanCompleted,
-    "LoanCancelled": LoanCancelled,
-    "LoanExtended": LoanExtended,
-    "BookOverdue": BookOverdue,
-    "PatronRegistered": PatronRegistered,
-    "PatronSuspended": PatronSuspended,
-    "PatronReinstated": PatronReinstated,
-    "LegacyWorkflowCompensated": LegacyWorkflowCompensated,
-}
 _CONTRACT_BY_CLASS = {
     contract.event_class: contract for contract in EVENT_CONTRACTS
 }
@@ -163,96 +130,6 @@ if len(_CONTRACT_BY_CLASS) != len(EVENT_CONTRACTS):
     raise RuntimeError("A domain event class has more than one wire contract")
 if len(_CONTRACT_BY_NAME) != len(EVENT_CONTRACTS):
     raise RuntimeError("A namespaced wire contract is registered more than once")
-
-
-def _upcast_catalog_book_reserved_v1(data: dict[str, Any]) -> dict[str, Any]:
-    result = dict(data)
-    # Keep the field while a mixed-version process still has the v1 domain
-    # class; once the v2 class is deployed it is deliberately discarded.
-    current_fields = {event_field.name for event_field in fields(CatalogBookReserved)}
-    if "return_due_date" not in current_fields:
-        result.pop("return_due_date", None)
-    _require_upcast_fields(
-        result,
-        "reservation_id",
-        "reservation_generation",
-        "patron_id",
-    )
-    return result
-
-
-def _upcast_with_required_fields(
-    *required_fields: str,
-) -> Callable[[dict[str, Any]], dict[str, Any]]:
-    def upcast(data: dict[str, Any]) -> dict[str, Any]:
-        result = dict(data)
-        _require_upcast_fields(result, *required_fields)
-        return result
-
-    return upcast
-
-
-def _require_upcast_fields(data: dict[str, Any], *required_fields: str) -> None:
-    missing = [name for name in required_fields if name not in data]
-    if missing:
-        raise InvalidEventEnvelopeError(
-            "Legacy event cannot be correlated safely; missing field(s): "
-            + ", ".join(missing)
-        )
-
-
-_UPCASTERS: dict[tuple[str, int], Callable[[dict[str, Any]], dict[str, Any]]] = {
-    ("library.catalog.book-reserved", 1): _upcast_catalog_book_reserved_v1,
-    ("library.catalog.book-borrowed", 1): _upcast_with_required_fields(
-        "reservation_id",
-        "reservation_generation",
-        "patron_id",
-        "loan_id",
-    ),
-    ("library.catalog.book-released", 1): _upcast_with_required_fields(
-        "reservation_id",
-        "reservation_generation",
-        "patron_id",
-    ),
-    ("library.catalog.book-returned", 1): _upcast_with_required_fields(
-        "loan_id",
-        "reservation_id",
-        "reservation_generation",
-        "patron_id",
-    ),
-    ("library.lending.loan-created", 1): _upcast_with_required_fields(
-        "reservation_id",
-        "reservation_generation",
-    ),
-    ("library.lending.loan-completed", 1): _upcast_with_required_fields(
-        "reservation_id",
-        "reservation_generation",
-    ),
-}
-
-
-def register_upcaster(
-    contract_name: str,
-    from_version: int,
-    upcaster: Callable[[dict[str, Any]], dict[str, Any]],
-) -> None:
-    """Register one deterministic data migration from N to N+1."""
-    contract = _CONTRACT_BY_NAME.get(contract_name)
-    if contract is None:
-        raise ValueError(f"Unknown event contract: {contract_name}")
-    if not isinstance(from_version, int) or isinstance(from_version, bool):
-        raise ValueError("from_version must be an integer")
-    if not 1 <= from_version < contract.version:
-        raise ValueError(
-            f"from_version must be between 1 and {contract.version - 1} "
-            f"for {contract_name}"
-        )
-    if not callable(upcaster):
-        raise TypeError("upcaster must be callable")
-    key = (contract_name, from_version)
-    if key in _UPCASTERS:
-        raise ValueError(f"Upcaster already registered for {contract_name} v{from_version}")
-    _UPCASTERS[key] = upcaster
 
 
 def contract_for_event(event: DomainEvent) -> EventContract:
@@ -298,63 +175,12 @@ def serialize_event(event: DomainEvent) -> str:
     return json.dumps(envelope, default=_encode_value, separators=(",", ":"))
 
 
-def deserialize_event(payload: Dict[str, Any]) -> DomainEvent:
-    """Validate, upcast, and reconstruct a typed domain event."""
+def deserialize_event(payload: dict[str, Any]) -> DomainEvent:
+    """Validate the current envelope and reconstruct a typed domain event."""
     if not isinstance(payload, dict):
         raise InvalidEventEnvelopeError("Event payload must be a JSON object")
-
-    if "contract" not in payload:
-        payload = _upcast_legacy_flat_payload(payload)
-
     contract, metadata, data = _read_envelope(payload)
-    data = _upcast_data(
-        contract,
-        payload["contract"]["version"],
-        data,
-        event_id=_optional_string(metadata.get("event_id")),
-    )
     return _construct_event(contract, metadata, data)
-
-
-def _upcast_legacy_flat_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Lift the pre-envelope payload without inventing business data."""
-    legacy_type = payload.get("event_type")
-    event_class = EVENT_TYPES.get(legacy_type) if isinstance(legacy_type, str) else None
-    if event_class is None:
-        raise UnsupportedEventContractError(
-            f"Unknown legacy event type: {legacy_type!r}",
-            event_id=_optional_string(payload.get("event_id")),
-            contract_name=f"legacy.{legacy_type}" if legacy_type else "legacy.unknown",
-            contract_version=0,
-        )
-
-    contract = _CONTRACT_BY_CLASS[event_class]
-    metadata = {
-        name: payload.get(name)
-        for name in _METADATA_FIELDS
-    }
-    if metadata["correlation_id"] is None:
-        metadata["correlation_id"] = metadata["event_id"]
-    data = {
-        key: value
-        for key, value in payload.items()
-        if key not in _METADATA_FIELDS
-        and key not in {"event_type", "_legacy_delivery"}
-    }
-    # Flat payloads predate the namespaced registry. For contracts whose
-    # domain shape changed, they are v1 even when they happen to contain all
-    # additive v2 fields (the upcaster validates that case explicitly).
-    legacy_version = 1
-    return {
-        "envelope_version": WIRE_ENVELOPE_VERSION,
-        "contract": {
-            "namespace": contract.namespace,
-            "name": contract.name,
-            "version": legacy_version,
-        },
-        "metadata": metadata,
-        "data": data,
-    }
 
 
 def _read_envelope(
@@ -434,67 +260,14 @@ def _read_envelope(
         )
 
     contract = _CONTRACT_BY_NAME.get(qualified_name)
-    if contract is None or version > contract.version:
+    if contract is None or version != contract.version:
         raise UnsupportedEventContractError(
             f"Unsupported event contract {qualified_name} v{version}",
             event_id=event_id,
             contract_name=qualified_name,
             contract_version=version,
         )
-    if version < 1:
-        raise UnsupportedEventContractError(
-            f"Invalid event contract version {qualified_name} v{version}",
-            event_id=event_id,
-            contract_name=qualified_name,
-            contract_version=version,
-        )
     return contract, metadata, data
-
-
-def _upcast_data(
-    contract: EventContract,
-    source_version: int,
-    data: dict[str, Any],
-    *,
-    event_id: str | None,
-) -> dict[str, Any]:
-    current = source_version
-    result = dict(data)
-    while current < contract.version:
-        upcaster = _UPCASTERS.get((contract.qualified_name, current))
-        if upcaster is None:
-            raise UnsupportedEventContractError(
-                f"No upcaster for {contract.qualified_name} v{current} -> v{current + 1}",
-                event_id=event_id,
-                contract_name=contract.qualified_name,
-                contract_version=current,
-            )
-        try:
-            result = upcaster(result)
-        except EventContractError as error:
-            if error.event_id is None:
-                error.event_id = event_id
-            if error.contract_name is None:
-                error.contract_name = contract.qualified_name
-            if error.contract_version is None:
-                error.contract_version = current
-            raise
-        except Exception as error:
-            raise InvalidEventEnvelopeError(
-                f"Upcaster for {contract.qualified_name} v{current} failed: {error}",
-                event_id=event_id,
-                contract_name=contract.qualified_name,
-                contract_version=current,
-            ) from error
-        if not isinstance(result, dict):
-            raise InvalidEventEnvelopeError(
-                f"Upcaster for {contract.qualified_name} v{current} returned non-object data",
-                event_id=event_id,
-                contract_name=contract.qualified_name,
-                contract_version=current,
-            )
-        current += 1
-    return result
 
 
 def _construct_event(

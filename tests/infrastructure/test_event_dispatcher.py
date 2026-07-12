@@ -11,7 +11,7 @@ from src.domain.catalog import CatalogBookBorrowed
 from src.domain.lending import LoanCancelled, LoanCompleted, LoanCreated
 from src.infrastructure.adapters.events import (
     EventDispatcher,
-    UnsupportedEventContractError,
+    InvalidEventEnvelopeError,
     deserialize_event,
     serialize_event,
 )
@@ -137,8 +137,8 @@ class TestEventSerialization:
 
         assert restored == event
 
-    def test_unknown_event_type_is_rejected_for_quarantine(self):
-        with pytest.raises(UnsupportedEventContractError):
+    def test_flat_event_type_is_rejected_for_quarantine(self):
+        with pytest.raises(InvalidEventEnvelopeError):
             deserialize_event({"event_type": "NoSuchEvent"})
 
     def test_cancelled_loan_is_registered_and_round_trips(self):
@@ -211,7 +211,7 @@ class TestDomainEventConsumer:
         assert dispatched == event
         identity = dispatcher.dispatch.await_args.kwargs["delivery_identity"]
         assert identity.contract_name == "library.lending.loan-created"
-        assert identity.contract_version == 2
+        assert identity.contract_version == 1
         assert len(identity.payload_hash) == 64
 
     @pytest.mark.asyncio

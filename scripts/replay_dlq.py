@@ -7,8 +7,8 @@ original topic, where the normal consumers process them again. Use after
 fixing the defect that caused the dead-lettering; handlers are idempotent,
 so replaying already-applied work is safe.
 
-Each DLQ message is the wrapper written by KafkaClient._send_to_dead_letter:
-{original_topic, partition, offset, key, value, error}.
+Each DLQ message is the wrapper written by KafkaClient._send_to_dead_letter.
+The key and value fields contain the original Kafka bytes encoded as base64.
 
 Usage:
     python scripts/replay_dlq.py --topic outbox.event.loan.dlq
@@ -128,20 +128,11 @@ async def replay_partition(
             replay_key, key_is_raw = decode_dead_letter_field(
                 wrapper.get("key")
             )
-            if value_is_raw or key_is_raw:
-                delivered = await kafka_client.send_raw(
-                    wrapper["original_topic"],
-                    value=_as_kafka_bytes(replay_value, value_is_raw),
-                    key=_as_kafka_bytes(replay_key, key_is_raw),
-                )
-            else:
-                # Backward compatibility with DLQ envelopes written before
-                # KafkaClient began preserving original wire bytes.
-                delivered = await kafka_client.send(
-                    wrapper["original_topic"],
-                    value=replay_value,
-                    key=replay_key,
-                )
+            delivered = await kafka_client.send_raw(
+                wrapper["original_topic"],
+                value=_require_kafka_bytes(replay_value, value_is_raw),
+                key=_require_kafka_bytes(replay_key, key_is_raw),
+            )
             if not delivered:
                 raise RuntimeError(
                     f"Failed to re-publish {partition.topic}[{partition.partition}] "
@@ -155,14 +146,12 @@ async def replay_partition(
     return replayed, skipped
 
 
-def _as_kafka_bytes(value, already_raw: bool) -> bytes | None:
+def _require_kafka_bytes(value, encoded_as_raw: bool) -> bytes | None:
     if value is None:
         return None
-    if already_raw:
-        if not isinstance(value, bytes):
-            raise TypeError("decoded DLQ binary field is not bytes")
-        return value
-    return json.dumps(value).encode("utf-8")
+    if not encoded_as_raw or not isinstance(value, bytes):
+        raise ValueError("DLQ key and value must use the current byte envelope")
+    return value
 
 
 if __name__ == "__main__":

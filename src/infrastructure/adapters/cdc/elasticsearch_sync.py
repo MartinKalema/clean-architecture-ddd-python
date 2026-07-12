@@ -212,7 +212,7 @@ class ElasticsearchSyncConsumer:
                 # A structurally invalid CDC row would create an undetectable
                 # permanent projection hole if parked and committed. Leave it
                 # uncommitted: Kafka lag then gates all ES queries to PostgreSQL
-                # until the schema/upcaster is repaired and the row reprocesses.
+                # until the event producer is repaired and the row reprocesses.
                 park_unrecoverable=False,
             ):
                 if not self._running:

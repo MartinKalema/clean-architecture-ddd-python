@@ -92,8 +92,7 @@ def build_config() -> dict:
         "kafka": {
             "bootstrap_servers": get_env("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
             "projection_group_id": get_env(
-                "KAFKA_PROJECTION_GROUP_ID",
-                get_env("KAFKA_CONSUMER_GROUP", "es-sync-consumer"),
+                "KAFKA_PROJECTION_GROUP_ID", "es-sync-consumer"
             ),
             "consumer_max_retries": get_env_int("KAFKA_CONSUMER_MAX_RETRIES", 3),
             "retry_backoff_seconds": get_env_float("KAFKA_RETRY_BACKOFF_SECONDS", 1.0),
@@ -106,15 +105,11 @@ def build_config() -> dict:
             "internal_topic_replication_factor": get_env_int(
                 "KAFKA_INTERNAL_TOPIC_REPLICATION_FACTOR", 3
             ),
-            # Notification intentionally inherits the legacy combined worker's
-            # group so a rolling deployment continues its committed offsets and
-            # never blasts historical confirmation emails. Workflow replay is
-            # safe because every transition is exact-token fenced/idempotent.
             "workflow_group_id": get_env(
                 "KAFKA_WORKFLOW_GROUP_ID", "domain-workflow-worker-v1"
             ),
             "notification_group_id": get_env(
-                "KAFKA_NOTIFICATION_GROUP_ID", "domain-event-worker"
+                "KAFKA_NOTIFICATION_GROUP_ID", "domain-notification-worker-v1"
             ),
         },
         "elasticsearch": {

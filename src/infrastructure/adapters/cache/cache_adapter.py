@@ -45,7 +45,7 @@ class CacheAdapter:
         self._recovery_locks: dict[str, asyncio.Lock] = {}
         self._recovery_tasks: dict[str, asyncio.Task[None]] = {}
 
-    KEY_VERSION = "v2"
+    KEY_VERSION = "v1"
     LOCK_TTL_SECONDS = 60.0
     LOCK_WAIT_SECONDS = 2.0
     RECOVERY_INITIAL_DELAY_SECONDS = 0.1

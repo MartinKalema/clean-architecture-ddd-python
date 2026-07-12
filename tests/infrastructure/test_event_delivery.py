@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import json
-import importlib.util
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from scripts.replay_dlq import replay_partition
-from src.domain.catalog import CatalogBookReserved
 from src.domain.lending import LoanCreated
 from src.domain.shared_kernel import ValidationException
 from src.infrastructure.adapters.events import (
@@ -35,6 +32,7 @@ from src.infrastructure.adapters.outbox import (
     OutboxRetentionService,
 )
 from src.infrastructure.exceptions import EventDispatcherException
+from src.infrastructure.external.kafka_client import encode_dead_letter_field
 
 
 def _loan_created(**metadata) -> LoanCreated:
@@ -62,7 +60,7 @@ def test_namespaced_envelope_round_trip_includes_causation_metadata():
     assert payload["contract"] == {
         "namespace": "library.lending",
         "name": "loan-created",
-        "version": 2,
+        "version": 1,
     }
     assert payload["metadata"]["correlation_id"] == "workflow-1"
     assert payload["metadata"]["causation_id"] == "reserve-1"
@@ -76,40 +74,12 @@ def test_event_trace_identities_are_bounded_before_outbox_persistence():
         _loan_created(correlation_id="unsafe identity")
 
 
-def test_flat_pending_outbox_payload_is_upcast_without_changing_event_identity():
+def test_flat_payload_is_rejected_instead_of_guessing_an_old_format():
     event = _loan_created()
-    legacy = {
-        **event.__dict__,
-        "event_type": "LoanCreated",
-    }
+    flat_payload = {**event.__dict__, "event_type": "LoanCreated"}
 
-    restored = deserialize_event(json.loads(json.dumps(legacy, default=str)))
-
-    assert restored == event
-    assert restored.event_id == event.event_id
-
-
-def test_explicit_legacy_compensation_record_is_a_consumable_contract():
-    legacy = {
-        "event_type": "LegacyWorkflowCompensated",
-        "event_id": "legacy-reservation-event",
-        "occurred_at": "2026-07-04T12:00:00+00:00",
-        "correlation_id": "legacy-reservation-event",
-        "causation_id": None,
-        "original_event_type": "CatalogBookReserved",
-        "aggregate_type": "book",
-        "aggregate_id": "book-1",
-        "reason": "legacy reservation lacked fencing and was released",
-        "_legacy_delivery": {
-            "retry_count": 2,
-            "occurred_at_storage": "utc-naive",
-        },
-    }
-
-    restored = deserialize_event(legacy)
-
-    assert type(restored).__name__ == "LegacyWorkflowCompensated"
-    assert restored.original_event_type == "CatalogBookReserved"
+    with pytest.raises(InvalidEventEnvelopeError, match="Unexpected event envelope"):
+        deserialize_event(json.loads(json.dumps(flat_payload, default=str)))
 
 
 def test_future_contract_version_is_rejected_for_quarantine():
@@ -123,56 +93,15 @@ def test_future_contract_version_is_rejected_for_quarantine():
     assert exc_info.value.contract_version == 999
 
 
-def test_catalog_reservation_v1_upcaster_tolerates_removed_due_date_field():
-    payload = {
-        "envelope_version": 1,
-        "contract": {
-            "namespace": "library.catalog",
-            "name": "book-reserved",
-            "version": 1,
-        },
-        "metadata": {
-            "event_id": "reservation-event-1",
-            "occurred_at": "2026-07-04T12:00:00+00:00",
-            "correlation_id": "workflow-1",
-            "causation_id": None,
-        },
-        "data": {
-            "book_id": "book-1",
-            "title": "DDD",
-            "reservation_id": "11111111-1111-4111-8111-111111111111",
-            "reservation_generation": 1,
-            "patron_id": "patron-1",
-            "reserved_at": "2026-07-04T12:00:00+00:00",
-            "return_due_date": "2026-07-18T12:00:00+00:00",
-            "borrower_email": "patron@example.com",
-        },
-    }
+def test_non_current_contract_version_is_rejected_for_quarantine():
+    payload = json.loads(serialize_event(_loan_created()))
+    payload["contract"]["version"] = 0
 
-    restored = deserialize_event(payload)
+    with pytest.raises(UnsupportedEventContractError) as exc_info:
+        deserialize_event(payload)
 
-    assert isinstance(restored, CatalogBookReserved)
-    assert restored.book_id == "book-1"
-    assert restored.reservation_id == payload["data"]["reservation_id"]
-
-
-def test_uncorrelatable_legacy_reservation_is_rejected_for_quarantine():
-    legacy = {
-        "event_type": "CatalogBookReserved",
-        "event_id": "legacy-reservation-event",
-        "occurred_at": "2026-07-04T12:00:00+00:00",
-        "book_id": "book-1",
-        "title": "DDD",
-        "reserved_at": "2026-07-04T12:00:00+00:00",
-        "return_due_date": "2026-07-18T12:00:00+00:00",
-        "borrower_email": "patron@example.com",
-    }
-
-    with pytest.raises(InvalidEventEnvelopeError) as exc_info:
-        deserialize_event(legacy)
-
-    assert exc_info.value.event_id == "legacy-reservation-event"
-    assert exc_info.value.contract_name == "library.catalog.book-reserved"
+    assert exc_info.value.contract_name == "library.lending.loan-created"
+    assert exc_info.value.contract_version == 0
 
 
 def test_known_contract_rejects_wrong_scalar_type():
@@ -205,47 +134,6 @@ def test_wire_contract_rejects_ambiguous_naive_datetime():
 
     with pytest.raises(InvalidEventEnvelopeError, match="explicit UTC offset"):
         deserialize_event(payload)
-
-
-def test_legacy_polling_outbox_conversion_preserves_pending_event_and_retry_audit():
-    migration_path = (
-        Path(__file__).resolve().parents[2]
-        / "migrations/versions/20260704_000002_debezium_outbox.py"
-    )
-    spec = importlib.util.spec_from_file_location("migration_002", migration_path)
-    assert spec is not None and spec.loader is not None
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    event = _loan_created()
-
-    converted = migration._convert_legacy_row(
-        {
-            "id": "legacy-row-1",
-            "event_type": "LoanCreated",
-            "event_data": json.dumps(event.__dict__, default=str),
-            "created_at": event.occurred_at,
-            "retry_count": 4,
-            "error_message": "broker unavailable",
-        },
-        legacy_timezone="UTC",
-    )
-
-    payload = json.loads(converted["payload"])
-    assert converted["id"] == "legacy-row-1"
-    assert converted["aggregatetype"] == "loan"
-    assert converted["aggregateid"] == "loan-1"
-    assert isinstance(converted["occurred_at"], datetime)
-    assert converted["occurred_at"] == event.occurred_at.replace(tzinfo=None)
-    assert payload["event_id"] == event.event_id
-    assert payload["_legacy_delivery"] == {
-        "retry_count": 4,
-        "last_error": "broker unavailable",
-        "occurred_at_storage": "utc-naive",
-    }
-    assert payload["occurred_at"].endswith("+00:00")
-    assert payload["borrowed_at"].endswith("+00:00")
-    assert payload["due_date"].endswith("+00:00")
-    assert deserialize_event(payload) == event
 
 
 @pytest.mark.asyncio
@@ -334,7 +222,7 @@ async def test_sqlalchemy_inbox_and_quarantine_are_durable_and_deduplicated():
             event_id="event-1",
             handler_name="unsafe handler",
             contract_name="library.lending.loan-created",
-            contract_version=2,
+            contract_version=1,
             payload_hash="a" * 64,
             correlation_id="workflow-1",
             causation_id=None,
@@ -344,7 +232,7 @@ async def test_sqlalchemy_inbox_and_quarantine_are_durable_and_deduplicated():
         event_id="event-1",
         handler_name="handler-1",
         contract_name="library.lending.loan-created",
-        contract_version=2,
+        contract_version=1,
         payload_hash="a" * 64,
         correlation_id="workflow-1",
         causation_id="reserve-1",
@@ -357,7 +245,7 @@ async def test_sqlalchemy_inbox_and_quarantine_are_durable_and_deduplicated():
         event_id="event-1",
         handler_name="handler-1",
         contract_name="library.lending.loan-created",
-        contract_version=2,
+        contract_version=1,
         payload_hash="a" * 64,
         correlation_id="workflow-1",
         causation_id="reserve-1",
@@ -368,7 +256,7 @@ async def test_sqlalchemy_inbox_and_quarantine_are_durable_and_deduplicated():
             event_id="event-1",
             handler_name="handler-1",
             contract_name="library.catalog.book-returned",
-            contract_version=2,
+            contract_version=1,
             payload_hash="b" * 64,
             correlation_id="workflow-1",
             causation_id="reserve-1",
@@ -402,8 +290,16 @@ async def test_dlq_replay_scopes_reads_and_commits_to_each_partition():
         def __init__(self):
             self.positions = {first: 0, second: 0}
             self.records = {
-                first: [SimpleNamespace(offset=0, value={"original_topic": "events", "value": {"n": 1}})],
-                second: [SimpleNamespace(offset=0, value={"original_topic": "events", "value": {"n": 2}})],
+                first: [SimpleNamespace(offset=0, value={
+                    "original_topic": "events",
+                    "key": None,
+                    "value": encode_dead_letter_field(b'{"n":1}'),
+                })],
+                second: [SimpleNamespace(offset=0, value={
+                    "original_topic": "events",
+                    "key": None,
+                    "value": encode_dead_letter_field(b'{"n":2}'),
+                })],
             }
             self.getone_partitions = []
             self.commits = []
@@ -422,7 +318,7 @@ async def test_dlq_replay_scopes_reads_and_commits_to_each_partition():
 
     consumer = FakeConsumer()
     producer = AsyncMock()
-    producer.send.return_value = True
+    producer.send_raw.return_value = True
 
     assert await replay_partition(
         consumer=consumer, kafka_client=producer, partition=first, end_offset=1

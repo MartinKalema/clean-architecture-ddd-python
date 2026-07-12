@@ -79,8 +79,6 @@ class LoanUnitOfWork:
                     ) from e
                 if (
                     "ix_loans_outstanding_book_unique" in constraint
-                    # Keep the old name during rolling migrations/downgrades.
-                    or "ix_loans_active_book_unique" in constraint
                     or "ix_loans_reservation_id_unique" in constraint
                     # SQLite reports columns rather than index names.
                     or "UNIQUE constraint failed: loans.catalog_book_id"

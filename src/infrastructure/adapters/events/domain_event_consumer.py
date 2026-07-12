@@ -27,7 +27,7 @@ from src.domain.lending import LoanCompleted, LoanCreated
 from src.infrastructure.adapters.events.delivery_store import EventQuarantine
 from src.infrastructure.adapters.events.event_registry import (
     EventContractError,
-    contract_for_event,
+    InvalidEventEnvelopeError,
     deserialize_event,
 )
 from src.infrastructure.exceptions import (
@@ -68,7 +68,7 @@ class DomainEventConsumer:
         logger: ILogger,
         topics: Optional[list[str]] = None,
         quarantine: Optional[EventQuarantine] = None,
-        group_id: str = "domain-event-worker",
+        group_id: str = "domain-workflow-worker-v1",
         durable_delivery: bool = False,
     ) -> None:
         if not group_id.strip():
@@ -131,7 +131,7 @@ class DomainEventConsumer:
         try:
             await self._dispatcher.dispatch(
                 event,
-                delivery_identity=_delivery_identity(value, event),
+                delivery_identity=_delivery_identity(value),
             )
         except Exception as error:
             if isinstance(event, DURABLE_TRANSITION_EVENTS):
@@ -170,19 +170,15 @@ class DomainEventConsumer:
         self._logger.info("Domain event consumer stopped")
 
 
-def _delivery_identity(value: dict, event) -> EventDeliveryIdentity:
+def _delivery_identity(value: dict) -> EventDeliveryIdentity:
     raw_contract = value.get("contract")
-    if isinstance(raw_contract, dict):
-        namespace = raw_contract.get("namespace")
-        name = raw_contract.get("name")
-        version = raw_contract.get("version")
-        contract_name = f"{namespace}.{name}"
-        contract_version = int(version)
-    else:
-        # Flat persisted payloads predate the envelope and are always v1.
-        contract = contract_for_event(event)
-        contract_name = contract.qualified_name
-        contract_version = 1
+    if not isinstance(raw_contract, dict):
+        raise InvalidEventEnvelopeError("Event contract must be an object")
+    namespace = raw_contract.get("namespace")
+    name = raw_contract.get("name")
+    version = raw_contract.get("version")
+    contract_name = f"{namespace}.{name}"
+    contract_version = int(version)
     canonical = json.dumps(
         value,
         sort_keys=True,

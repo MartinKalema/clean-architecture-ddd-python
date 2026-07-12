@@ -37,8 +37,8 @@ def validate_pagination(
 ) -> None:
     """Validate pagination at the application boundary.
 
-    Offset pagination is retained for compatibility but is bounded by the
-    Elasticsearch result window. New consumers should use ``cursor``.
+    Offset pagination is bounded by the Elasticsearch result window. Cursors
+    are the stable option for large or changing result sets.
     """
     if isinstance(limit, bool) or limit < 1 or limit > MAX_PAGE_SIZE:
         raise InvalidPaginationError(

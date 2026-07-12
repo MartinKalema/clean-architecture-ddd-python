@@ -21,18 +21,14 @@ def _repository_head() -> str:
     return head
 
 
-@pytest.mark.parametrize("revision", ["004", "005", "006", "008"])
-def test_identity_and_delivery_contract_migrations_reject_unsafe_downgrade(
-    revision,
-):
+def test_repository_has_one_current_schema_baseline():
     root = Path(__file__).resolve().parents[2]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "migrations"))
-    script = ScriptDirectory.from_config(config).get_revision(revision)
-    assert script is not None
+    scripts = list(ScriptDirectory.from_config(config).walk_revisions())
 
-    with pytest.raises(RuntimeError, match="irreversible"):
-        script.module.downgrade()
+    assert [script.revision for script in scripts] == ["baseline_20260712"]
+    assert scripts[0].down_revision is None
 
 
 @pytest.mark.asyncio

@@ -20,7 +20,6 @@ from src.application.ports import BorrowerProfile
 from src.domain.lending import LoanCreated
 from src.domain.lending.exceptions import BookNotAvailableException
 from src.infrastructure.adapters.events import (
-    EVENT_TYPES,
     deserialize_event,
     outbox_type_for_event_class,
 )
@@ -28,8 +27,8 @@ from src.infrastructure.adapters.lending import LoanUnitOfWork
 from src.infrastructure.adapters.outbox import OutboxMessageModel
 
 
-async def _get_outbox_rows(test_db, event_type: str) -> list[OutboxMessageModel]:
-    wire_type = outbox_type_for_event_class(EVENT_TYPES[event_type])
+async def _get_outbox_rows(test_db, event_class) -> list[OutboxMessageModel]:
+    wire_type = outbox_type_for_event_class(event_class)
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
     async with session_factory() as session:
         result = await session.execute(
@@ -77,7 +76,7 @@ async def test_create_loan_writes_loan_created_to_outbox(test_db):
     )
     result = await handler.handle(command)
 
-    rows = await _get_outbox_rows(test_db, "LoanCreated")
+    rows = await _get_outbox_rows(test_db, LoanCreated)
     rows = [r for r in rows if r.aggregateid == result.id]
     assert len(rows) == 1
 
@@ -87,7 +86,7 @@ async def test_create_loan_writes_loan_created_to_outbox(test_db):
     assert payload["contract"] == {
         "namespace": "library.lending",
         "name": "loan-created",
-        "version": 2,
+        "version": 1,
     }
     assert payload["data"]["reservation_id"] == command.reservation_id
     assert payload["data"]["reservation_generation"] == 1
@@ -150,7 +149,7 @@ async def test_rejected_command_writes_nothing_to_outbox(test_db):
         borrowed_at=datetime(2026, 7, 4, 12, 0, tzinfo=timezone.utc),
     )
     await handler.handle(command)
-    rows_before = await _get_outbox_rows(test_db, "LoanCreated")
+    rows_before = await _get_outbox_rows(test_db, LoanCreated)
 
     # A different reservation for the same book is rejected before commit.
     contending_command = CreateLoanCommand(
@@ -165,5 +164,5 @@ async def test_rejected_command_writes_nothing_to_outbox(test_db):
     with pytest.raises(BookNotAvailableException):
         await handler.handle(contending_command)
 
-    rows_after = await _get_outbox_rows(test_db, "LoanCreated")
+    rows_after = await _get_outbox_rows(test_db, LoanCreated)
     assert len(rows_after) == len(rows_before)
