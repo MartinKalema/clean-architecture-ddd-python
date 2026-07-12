@@ -1,9 +1,6 @@
-from .etcd_client import EtcdClient
-from .postgresql import PostgreSQL
-from .sendgrid_client import SendGridClient
+"""External clients.
 
-__all__ = [
-    "EtcdClient",
-    "PostgreSQL",
-    "SendGridClient",
-]
+Import concrete clients from their modules. Keeping this package initializer
+side-effect free prevents importing Redis/PostgreSQL from eagerly requiring
+unrelated etcd or SendGrid SDKs.
+"""

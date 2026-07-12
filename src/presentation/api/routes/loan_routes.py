@@ -2,16 +2,12 @@
 Loan API Routes.
 """
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Header, Query, Response
+from pydantic import BaseModel, Field
 
-from src.application.command_handlers.create_loan import (
-    CreateLoanCommand,
-    CreateLoanHandler,
-)
 from src.application.command_handlers.extend_loan import (
     ExtendLoanCommand,
     ExtendLoanHandler,
@@ -29,29 +25,14 @@ from src.application.query_handlers.list_patron_loans import (
     ListPatronLoansQuery,
 )
 from src.container import Container
-from src.domain.lending.exceptions import (
-    BookNotAvailableException,
-    CannotExtendOverdueLoanException,
-    LendingException,
-    LoanAlreadyReturnedException,
-    LoanNotFoundException,
-)
+from src.presentation.api.pagination import set_page_headers
 
 router = APIRouter(prefix="/loans", tags=["Loans"])
 
 
-class LoanCreate(BaseModel):
-    """Request model for creating a loan."""
-    patron_id: str
-    patron_email: str
-    catalog_book_id: str
-    book_title: str
-    loan_duration_days: int = 14
-
-
 class ExtendLoanRequest(BaseModel):
     """Request model for extending a loan."""
-    days: int = 7
+    days: int = Field(default=7, ge=1, le=365)
 
 
 class LoanResponse(BaseModel):
@@ -80,45 +61,15 @@ class ReturnLoanResponse(BaseModel):
     was_overdue: bool
 
 
-@router.post("", response_model=LoanResponse, status_code=201)
-@inject
-async def create_loan(
-    loan: LoanCreate,
-    handler: CreateLoanHandler = Depends(Provide[Container.create_loan_handler]),
-):
-    """Create a new loan."""
-    try:
-        command = CreateLoanCommand(
-            patron_id=loan.patron_id,
-            patron_email=loan.patron_email,
-            catalog_book_id=loan.catalog_book_id,
-            book_title=loan.book_title,
-            loan_duration_days=loan.loan_duration_days,
-        )
-        result = await handler.handle(command)
-        return LoanResponse(
-            id=result.id,
-            patron_id=result.patron_id,
-            patron_email=loan.patron_email,
-            catalog_book_id=result.catalog_book_id,
-            book_title=result.book_title,
-            borrowed_at=result.borrowed_at,
-            due_date=result.due_date,
-            status="active",
-        )
-    except BookNotAvailableException as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except LendingException as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
 @router.get("/patron/{patron_id}", response_model=List[LoanResponse])
 @inject
 async def list_patron_loans(
     patron_id: str,
+    response: Response,
     only_active: bool = Query(False),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    cursor: Optional[str] = Query(None, max_length=1024),
     handler: ListPatronLoansHandler = Depends(Provide[Container.list_patron_loans_handler]),
 ):
     """List loans for a patron."""
@@ -127,8 +78,14 @@ async def list_patron_loans(
         only_active=only_active,
         limit=limit,
         offset=offset,
+        cursor=cursor,
     )
-    results = await handler.handle(query)
+    page = await handler.handle_page(query)
+    set_page_headers(
+        response,
+        next_cursor=page.next_cursor,
+        total=page.total,
+    )
     return [
         LoanResponse(
             id=loan.id,
@@ -141,7 +98,7 @@ async def list_patron_loans(
             returned_at=loan.returned_at,
             status=loan.status,
         )
-        for loan in results
+        for loan in page.items
     ]
 
 
@@ -154,8 +111,6 @@ async def get_loan(
     """Get a loan by ID."""
     query = GetLoanQuery(loan_id=loan_id)
     result = await handler.handle(query)
-    if not result:
-        raise HTTPException(status_code=404, detail=f"Loan {loan_id} not found")
     return LoanResponse(
         id=result.id,
         patron_id=result.patron_id,
@@ -174,42 +129,43 @@ async def get_loan(
 async def extend_loan(
     loan_id: str,
     request: ExtendLoanRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: ExtendLoanHandler = Depends(Provide[Container.extend_loan_handler]),
 ):
     """Extend a loan."""
-    try:
-        command = ExtendLoanCommand(loan_id=loan_id, days=request.days)
-        result = await handler.handle(command)
-        return ExtendLoanResponse(
-            id=result.id,
-            new_due_date=result.new_due_date,
-        )
-    except LoanNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except CannotExtendOverdueLoanException as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except LendingException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    command = ExtendLoanCommand(
+        loan_id=loan_id,
+        days=request.days,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    return ExtendLoanResponse(
+        id=result.id,
+        new_due_date=result.new_due_date,
+    )
 
 
 @router.post("/{loan_id}/return", response_model=ReturnLoanResponse)
 @inject
 async def return_loan(
     loan_id: str,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: ReturnLoanHandler = Depends(Provide[Container.return_loan_handler]),
 ):
     """Return a loan."""
-    try:
-        command = ReturnLoanCommand(loan_id=loan_id)
-        result = await handler.handle(command)
-        return ReturnLoanResponse(
-            id=result.id,
-            returned_at=result.returned_at,
-            was_overdue=result.was_overdue,
-        )
-    except LoanNotFoundException as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except LoanAlreadyReturnedException as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except LendingException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    command = ReturnLoanCommand(
+        loan_id=loan_id,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    return ReturnLoanResponse(
+        id=result.id,
+        returned_at=result.returned_at,
+        was_overdue=result.was_overdue,
+    )

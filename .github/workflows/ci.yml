@@ -6,6 +6,24 @@ on:
   pull_request:
 
 jobs:
+  compose-contract:
+    name: Docker Compose correctness topology
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate default and optional topologies
+        shell: bash
+        run: |
+          docker compose config --quiet
+          default_services="$(docker compose config --services)"
+          for required in migrator postgres-extension-init kafka kafka-domain-topic-init debezium debezium-outbox-init debezium-outbox-monitor event-worker notification-worker reservation-reaper outbox-cleaner durable-state-cleaner; do
+            grep -Fxq "$required" <<<"$default_services" || {
+              echo "Missing correctness-critical default service: $required" >&2
+              exit 1
+            }
+          done
+          docker compose --profile cdc config --quiet
+
   typecheck:
     name: mypy (dependency rule + type layer)
     runs-on: ubuntu-latest
@@ -21,8 +39,26 @@ jobs:
         run: mypy src
 
   test:
-    name: pytest (domain, application, infrastructure, integration)
+    name: pytest (migrated PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: library
+          POSTGRES_PASSWORD: library_secret
+          POSTGRES_DB: library_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U library -d library_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://library:library_secret@127.0.0.1:5432/library_test
+      TEST_DATABASE_URL: postgresql+asyncpg://library:library_secret@127.0.0.1:5432/library_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,8 +67,106 @@ jobs:
           cache: pip
       - name: Install
         run: pip install -e . pytest
+      - name: Provision trusted PostgreSQL extensions
+        run: |
+          python - <<'PY'
+          import psycopg2
+
+          with psycopg2.connect(
+              host="127.0.0.1",
+              port=5432,
+              user="library",
+              password="library_secret",
+              dbname="library_test",
+          ) as connection:
+              with connection.cursor() as cursor:
+                  cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+          PY
+      - name: Apply database migrations
+        run: alembic upgrade head
+      - name: Verify database schema contract
+        run: |
+          python - <<'PY'
+          import asyncio
+          import os
+
+          from src.infrastructure.external.postgresql import PostgreSQL
+
+          async def verify() -> None:
+              database = PostgreSQL(os.environ["TEST_DATABASE_URL"])
+              try:
+                  await database.verify_schema_current()
+              finally:
+                  await database.dispose()
+
+          asyncio.run(verify())
+          PY
+      - name: Reject ORM and Alembic schema drift
+        run: alembic check
       - name: pytest
-        # e2e requires the full compose stack (etcd, Kafka, ES); everything
-        # else runs infrastructure-free since app composition moved into
-        # the create_app factory
-        run: pytest tests/domain tests/application tests/infrastructure tests/integration -q
+        # E2E requires the full Compose stack (etcd, Kafka, and workers).
+        # Integration tests use the migrated PostgreSQL service above so
+        # PostgreSQL constraints and Alembic state are part of the test gate.
+        run: >-
+          python -m pytest tests/domain tests/application tests/infrastructure
+          tests/integration tests/presentation -vv -x
+
+  migration-upgrade:
+    name: Alembic legacy outbox and correlation upgrades
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: library
+          POSTGRES_PASSWORD: library_secret
+          POSTGRES_DB: library_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U library -d library_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://library:library_secret@127.0.0.1:5432/library_migration_test
+      # The seeded pre-006 fixtures model the historical Docker UTC baseline.
+      LEGACY_NAIVE_TIMEZONE: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e .
+      - name: Provision trusted PostgreSQL extensions
+        run: |
+          python - <<'PY'
+          import psycopg2
+
+          with psycopg2.connect(
+              host="127.0.0.1",
+              port=5432,
+              user="library",
+              password="library_secret",
+              dbname="library_migration_test",
+          ) as connection:
+              with connection.cursor() as cursor:
+                  cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+          PY
+      - name: Verify pending polling-outbox transfer
+        run: |
+          alembic upgrade 001
+          python scripts/verify_migration_002.py seed
+          alembic upgrade 002
+          python scripts/verify_migration_002.py verify
+      - name: Build revision 003 legacy domain data
+        run: |
+          alembic upgrade 003
+          python scripts/verify_migration_004.py seed
+      - name: Upgrade and verify reconciliation
+        run: |
+          alembic upgrade head
+          python scripts/verify_migration_002.py verify
+          python scripts/verify_migration_004.py verify

@@ -55,7 +55,9 @@ def build_config() -> dict:
         "sendgrid": {
             "api_key": get_env("SENDGRID_API_KEY", "SG.placeholder"),
             "from_email": get_env("SENDGRID_FROM_EMAIL", "admin@library.com"),
-            "admin_email": get_env("SENDGRID_ADMIN_EMAIL", "admin@library.com"),
+            "request_timeout_seconds": get_env_float(
+                "SENDGRID_REQUEST_TIMEOUT_SECONDS", 15.0
+            ),
         },
         "circuit_breakers": {
             "sendgrid": {
@@ -67,7 +69,6 @@ def build_config() -> dict:
                 "window_seconds": get_env_float("CB_SENDGRID_WINDOW_SECONDS", 60.0),
                 "minimum_calls": get_env_int("CB_SENDGRID_MINIMUM_CALLS", 10),
                 "half_open_max_calls": get_env_int("CB_SENDGRID_HALF_OPEN_MAX_CALLS", 1),
-                "call_timeout": get_env_float("CB_SENDGRID_CALL_TIMEOUT", 30.0),
             },
             "elasticsearch": {
                 "name": get_env("CB_ELASTICSEARCH_NAME", "elasticsearch"),
@@ -90,11 +91,34 @@ def build_config() -> dict:
         },
         "kafka": {
             "bootstrap_servers": get_env("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-            "consumer_group": get_env("KAFKA_CONSUMER_GROUP", "es-sync-consumer"),
+            "projection_group_id": get_env(
+                "KAFKA_PROJECTION_GROUP_ID",
+                get_env("KAFKA_CONSUMER_GROUP", "es-sync-consumer"),
+            ),
             "consumer_max_retries": get_env_int("KAFKA_CONSUMER_MAX_RETRIES", 3),
             "retry_backoff_seconds": get_env_float("KAFKA_RETRY_BACKOFF_SECONDS", 1.0),
+            "consumer_max_poll_interval_ms": get_env_int(
+                "KAFKA_CONSUMER_MAX_POLL_INTERVAL_MS", 900_000
+            ),
+            "message_processing_timeout_seconds": get_env_float(
+                "KAFKA_MESSAGE_PROCESSING_TIMEOUT_SECONDS", 180.0
+            ),
+            "internal_topic_replication_factor": get_env_int(
+                "KAFKA_INTERNAL_TOPIC_REPLICATION_FACTOR", 3
+            ),
+            # Notification intentionally inherits the legacy combined worker's
+            # group so a rolling deployment continues its committed offsets and
+            # never blasts historical confirmation emails. Workflow replay is
+            # safe because every transition is exact-token fenced/idempotent.
+            "workflow_group_id": get_env(
+                "KAFKA_WORKFLOW_GROUP_ID", "domain-workflow-worker-v1"
+            ),
+            "notification_group_id": get_env(
+                "KAFKA_NOTIFICATION_GROUP_ID", "domain-event-worker"
+            ),
         },
         "elasticsearch": {
+            "enabled": get_env("ELASTICSEARCH_ENABLED", "false").lower() == "true",
             "url": get_env("ELASTICSEARCH_URL", "http://localhost:9200"),
             "max_connections": get_env_int("ELASTICSEARCH_MAX_CONNECTIONS", 300),
             "request_timeout": get_env_int("ELASTICSEARCH_REQUEST_TIMEOUT", 30),
@@ -104,9 +128,9 @@ def build_config() -> dict:
             "verify_certs": get_env("ELASTICSEARCH_VERIFY_CERTS", "true").lower() == "true",
         },
         "catalog": {
-            # TTL must stay comfortably above worst-case event latency:
-            # a reservation released before its loan event arrives leaves
-            # a loan for a book the catalog gave back
+            # Keep the TTL comfortably above worst-case event latency. Exact
+            # reservation fencing makes expiry safe, but an undersized TTL
+            # would still compensate otherwise valid borrows.
             "reservation_ttl_seconds": get_env_int("RESERVATION_TTL_SECONDS", 300),
             "reaper_interval_seconds": get_env_int("RESERVATION_REAPER_INTERVAL_SECONDS", 60),
         },

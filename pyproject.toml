@@ -26,6 +26,9 @@ dependencies = [
     "etcd3",
     "protobuf>=3.19.0,<4.0.0",
     "python-dotenv",
+    # Alembic must validate and apply the operator-declared IANA timezone even
+    # on minimal containers or hosts without a system timezone database.
+    "tzdata>=2024.1",
     "redis",
     "aiokafka",
     "aiohttp",
@@ -37,6 +40,7 @@ addopts = "-v"
 testpaths = ["tests"]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 filterwarnings = [
     # etcd3 is unmaintained and ships protobuf code generated for the
     # legacy descriptor API (the reason for the protobuf<4 pin). Its

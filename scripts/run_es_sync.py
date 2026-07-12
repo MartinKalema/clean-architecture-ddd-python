@@ -55,6 +55,12 @@ async def main() -> None:
     except Exception as e:
         logger.error(f"Consumer error: {e}")
         raise
+    finally:
+        # CDC cache invalidation can lazily open Redis independently of the API.
+        try:
+            await container.redis_client().close()
+        finally:
+            container.etcd_adapter().close()
 
 
 if __name__ == "__main__":

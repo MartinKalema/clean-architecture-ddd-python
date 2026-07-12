@@ -29,6 +29,8 @@ services:
     build: .
     container_name: clean_arch_seeder
     env_file: .env.docker
+    environment:
+      ELASTICSEARCH_ENABLED: ${ELASTICSEARCH_ENABLED:-false}
     command: ["python", "scripts/seed_etcd_config.py"]
     depends_on:
       etcd:
@@ -44,6 +46,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-extension-init:
+        condition: service_completed_successfully
       seeder:
         condition: service_completed_successfully
 
@@ -59,7 +63,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -129,6 +133,23 @@ services:
       retries: 5
     restart: unless-stopped
 
+  postgres-extension-init:
+    image: postgres:16-alpine
+    container_name: clean_arch_postgres_extension_init
+    environment:
+      PGPASSWORD: library_secret
+    command:
+      - "sh"
+      - "-ec"
+      - >-
+        psql -h postgres -U library -d library_db
+        -v ON_ERROR_STOP=1
+        -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   pgbouncer:
     image: edoburu/pgbouncer:latest
     container_name: clean_arch_pgbouncer
@@ -197,7 +218,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # CDC Pipeline Services
+  # Domain-event pipeline (default) and optional CDC read-model services
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: clean_arch_zookeeper
@@ -215,8 +236,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    profiles:
-      - cdc
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -233,6 +252,9 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      # Correctness events remain replayable for 30 days. The database outbox
+      # retains 90 days, leaving another 60-day outage/recovery margin.
+      KAFKA_LOG_RETENTION_HOURS: 720
       # Off, as in production: topic shape is declared by the Debezium
       # connectors (topic.creation.*) and DLQ topics are created by the
       # messaging layer on first use. With auto-create on, any consumer
@@ -250,8 +272,26 @@ services:
       retries: 10
       start_period: 60s
     restart: unless-stopped
-    profiles:
-      - cdc
+
+  kafka-domain-topic-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: clean_arch_kafka_domain_topic_init
+    command:
+      - bash
+      - -ec
+      - |
+        for topic in outbox.event.book outbox.event.loan outbox.event.patron; do
+          kafka-topics --bootstrap-server kafka:29092 \
+            --create --if-not-exists --topic "$$topic" \
+            --partitions 4 --replication-factor 1
+          kafka-configs --bootstrap-server kafka:29092 \
+            --entity-type topics --entity-name "$$topic" --alter \
+            --add-config retention.ms=2592000000
+        done
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
 
   debezium:
     image: debezium/connect:2.4
@@ -261,8 +301,11 @@ services:
     environment:
       GROUP_ID: 1
       CONFIG_STORAGE_TOPIC: debezium_configs
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
       OFFSET_STORAGE_TOPIC: debezium_offsets
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
       STATUS_STORAGE_TOPIC: debezium_statuses
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
       BOOTSTRAP_SERVERS: kafka:29092
       KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
@@ -280,8 +323,6 @@ services:
       retries: 10
       start_period: 60s
     restart: unless-stopped
-    profiles:
-      - cdc
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
@@ -328,21 +369,98 @@ services:
     profiles:
       - cdc
 
-  debezium-init:
+  debezium-outbox-init:
     image: curlimages/curl:latest
-    container_name: clean_arch_debezium_init
+    container_name: clean_arch_debezium_outbox_init
     volumes:
       - ./deploy/debezium:/config:ro
-    # Topic partitioning is declared by the connectors themselves
-    # (topic.creation.* in the register-*.json configs): the component
-    # that owns the topics declares their shape. DLQ topics are created
-    # by the messaging layer on first use (KafkaClient._ensure_topic).
-    command: ["sh", "-c", "echo 'Registering Debezium PostgreSQL connector...' && curl -X POST -H 'Content-Type: application/json' --data @/config/register-connector.json http://debezium:8083/connectors && echo '' && echo 'Registering Debezium outbox connector...' && curl -X POST -H 'Content-Type: application/json' --data @/config/register-outbox-connector.json http://debezium:8083/connectors && echo '' && echo 'Connectors registered successfully!'"]
+    # The outbox connector is part of business correctness. Recreate it from
+    # the reviewed config (offsets remain in Kafka), then block until both the
+    # connector and its task are RUNNING. "Connector exists" is not health.
+    command:
+      - sh
+      - -ec
+      - |
+        if curl -fsS http://debezium:8083/connectors/outbox-connector >/dev/null; then
+          echo 'Replacing Debezium outbox connector with reviewed config...'
+          curl -fsS -X DELETE \
+            http://debezium:8083/connectors/outbox-connector
+          while curl -fsS \
+            http://debezium:8083/connectors/outbox-connector >/dev/null; do
+            sleep 1
+          done
+        fi
+        until curl -fsS -X POST -H 'Content-Type: application/json' \
+          --data @/config/register-outbox-connector.json \
+          http://debezium:8083/connectors; do
+          echo 'Outbox connector registration not accepted yet; retrying...'
+          sleep 2
+        done
+        echo 'Waiting for outbox connector and task to be RUNNING...'
+        while true; do
+          status="$$(curl -fsS \
+            http://debezium:8083/connectors/outbox-connector/status || true)"
+          running="$$(echo "$$status" | grep -o '"state":"RUNNING"' | wc -l)"
+          if [ "$$running" -ge 2 ] && \
+             ! echo "$$status" | grep -Eq '"state":"(FAILED|UNASSIGNED|PAUSED)"'; then
+            echo 'Debezium outbox connector is healthy'
+            break
+          fi
+          echo "Outbox connector not ready: $$status"
+          sleep 2
+        done
     depends_on:
       debezium:
         condition: service_healthy
-      postgres:
+      kafka-domain-topic-init:
+        condition: service_completed_successfully
+      migrator:
+        condition: service_completed_successfully
+
+  debezium-outbox-monitor:
+    image: curlimages/curl:latest
+    container_name: clean_arch_debezium_outbox_monitor
+    command: ["sh", "-c", "while true; do sleep 30; done"]
+    depends_on:
+      debezium-outbox-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          status="$$(curl -fsS
+          http://debezium:8083/connectors/outbox-connector/status)" &&
+          test "$$(echo "$$status" | grep -o '"state":"RUNNING"' | wc -l)" -ge 2 &&
+          ! echo "$$status" | grep -Eq '"state":"(FAILED|UNASSIGNED|PAUSED)"'
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  debezium-cdc-init:
+    image: curlimages/curl:latest
+    container_name: clean_arch_debezium_cdc_init
+    volumes:
+      - ./deploy/debezium:/config:ro
+    # Table CDC only feeds the optional Elasticsearch projection.
+    command:
+      - sh
+      - -ec
+      - |
+        if curl -fsS http://debezium:8083/connectors/library-connector >/dev/null; then
+          echo 'Debezium table CDC connector already registered'
+        else
+          echo 'Registering Debezium table CDC connector...'
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            --data @/config/register-connector.json \
+            http://debezium:8083/connectors
+        fi
+    depends_on:
+      debezium:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     profiles:
       - cdc
 
@@ -374,7 +492,7 @@ services:
         condition: service_healthy
       elasticsearch-init:
         condition: service_completed_successfully
-      debezium-init:
+      debezium-cdc-init:
         condition: service_completed_successfully
       etcd:
         condition: service_healthy
@@ -397,13 +515,45 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-      debezium-init:
+      debezium-outbox-init:
         condition: service_completed_successfully
       etcd:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "assert 'run_event_worker.py' in open('/proc/1/cmdline').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
-    profiles:
-      - cdc
+
+  notification-worker:
+    build: .
+    # Optional email delivery has a separate consumer group and process. A
+    # SendGrid outage cannot head-of-line block Catalog/Lending convergence.
+    deploy:
+      replicas: 2
+    env_file: .env.docker
+    command: ["python", "scripts/run_notification_worker.py"]
+    environment:
+      ETCD_HOST: etcd
+      ETCD_PORT: 2379
+    depends_on:
+      kafka:
+        condition: service_healthy
+      debezium-outbox-init:
+        condition: service_completed_successfully
+      etcd:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "assert 'run_notification_worker.py' in open('/proc/1/cmdline').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
 
   reservation-reaper:
     build: .
@@ -418,9 +568,84 @@ services:
         condition: service_completed_successfully
       etcd:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os,time;
+          path='/tmp/reservation-reaper-heartbeat';
+          limit=max(180,int(os.getenv('RESERVATION_REAPER_INTERVAL_SECONDS','60'))*3);
+          assert os.path.exists(path) and time.time()-os.path.getmtime(path)<limit
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     restart: unless-stopped
-    profiles:
-      - cdc
+
+  outbox-cleaner:
+    build: .
+    container_name: clean_arch_outbox_cleaner
+    env_file: .env.docker
+    command:
+      - sh
+      - -ec
+      - |
+        while true; do
+          python scripts/cleanup_outbox.py \
+            --retention-hours "$${OUTBOX_RETENTION_HOURS:-2160}" \
+            --batch-size "$${OUTBOX_CLEANUP_BATCH_SIZE:-500}" \
+            --max-batches "$${OUTBOX_CLEANUP_MAX_BATCHES:-20}" \
+            --max-slot-lag-bytes "$${OUTBOX_MAX_SLOT_LAG_BYTES:-1073741824}" \
+            --replication-slot "$${DEBEZIUM_OUTBOX_SLOT_NAME:-library_outbox_slot}"
+          sleep "$${OUTBOX_CLEANUP_INTERVAL_SECONDS:-3600}"
+        done
+    environment:
+      ETCD_HOST: etcd
+      ETCD_PORT: 2379
+    depends_on:
+      # Do not start retention until the outbox connector has successfully
+      # registered its durable slot and both connector/task report RUNNING.
+      debezium-outbox-init:
+        condition: service_completed_successfully
+      etcd:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    restart: unless-stopped
+
+  durable-state-cleaner:
+    build: .
+    container_name: clean_arch_durable_state_cleaner
+    env_file: .env.docker
+    command:
+      - sh
+      - -ec
+      - |
+        while true; do
+          python scripts/cleanup_durable_state.py \
+            --command-receipt-days "$${COMMAND_RECEIPT_RETENTION_DAYS:-30}" \
+            --terminal-operation-days "$${TERMINAL_OPERATION_RETENTION_DAYS:-120}" \
+            --processed-inbox-days "$${PROCESSED_INBOX_RETENTION_DAYS:-120}" \
+            --quarantine-days "$${EVENT_QUARANTINE_RETENTION_DAYS:-365}" \
+            --batch-size "$${DURABLE_STATE_CLEANUP_BATCH_SIZE:-500}" \
+            --max-batches "$${DURABLE_STATE_CLEANUP_MAX_BATCHES:-20}"
+          sleep "$${DURABLE_STATE_CLEANUP_INTERVAL_SECONDS:-86400}"
+        done
+    environment:
+      ETCD_HOST: etcd
+      ETCD_PORT: 2379
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      etcd:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    restart: unless-stopped
 
   locust-master:
     image: locustio/locust

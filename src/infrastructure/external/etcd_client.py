@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 import etcd3
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
+    from src.application.ports import ILogger
 
 
 class EtcdClient:

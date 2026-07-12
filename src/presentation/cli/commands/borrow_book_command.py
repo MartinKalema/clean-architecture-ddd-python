@@ -26,6 +26,9 @@ def borrow(
     try:
         command = BorrowBookCommand(book_id=book_id, borrower_email=borrower_email)
         result = asyncio.run(handler.handle(command))
-        click.echo(f"Successfully borrowed: {result.title}")
+        click.echo(
+            f"Borrow requested: {result.title} "
+            f"(reservation {result.reservation_id})"
+        )
     except Exception as e:
         click.echo(f"Error: {e}")

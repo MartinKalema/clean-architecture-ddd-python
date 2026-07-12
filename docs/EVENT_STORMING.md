@@ -571,17 +571,20 @@ This document contains the Event Storming artifacts and domain model diagrams fo
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
 │  │                              LENDING CONTEXT                                     │    │
 │  │                                                                                  │    │
-│  │  ┌──────────────────┐         ┌──────────────────┐                              │    │
-│  │  │  LoanableBook    │         │      Loan        │                              │    │
-│  │  │   «entity»       │◀────────│  «aggregate»     │                              │    │
-│  │  ├──────────────────┤ 0..*    ├──────────────────┤                              │    │
-│  │  │ catalogBookId    │         │ id: LoanId       │                              │    │
-│  │  │ isAvailable      │         │ bookId           │                              │    │
-│  │  │ holdQueue        │         │ patronId         │                              │    │
-│  │  └──────────────────┘         │ borrowedAt       │                              │    │
-│  │           │                   │ dueDate          │                              │    │
-│  │           │ 0..*              │ status           │                              │    │
-│  │           ▼                   └──────────────────┘                              │    │
+│  │                              ┌──────────────────┐                              │    │
+│  │                              │      Loan        │                              │    │
+│  │                              │  «aggregate»     │                              │    │
+│  │                              ├──────────────────┤                              │    │
+│  │                              │ id: LoanId       │                              │    │
+│  │                              │ bookId           │                              │    │
+│  │                              │ reservationId    │                              │    │
+│  │                              │ patronId         │                              │    │
+│  │                              │ borrowedAt       │                              │    │
+│  │                              │ dueDate          │                              │    │
+│  │                              │ status           │                              │    │
+│  │                              └──────────────────┘                              │    │
+│  │                                      │                                        │    │
+│  │                                      ▼                                        │    │
 │  │  ┌──────────────────┐                  │                                        │    │
 │  │  │      Hold        │                  │                                        │    │
 │  │  │  «aggregate»     │                  │ BookBorrowed                           │    │

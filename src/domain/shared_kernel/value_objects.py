@@ -24,14 +24,16 @@ class EmailAddress:
     value: str
 
     def __post_init__(self):
-        if not self.value or not self._is_valid_email(self.value):
-            raise InvalidEmailException(self.value)
+        value = str(self.value).strip().lower()
+        if len(value) > 254 or not self._is_valid_email(value):
+            raise InvalidEmailException(value)
+        object.__setattr__(self, "value", value)
 
     @staticmethod
     def _is_valid_email(email: str) -> bool:
         """Basic email validation."""
         pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        return bool(re.match(pattern, email))
+        return bool(re.fullmatch(pattern, email))
 
     def __str__(self) -> str:
         return self.value

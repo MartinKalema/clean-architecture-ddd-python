@@ -23,8 +23,8 @@
         ┌─────────────────┼─────────────────┐
         │                 │                 │
    ┌────▼────┐      ┌────▼────┐      ┌────▼────┐
-   │  Redis  │      │PgBouncer│      │RabbitMQ │
-   │ (Cache) │      │ (Pool)  │      │ (Queue) │
+   │  Redis  │      │PgBouncer│      │  Kafka  │
+   │ (Cache) │      │ (Pool)  │      │ (Events)│
    └─────────┘      └────┬────┘      └─────────┘
                          │
                    ┌─────▼─────┐
@@ -43,8 +43,11 @@
 ### Quick Start
 
 ```bash
-# Start all services
+# Start the API plus its required event pipeline and reservation reaper
 docker compose up --build
+
+# Add optional table CDC and the Elasticsearch read model
+docker compose --profile cdc up --build
 
 # Or with load testing profile
 docker compose --profile loadtest up --build --scale locust-worker=4
@@ -56,7 +59,8 @@ docker compose --profile loadtest up --build --scale locust-worker=4
 |---------|-----|---------|
 | API | http://localhost:8000 | Main application |
 | Locust | http://localhost:8089 | Load testing UI |
-| RabbitMQ | http://localhost:15672 | Message broker management |
+| Kafka | localhost:9092 | Domain-event and CDC broker |
+| Debezium | http://localhost:8083 | Outbox/CDC connector API |
 | PgBouncer | localhost:6432 | Connection pooling |
 | PostgreSQL | localhost:5432 | Database (direct) |
 | Redis | localhost:6379 | Cache |
@@ -74,8 +78,8 @@ DATABASE_URL=postgresql+asyncpg://library:library_secret@pgbouncer:6432/library_
 ETCD_HOST=etcd
 ETCD_PORT=2379
 
-# RabbitMQ
-RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+# Kafka
+KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 
 # Redis
 REDIS_URL=redis://redis:6379/0
@@ -95,13 +99,109 @@ SENDGRID_FROM_EMAIL=noreply@example.com
 api:
   build: .
   depends_on:
-    - pgbouncer
-    - redis
-    - rabbitmq
-    - etcd
+    migrator:
+      condition: service_completed_successfully
+    pgbouncer:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
 ```
 
-The API runs with 2 Uvicorn workers per container. Scale horizontally with multiple containers behind nginx.
+The API runs with one Uvicorn worker per container and scales horizontally
+behind Nginx. The default stack also starts Zookeeper, Kafka, Debezium's
+transactional-outbox connector, two event-worker replicas, the reservation
+reaper, and bounded outbox/durable-state cleaners. The first three complete
+business workflows; the cleaners keep retained event data bounded. The `cdc` profile adds only
+the optional table-CDC/Elasticsearch projection path.
+
+The default topology also runs `debezium-outbox-monitor`, whose health probe
+checks both connector and task state continuously after registration. Worker
+containers expose process health, while the reservation reaper touches a
+success-only heartbeat; repeated sweep failures make that container unhealthy
+instead of being hidden by its retry loop. API containers probe `/health/ready`
+rather than liveness.
+
+The cleaner defaults to 90-day retention and deletes at most 10,000 rows
+per hourly run. Retention uses the database insertion timestamp, not the domain
+event occurrence timestamp, so delayed historical events receive a full
+retention window. Compose starts the cleaner only after the outbox connector
+and task report `RUNNING`; the same dependency is mandatory in other
+environments. Keep the Debezium replication slot durable: a lagging connector
+can still read retained WAL after rows are pruned, but a recreated slot cannot
+recover pruned history. Every cleanup run therefore verifies that the declared
+slot exists in the current database, is active, has a confirmed flush LSN, and
+remains below `OUTBOX_MAX_SLOT_LAG_BYTES`. The cutoff comes from PostgreSQL's
+clock, and slot state is checked before and after every delete batch so a failed
+fence rolls the transaction back. Correctness topics retain 30 days, leaving a
+60-day database recovery margin. Increase both horizons before a longer outage.
+
+The durable-state cleaner keeps command receipts for 30 days, terminal borrow
+operations and processed inbox claims for 120 days, and quarantined payloads
+for 365 days. The inbox horizon exceeds the 90-day outbox replay horizon, so
+deduplication evidence cannot expire while its source event remains replayable.
+Archive quarantine evidence externally before extending an investigation past
+its maximum retention; it may contain patron data.
+
+### Database Schema Ownership
+
+Alembic is the sole PostgreSQL schema owner. Deployments run `alembic upgrade
+head` once, before application processes. API startup only verifies that the
+database's `alembic_version` exactly equals the repository head; it fails fast
+instead of creating or upgrading tables.
+
+The migration role must own schema DDL. Revision 007 also needs the trusted
+`pg_trgm` extension; least-privilege environments should have a database
+administrator install it before deployment. Its large query indexes are built
+with `CREATE INDEX CONCURRENTLY`, so writes remain available during those
+builds, while the invariant/table-rewrite revisions still require a normal
+maintenance-window lock budget.
+
+In Docker Compose, this ordering is enforced by the one-shot `migrator`
+service and `depends_on: condition: service_completed_successfully`. Apply the
+same expand/migrate/verify ordering in Kubernetes or managed deployments.
+
+Pre-006 application processes wrote local, timezone-naive datetimes. Before
+upgrading any non-empty legacy database, set `LEGACY_NAIVE_TIMEZONE` on the
+one-shot migrator to the exact IANA timezone used by those historical
+application hosts (for example, `UTC` or `Asia/Qatar`). Do not substitute the
+timezone of the new deployment. Migrations `002`, `005`, and `006` validate the
+name and abort transactionally when timestamp-bearing legacy rows exist but
+the setting is missing or invalid. Fresh empty schemas do not require it. The
+pending polling-outbox conversion additionally refuses ambiguous or
+nonexistent local payload times at a daylight-saving transition; reconcile
+those rows explicitly and retry the migration.
+
+Patched revision `002` writes a `revision-002-lossless-outbox` safety marker.
+An installation stamped by the earlier destructive body has no such proof, so
+revision `005` stops before timestamp conversion. Only after auditing/recovering
+the pre-002 backup and WAL may an operator set
+`ACKNOWLEDGE_UNSAFE_LEGACY_002=I_AUDITED_BACKUP_AND_WAL_FOR_REVISION_002`.
+The acknowledgement records the audit; it cannot recreate events already lost.
+
+Migration `004` is an explicit contract migration, not a rolling-compatible
+expand step: it makes correlation fields mandatory and changes integration
+event schemas. For this release, drain domain-event consumer lag to zero,
+stop old API writers/workers/reaper, apply Alembic head once, deploy the API
+and correctness workers together, replace the outbox connector config, wait
+for its connector and task to report `RUNNING`, and only then restore traffic.
+Do not overlap pre-004 writers or queued pre-004 event payloads with the new
+contract. A future zero-downtime rollout must split this into expand,
+dual-compatible event/upcaster, backfill, and contract releases.
+
+Revisions `004` through `006` intentionally reject downgrade. They establish
+reservation/loan identity, durable event delivery state, command receipts,
+and UTC/invariant contracts that cannot be projected back without losing
+business identity or replay protection. Restore a pre-upgrade backup instead
+of attempting a schema downgrade. Revision `002` predates this guard; an
+installation that already ran its original destructive form can recover lost
+pending rows only from a database backup or retained WAL, not from a later
+migration. An older copy of revision `002` also normalized offset-aware outbox
+timestamps to UTC-naive while leaving local-naive timestamps unchanged. If an
+installation was already stamped at `002` before this correction, revision
+`005` cannot identify that mixed provenance. Audit the outbox timestamps and
+restore/correct them from their original payloads, backup, or WAL before
+continuing; choosing a timezone cannot repair a column that already mixes two
+wall-clock conventions.
 
 ### Nginx Load Balancer
 
@@ -147,10 +247,31 @@ Centralized configuration management. Keys are stored under `/config/` prefix:
 ```
 /config/database/url
 /config/redis/enabled
-/config/circuit_breakers/rabbitmq/timeout
+/config/circuit_breakers/sendgrid/timeout
 ```
 
 ## Production Deployment
+
+### Required Topology
+
+The snippets below describe the API process only; deploying that process by
+itself is not a functional system. Every production environment must also
+provide:
+
+- a one-shot `alembic upgrade head` job before any release process starts;
+- PostgreSQL through a healthy PgBouncer path and etcd configuration;
+- durable Kafka plus Kafka Connect/Debezium with the outbox connector and task
+  both `RUNNING`;
+- one or more `python scripts/run_event_worker.py` processes using the shared
+  consumer group;
+- exactly one active `python scripts/run_reservation_reaper.py` process (or a
+  leader-elected equivalent).
+
+Domain-event workers retry transient state reconciliation indefinitely with
+bounded backoff. Alert on worker restarts, outbox connector/task state,
+consumer lag approaching the reservation TTL, and any DLQ record.
+`/health/ready` covers the API request path; it is not a substitute for these
+pipeline health signals.
 
 ### Google Cloud Run
 
@@ -160,7 +281,7 @@ Centralized configuration management. Keys are stored under `/config/` prefix:
 2. Set pool mode to `Transaction`
 3. Configure Cloud SQL Auth Proxy
 
-#### Service Configuration
+#### API Service Component
 
 ```yaml
 apiVersion: serving.knative.dev/v1
@@ -190,9 +311,14 @@ spec:
               memory: "512Mi"
 ```
 
+Use managed Kafka/Kafka Connect or separately hosted equivalents, plus Cloud
+Run worker services/jobs for the event-worker, reaper, and migrator commands
+listed above. Do not route client traffic to the API service until those
+release checks pass.
+
 ### Kubernetes
 
-#### Deployment
+#### API Deployment Component
 
 ```yaml
 apiVersion: apps/v1
@@ -227,6 +353,12 @@ spec:
               path: /health/ready
               port: 8000
 ```
+
+Create a pre-deploy Kubernetes `Job` with command `alembic upgrade head`, an
+`event-worker` Deployment (replicas bounded by Kafka partitions), and a
+single-replica `reservation-reaper` Deployment. Kafka/Connect may be managed
+by an operator, but rollout health must verify the outbox connector and task
+states before the API Service is made ready for traffic.
 
 #### Horizontal Pod Autoscaler
 

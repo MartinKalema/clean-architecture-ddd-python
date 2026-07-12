@@ -25,18 +25,27 @@ Load tested with production-like traffic distribution (93% reads, 7% writes):
 git clone https://github.com/MartinKalema/clean-architecture-ddd-python.git
 cd clean-architecture-ddd-python
 
-# Start all services with Docker
+# Start the API and all correctness-critical infrastructure
 docker compose up --build
 
 # API available at http://localhost:8000
 # API docs at http://localhost:8000/docs
 ```
 
-### Run with CDC Pipeline (Elasticsearch)
+The default stack runs Alembic migrations before starting the API, then
+starts the transactional-outbox pipeline (Debezium, Kafka, durable workflow
+workers, and independently scaled notification workers) plus the reservation
+reaper, connector monitor, and bounded outbox/durable-state cleaners. These
+are part of the operating topology, not optional observability services. Each API instance
+refuses to start unless the database revision exactly matches the repository's
+Alembic head.
+
+### Add the Elasticsearch Read Model
 
 ```bash
-# Start with CDC profile (includes Kafka, Debezium, Elasticsearch)
-docker compose --profile cdc up --build
+# Adds table CDC, Elasticsearch, Kibana, and the ES projection workers.
+# The domain-event pipeline already runs in the default stack.
+ELASTICSEARCH_ENABLED=true docker compose --profile cdc up --build
 
 # Kibana available at http://localhost:5601
 # Elasticsearch at http://localhost:9200
@@ -74,11 +83,11 @@ docker compose --profile loadtest up --build --scale locust-worker=4
 ```
 Client → Nginx (LB) → API (x8) → PgBouncer → PostgreSQL
                          ↓                        ↓
-                   Redis (Cache)            Debezium (CDC)
+                   Redis (Cache)          Transactional Outbox
                          ↓                        ↓
-                   etcd (Config)              Kafka
+                   etcd (Config)      Debezium → Kafka → Event Workers
                                                   ↓
-                                           Elasticsearch
+                                  Optional table CDC → Elasticsearch
 ```
 
 | Component | Purpose |
@@ -88,9 +97,14 @@ Client → Nginx (LB) → API (x8) → PgBouncer → PostgreSQL
 | **Redis** | Cache layer with TTL-based expiry (120s) |
 | **etcd** | Centralized configuration |
 | **PostgreSQL** | Primary database (write model) |
-| **Debezium** | Change Data Capture from PostgreSQL WAL |
-| **Kafka** | Event streaming for CDC pipeline |
-| **Elasticsearch** | Read-optimized search (CQRS read model) |
+| **Debezium** | Publishes the transactional outbox; optionally publishes table CDC |
+| **Kafka** | Delivers domain events to application event workers |
+| **Event workers** | Continue cross-context workflows from durable domain events |
+| **Connector monitor** | Continuously reports outbox connector/task failure |
+| **Reservation reaper** | Releases expired semantic locks when a borrow cannot complete |
+| **Outbox cleaner** | Prunes delivered WAL-backed outbox history in bounded batches |
+| **Durable-state cleaner** | Bounds idempotency, terminal operation, inbox, and quarantine history |
+| **Elasticsearch** | Optional read-optimized search projection (CQRS read model) |
 
 ## Layer Responsibilities
 
@@ -100,26 +114,27 @@ Pure business logic with no external dependencies:
 
 - **Entities**: `Book`, `Loan`, `Patron` aggregates
 - **Value Objects**: `BookId`, `Title`, `EmailAddress`
-- **Domain Events**: `BookBorrowed`, `BookReturned`
-- **Interfaces**: `ILogger`, `IEventDispatcher`, `IEmailService`, `ICache`
+- **Domain Events**: correlated reservation, borrow, loan, cancellation, and return facts
+- **Domain Ports**: aggregate repositories expressed only in domain terms
 - **Bounded Contexts**: Catalog, Lending, Patron
 
 ### Application Layer (`src/application/`)
 
 CQRS handlers for business operations:
 
-- **Command Handlers**: `AddBook`, `BorrowBook`, `CreateLoan`, `ReturnBook`
+- **Command Handlers**: public catalog/patron/loan use cases plus internal saga transitions
 - **Query Handlers**: `ListBooks`, `GetBook`, `ListPatrons` (with caching)
 - **Event Handlers**: Async reactions to domain events
+- **Application Ports**: clock, cache, logging, email, event delivery, command receipts, and upstream anti-corruption contracts
 
 ### Infrastructure Layer (`src/infrastructure/`)
 
 External integrations and technical concerns:
 
 - **Adapters**: Repository implementations, messaging, email, caching
-- **Resilience**: Circuit breakers for RabbitMQ and SendGrid
+- **Resilience**: Circuit breakers for external services
 - **Outbox**: Transactional event delivery guarantee
-- **External Clients**: Redis, RabbitMQ, SendGrid, etcd
+- **External Clients**: PostgreSQL, Redis, Kafka, Elasticsearch, SendGrid, etcd
 
 ### Presentation Layer (`src/presentation/`)
 
@@ -167,13 +182,23 @@ async def send_email(to, subject, content):
 
 ### Race Condition Prevention
 
-Partial unique index prevents duplicate active loans:
+Two database constraints close the message-redelivery and concurrency races:
 
 ```sql
-CREATE UNIQUE INDEX ix_loans_active_book_unique
+CREATE UNIQUE INDEX ix_loans_reservation_id_unique
+ON loans (reservation_id);
+
+CREATE UNIQUE INDEX ix_loans_outstanding_book_unique
 ON loans (catalog_book_id)
-WHERE status = 'active'
+WHERE status NOT IN ('returned', 'cancelled');
 ```
+
+Every reservation has a UUID identity and a book-local generation fence.
+Catalog stores the exact current loan, so delayed confirmation, compensation,
+or return events cannot mutate a newer patron's workflow.
+The final Lending decision reloads authoritative Patron facts under a shared
+transaction-scoped patron fence. Lending then applies its own tier-to-capacity
+and loan-duration policy; Patron does not dictate Lending rules through the ACL.
 
 ## Directory Structure
 
@@ -183,7 +208,7 @@ src/
 │   ├── catalog/                 # Catalog Bounded Context
 │   ├── lending/                 # Lending Bounded Context
 │   ├── patron/                  # Patron Bounded Context
-│   └── shared_kernel/           # Cross-context interfaces
+│   └── shared_kernel/           # Minimal shared domain concepts
 ├── application/                 # Application Layer (CQRS)
 │   ├── command_handlers/        # Write operations
 │   ├── query_handlers/          # Read operations (cached)
@@ -191,7 +216,7 @@ src/
 ├── infrastructure/              # Infrastructure Layer
 │   ├── adapters/
 │   │   ├── cache/               # Redis cache adapter
-│   │   ├── messaging/           # RabbitMQ dispatcher
+│   │   ├── events/              # Kafka event delivery
 │   │   ├── email/               # SendGrid service
 │   │   ├── resilience/          # Circuit breakers
 │   │   └── outbox/              # Transactional outbox
@@ -202,8 +227,10 @@ src/
 
 tests/
 ├── domain/                      # Entity & value object tests
-├── unit/                        # Isolated unit tests
+├── application/                 # Command/event handler tests
+├── infrastructure/              # Adapter and delivery tests
 ├── integration/                 # Repository & handler tests
+├── presentation/                # Public route contracts
 ├── e2e/                         # API tests
 └── load/                        # Locust performance tests
     ├── scenarios.py             # User behavior definitions
@@ -220,12 +247,26 @@ Configuration is managed through etcd with environment variable overrides:
 DATABASE_URL=postgresql+asyncpg://user:pass@pgbouncer:6432/db
 REDIS_URL=redis://redis:6379/0
 REDIS_ENABLED=true
-RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 
 # Circuit breakers
-CB_RABBITMQ_FAILURE_THRESHOLD=5
-CB_RABBITMQ_TIMEOUT=30.0
+CB_SENDGRID_FAILURE_THRESHOLD=3
+CB_SENDGRID_TIMEOUT=60.0
 ```
+
+### Database Migrations
+
+Alembic is the only schema owner. The application never calls
+`metadata.create_all()` and never upgrades the database during startup:
+
+```bash
+# Apply this release's schema before starting application processes
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/db alembic upgrade head
+```
+
+Startup fails fast if `alembic_version` is absent, behind, ahead, or on a
+different migration branch. In Docker Compose, the one-shot `migrator` service
+runs first and every API instance verifies its result.
 
 ## Testing
 
@@ -235,13 +276,27 @@ pytest
 
 # By category
 pytest tests/domain          # Domain logic
-pytest tests/unit            # Unit tests
+pytest tests/application     # Application orchestration
+pytest tests/infrastructure  # Adapters and messaging
 pytest tests/integration     # Repository & handler tests
+pytest tests/presentation    # Public HTTP command surface
 pytest tests/e2e             # API tests
 
 # With coverage
 pytest --cov=src --cov-report=html
 ```
+
+Database-backed tests intentionally use a migrated PostgreSQL schema; they do
+not synthesize one with SQLAlchemy metadata. Migrate a test database first and
+point both variables at it:
+
+```bash
+DATABASE_URL=postgresql+asyncpg://library:library_secret@localhost:5432/library_test alembic upgrade head
+TEST_DATABASE_URL=postgresql+asyncpg://library:library_secret@localhost:5432/library_test pytest tests/integration
+```
+
+CI always uses this migrated PostgreSQL path, so PostgreSQL-specific and
+migration-only constraints are part of the merge gate.
 
 ## API Endpoints
 
@@ -250,14 +305,23 @@ pytest --cov=src --cov-report=html
 | GET | `/books` | List all books |
 | POST | `/books` | Add a new book |
 | GET | `/books/{id}` | Get book details |
-| POST | `/books/{id}/borrow` | Borrow a book |
-| POST | `/books/{id}/return` | Return a book |
+| POST | `/books/{id}/borrow` | Start a borrow (`202` with reservation identity) |
+| GET | `/borrow-operations/{id}` | Poll the accepted borrow workflow |
 | GET | `/patrons` | List all patrons |
 | POST | `/patrons` | Register a patron |
-| GET | `/loans` | List all loans |
-| POST | `/loans` | Create a loan |
+| GET | `/loans/{id}` | Get one loan |
+| GET | `/loans/patron/{patron_id}` | List a patron's loans |
+| POST | `/loans/{id}/extend` | Extend an active loan |
+| POST | `/loans/{id}/return` | Return a loan and reconcile its catalog book |
 | GET | `/health` | Liveness check |
 | GET | `/health/ready` | Readiness check |
+
+Every public `POST` command requires an `Idempotency-Key` header containing
+8–128 URL/log-safe characters. Reusing the key with identical command facts
+returns the committed response; reusing it for different facts returns `409`.
+The borrow response includes `Location: /borrow-operations/{id}`. List routes
+return continuation metadata in `X-Next-Cursor` (and exact totals, when
+available, in `X-Total-Count`).
 
 ## Documentation
 
@@ -292,7 +356,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
+    from src.application.ports import ILogger
 
 class MyService:
     def __init__(self, logger: ILogger): ...

@@ -83,6 +83,9 @@
       },
       "current_loan_count": {
         "type": "integer"
+      },
+      "version": {
+        "type": "long"
       }
     }
   },

@@ -93,7 +93,7 @@ ENDPOINT_WEIGHTS = {
     "get_patron": 5,        # View patron details
     "register_patron": 1,   # Very rare - registration
     # Loan endpoints
-    "create_loan": 3,       # Occasional borrowing
+    "borrow_book": 3,       # Occasional borrowing through the saga
     "list_patron_loans": 3, # View loans
     "extend_loan": 1,       # Rare extension
     "return_loan": 1,       # Rare return

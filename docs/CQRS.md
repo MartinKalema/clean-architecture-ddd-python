@@ -92,13 +92,15 @@ class BookQueryRepository:
         return [self._to_read_model_from_es(hit) for hit in result["hits"]]
 ```
 
-### CDC Pipeline Components
+### Event and CDC Pipeline Components
 
 | Component | Image | Purpose |
 |-----------|-------|---------|
 | Zookeeper | `confluentinc/cp-zookeeper:7.5.0` | Kafka coordination |
-| Kafka | `confluentinc/cp-kafka:7.5.0` | Message streaming |
-| Debezium | `debezium/connect:2.4` | CDC connector |
+| Kafka | `confluentinc/cp-kafka:7.5.0` | Domain-event and CDC streams |
+| Debezium | `debezium/connect:2.4` | Transactional outbox and optional table CDC connectors |
+| Event Worker | Custom Python | Domain event → application event handlers |
+| Reservation Reaper | Custom Python | Releases expired borrow reservations |
 | Elasticsearch | `elasticsearch:8.11.0` | Search engine |
 | ES Sync | Custom Python | Kafka → ES sync |
 
@@ -142,12 +144,15 @@ Events are emitted when aggregates change state:
 **Catalog Context**
 - `BookAddedToCatalog` - New book added
 - `BookRemovedFromCatalog` - Book removed
-- `CatalogBookBorrowed` - Book borrowed (includes borrower email, dates)
-- `CatalogBookReturned` - Book returned
+- `CatalogBookReserved` - Exact reservation UUID, generation, and owner recorded
+- `CatalogBookReleased` - Exact reservation released; Lending cancels its loan
+- `CatalogBookBorrowed` - Exact reservation confirmed with its current loan
+- `CatalogBookReturned` - Exact current loan reconciled back to available
 
 **Lending Context**
-- `LoanCreated` - New loan created
-- `LoanCompleted` - Book returned
+- `LoanCreated` - Tentative correlated loan; Catalog confirms or rejects it
+- `LoanCompleted` - Authoritative return; Catalog reconciles by exact loan ID
+- `LoanCancelled` - Tentative loan compensated before borrow confirmation
 - `BookOverdue` - Loan became overdue
 - `LoanExtended` - Due date extended
 
@@ -156,18 +161,18 @@ Events are emitted when aggregates change state:
 - `PatronSuspended` - Patron suspended
 - `PatronReinstated` - Patron reinstated
 
-### Event Flow (Domain Events via RabbitMQ)
+### Event Flow (Domain Events via Kafka)
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Command   │────▶│  Aggregate  │────▶│   Outbox    │────▶│  RabbitMQ   │
-│   Handler   │     │  (Domain)   │     │   Table     │     │  (Broker)   │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-                                                                   │
-                                                            ┌──────▼──────┐
-                                                            │   Event     │
-                                                            │  Handlers   │
-                                                            └─────────────┘
+┌─────────────┐    ┌─────────────┐    ┌──────────┐    ┌──────────┐    ┌─────────┐
+│   Command   │───▶│  Aggregate  │───▶│  Outbox  │───▶│ Debezium │───▶│  Kafka  │
+│   Handler   │    │  (Domain)   │    │  Table   │    │  Router  │    │         │
+└─────────────┘    └─────────────┘    └──────────┘    └──────────┘    └────┬────┘
+                                                                           │
+                                                                    ┌──────▼──────┐
+                                                                    │   Event     │
+                                                                    │  Handlers   │
+                                                                    └─────────────┘
 ```
 
 ### Transactional Outbox Pattern
@@ -185,24 +190,32 @@ async with uow:
 
 ---
 
-## Starting the CDC Stack
+## Starting the Event and CDC Stacks
 
 ```bash
-# Start all services including CDC pipeline
-docker-compose --profile cdc up -d
+# Core domain-event delivery is always started with the application
+docker compose up -d
 
-# The following happens automatically:
-# 1. Elasticsearch starts and becomes healthy
-# 2. elasticsearch-init creates indices
-# 3. Debezium starts and becomes healthy
-# 4. debezium-init registers the PostgreSQL connector
-# 5. es-sync starts consuming CDC events
+# Add the optional Elasticsearch read-model projection
+docker compose --profile cdc up -d
+
+# Default stack:
+# 1. Alembic migrates PostgreSQL
+# 2. Debezium registers the transactional-outbox connector
+# 3. event-worker consumes domain events and the reservation reaper runs
+# CDC profile additions:
+# 4. Elasticsearch starts and elasticsearch-init creates indices
+# 5. Debezium registers the table-CDC connector
+# 6. es-sync consumes table changes into Elasticsearch
 ```
 
 ### Verifying the Pipeline
 
 ```bash
-# Check Debezium connector status
+# Core outbox connector
+curl http://localhost:8083/connectors/outbox-connector/status | jq
+
+# Optional table-CDC connector (cdc profile)
 curl http://localhost:8083/connectors/library-connector/status | jq
 
 # Check Elasticsearch indices

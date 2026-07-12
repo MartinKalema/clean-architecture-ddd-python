@@ -1,111 +1,133 @@
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
 
 from src.application.command_handlers import (
     AddBookCommand,
     AddBookHandler,
     BorrowBookCommand,
     BorrowBookHandler,
-    ReturnBookCommand,
-    ReturnBookHandler,
 )
 from src.application.query_handlers import (
     GetBookHandler,
     GetBookQuery,
+    GetBorrowOperationHandler,
+    GetBorrowOperationQuery,
     ListBooksHandler,
     ListBooksQuery,
 )
 from src.container import Container
-from src.domain.catalog import BorrowerNotEligibleException, DomainException
+from src.presentation.api.pagination import set_page_headers
 from src.presentation.api.models.book_models import (
     BookCreate,
     BookResponse,
+    BorrowBookResponse,
+    BorrowOperationResponse,
     BorrowRequest,
 )
 
 router = APIRouter()
 
 
-@router.post("/books", response_model=BookResponse)
+@router.post("/books", response_model=BookResponse, status_code=201)
 @inject
 async def create_book(
     book: BookCreate,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: AddBookHandler = Depends(Provide[Container.add_book_handler])
 ):
     """Create a new book (Command)."""
-    try:
-        command = AddBookCommand(title=book.title, author=book.author)
-        result = await handler.handle(command)
-        return BookResponse(
-            id=result.id,
-            title=result.title,
-            author=result.author,
-            is_borrowed=result.is_borrowed,
-            status=result.status
-        )
-    except DomainException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    command = AddBookCommand(
+        title=book.title,
+        author=book.author,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    return BookResponse(
+        id=result.id,
+        title=result.title,
+        author=result.author,
+        is_borrowed=result.is_borrowed,
+        status=result.status,
+    )
 
 
-@router.post("/books/{book_id}/borrow", response_model=BookResponse)
+@router.post(
+    "/books/{book_id}/borrow",
+    response_model=BorrowBookResponse,
+    status_code=202,
+)
 @inject
 async def borrow_book(
     book_id: str,
     borrow_request: BorrowRequest,
+    response: Response,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     handler: BorrowBookHandler = Depends(Provide[Container.borrow_book_handler])
 ):
     """Borrow a book (Command)."""
-    try:
-        command = BorrowBookCommand(
-            book_id=book_id,
-            borrower_email=borrow_request.borrower_email
-        )
-        result = await handler.handle(command)
-        return BookResponse(
-            id=result.id,
-            title=result.title,
-            author=result.author,
-            is_borrowed=result.is_borrowed,
-            status=result.status
-        )
-    except BorrowerNotEligibleException as e:
-        raise HTTPException(status_code=403, detail=str(e))
-    except DomainException as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    command = BorrowBookCommand(
+        book_id=book_id,
+        borrower_email=borrow_request.borrower_email,
+        idempotency_key=idempotency_key,
+    )
+    result = await handler.handle(command)
+    response.headers["Location"] = f"/borrow-operations/{result.operation_id}"
+    return BorrowBookResponse(
+        id=result.id,
+        title=result.title,
+        author=result.author,
+        is_borrowed=result.is_borrowed,
+        status=result.status,
+        reservation_id=result.reservation_id,
+        reservation_generation=result.reservation_generation,
+        operation_id=result.operation_id,
+        return_due_date=result.return_due_date,
+    )
 
 
-@router.post("/books/{book_id}/return", response_model=BookResponse)
+@router.get(
+    "/borrow-operations/{operation_id}",
+    response_model=BorrowOperationResponse,
+)
 @inject
-async def return_book(
-    book_id: str,
-    handler: ReturnBookHandler = Depends(Provide[Container.return_book_handler])
+async def get_borrow_operation(
+    operation_id: str,
+    handler: GetBorrowOperationHandler = Depends(
+        Provide[Container.get_borrow_operation_handler]
+    ),
 ):
-    """Return a borrowed book (Command)."""
-    try:
-        command = ReturnBookCommand(book_id=book_id)
-        result = await handler.handle(command)
-        return BookResponse(
-            id=result.id,
-            title=result.title,
-            author=result.author,
-            is_borrowed=result.is_borrowed,
-            status=result.status
-        )
-    except DomainException as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    """Poll the durable outcome of an accepted borrow workflow."""
+    result = await handler.handle(GetBorrowOperationQuery(operation_id))
+    return BorrowOperationResponse(**result.__dict__)
 
 
 @router.get("/books", response_model=List[BookResponse])
 @inject
 async def list_books(
+    response: Response,
     only_available: bool = Query(False, description="Filter to only available books"),
     only_borrowed: bool = Query(False, description="Filter to only borrowed books"),
-    author: Optional[str] = Query(None, description="Filter by author name (partial match)"),
-    title: Optional[str] = Query(None, description="Filter by title (partial match)"),
+    author: Optional[str] = Query(
+        None, max_length=200, description="Filter by author name (partial match)"
+    ),
+    title: Optional[str] = Query(
+        None, max_length=100, description="Filter by title (partial match)"
+    ),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
+    cursor: Optional[str] = Query(
+        None,
+        max_length=1024,
+        description="Opaque continuation cursor; cannot be combined with non-zero offset",
+    ),
     handler: ListBooksHandler = Depends(Provide[Container.list_books_handler])
 ):
     """List books with optional filtering (Query)."""
@@ -116,8 +138,14 @@ async def list_books(
         title_contains=title,
         limit=limit,
         offset=offset,
+        cursor=cursor,
     )
-    results = await handler.handle(query)
+    page = await handler.handle_page(query)
+    set_page_headers(
+        response,
+        next_cursor=page.next_cursor,
+        total=page.total,
+    )
     return [
         BookResponse(
             id=book.id,
@@ -126,7 +154,7 @@ async def list_books(
             is_borrowed=book.is_borrowed,
             status=book.status
         )
-        for book in results
+        for book in page.items
     ]
 
 
@@ -137,15 +165,12 @@ async def get_book(
     handler: GetBookHandler = Depends(Provide[Container.get_book_handler])
 ):
     """Get a single book by ID (Query)."""
-    try:
-        query = GetBookQuery(book_id=book_id)
-        result = await handler.handle(query)
-        return BookResponse(
-            id=result.id,
-            title=result.title,
-            author=result.author,
-            is_borrowed=result.is_borrowed,
-            status=result.status
-        )
-    except DomainException as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    query = GetBookQuery(book_id=book_id)
+    result = await handler.handle(query)
+    return BookResponse(
+        id=result.id,
+        title=result.title,
+        author=result.author,
+        is_borrowed=result.is_borrowed,
+        status=result.status,
+    )

@@ -6,22 +6,34 @@ the library's lending operations.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
+import re
 from typing import Optional
 
 from src.domain.lending.events.lending_events import (
     BookOverdue,
+    LoanCancelled,
     LoanCompleted,
     LoanCreated,
     LoanExtended,
 )
 from src.domain.lending.exceptions import (
     CannotExtendOverdueLoanException,
-    LoanAlreadyReturnedException,
+    InvalidCancellationReasonException,
+    InvalidLoanDurationException,
+    InvalidLoanReferenceException,
+    InvalidLoanReturnDateException,
+    InvalidLoanStateException,
+    InvalidReservationGenerationException,
     LoanNotActiveException,
     LoanNotOverdueException,
 )
-from src.domain.lending.value_objects import DueDate, LoanId, LoanStatus
-from src.domain.shared_kernel import AggregateRoot
+from src.domain.lending.value_objects import DueDate, LoanId, LoanStatus, ReservationId
+from src.domain.shared_kernel import (
+    AggregateRoot,
+    EmailAddress,
+    aggregate_transition,
+    require_utc_datetime,
+)
 
 
 @dataclass
@@ -41,9 +53,59 @@ class Loan(AggregateRoot):
     book_title: str
     due_date: DueDate
     borrowed_at: datetime
+    reservation_id: ReservationId
+    reservation_generation: int
     id: LoanId = field(default_factory=LoanId.next_id)
     status: LoanStatus = LoanStatus.ACTIVE
     returned_at: Optional[datetime] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, LoanId):
+            self.id = LoanId(self.id)
+        if not isinstance(self.reservation_id, ReservationId):
+            self.reservation_id = ReservationId(self.reservation_id)
+        if not isinstance(self.due_date, DueDate):
+            self.due_date = DueDate(self.due_date)
+        try:
+            if not isinstance(self.status, LoanStatus):
+                self.status = LoanStatus(self.status)
+        except (TypeError, ValueError) as error:
+            raise InvalidLoanStateException("unknown status") from error
+        self.patron_id = self._normalize_reference(self.patron_id, "patron_id")
+        self.catalog_book_id = self._normalize_reference(
+            self.catalog_book_id, "catalog_book_id"
+        )
+        self.patron_email = EmailAddress(self.patron_email).value
+        self.book_title = " ".join(str(self.book_title).split())
+        if not self.book_title or len(self.book_title) > 100:
+            raise InvalidLoanReferenceException("book_title")
+        if self.reservation_generation < 1:
+            raise InvalidReservationGenerationException(self.reservation_generation)
+        self.borrowed_at = require_utc_datetime(self.borrowed_at, "borrowed_at")
+        if self.returned_at is not None:
+            self.returned_at = require_utc_datetime(
+                self.returned_at, "returned_at"
+            )
+        if self.due_date.value <= self.borrowed_at:
+            raise InvalidLoanDurationException(0)
+        if self.returned_at is not None and self.returned_at < self.borrowed_at:
+            raise InvalidLoanReturnDateException(self.id.value)
+        if (self.status is LoanStatus.RETURNED) != (self.returned_at is not None):
+            raise InvalidLoanStateException(
+                "returned status and returned_at must change together"
+            )
+        super().__post_init__()
+
+    @staticmethod
+    def _normalize_reference(value: str, field: str) -> str:
+        normalized = str(value).strip()
+        if (
+            not normalized
+            or len(normalized) > 64
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", normalized)
+        ):
+            raise InvalidLoanReferenceException(field)
+        return normalized
 
     @classmethod
     def create(
@@ -54,8 +116,17 @@ class Loan(AggregateRoot):
         book_title: str,
         loan_duration_days: int,
         borrowed_at: datetime,
+        reservation_id: str | ReservationId,
+        reservation_generation: int,
     ) -> "Loan":
         """Factory method to create a new loan."""
+        if reservation_generation < 1:
+            raise InvalidReservationGenerationException(reservation_generation)
+        token = (
+            reservation_id
+            if isinstance(reservation_id, ReservationId)
+            else ReservationId(reservation_id)
+        )
         due_date = DueDate.from_loan_duration(borrowed_at, loan_duration_days)
 
         loan = cls(
@@ -65,11 +136,15 @@ class Loan(AggregateRoot):
             book_title=book_title,
             due_date=due_date,
             borrowed_at=borrowed_at,
+            reservation_id=token,
+            reservation_generation=reservation_generation,
         )
 
         loan.add_event(
             LoanCreated(
                 loan_id=loan.id.value,
+                reservation_id=token.value,
+                reservation_generation=reservation_generation,
                 patron_id=patron_id,
                 patron_email=patron_email,
                 book_id=catalog_book_id,
@@ -81,10 +156,16 @@ class Loan(AggregateRoot):
 
         return loan
 
-    def return_book(self, returned_at: datetime) -> None:
+    @aggregate_transition
+    def return_book(self, returned_at: datetime) -> bool:
         """Mark the loan as returned."""
         if self.status == LoanStatus.RETURNED:
-            raise LoanAlreadyReturnedException(self.id.value)
+            return False
+        if self.status == LoanStatus.CANCELLED:
+            raise LoanNotActiveException(self.id.value, "return")
+        returned_at = require_utc_datetime(returned_at, "returned_at")
+        if returned_at < self.borrowed_at:
+            raise InvalidLoanReturnDateException(self.id.value)
 
         self.status = LoanStatus.RETURNED
         self.returned_at = returned_at
@@ -92,13 +173,41 @@ class Loan(AggregateRoot):
         self.add_event(
             LoanCompleted(
                 loan_id=self.id.value,
+                reservation_id=self.reservation_id.value,
+                reservation_generation=self.reservation_generation,
                 patron_id=self.patron_id,
                 book_id=self.catalog_book_id,
                 returned_at=self.returned_at,
                 was_overdue=self.due_date.is_overdue_as_of(returned_at),
             )
         )
+        return True
 
+    @aggregate_transition
+    def cancel(self, reason: str) -> bool:
+        """Compensate a loan whose exact Catalog reservation was not confirmed."""
+        if self.status == LoanStatus.CANCELLED:
+            return False
+        if self.status == LoanStatus.RETURNED:
+            raise LoanNotActiveException(self.id.value, "cancel")
+        reason = " ".join(str(reason).split())
+        if not reason or len(reason) > 500:
+            raise InvalidCancellationReasonException()
+
+        self.status = LoanStatus.CANCELLED
+        self.add_event(
+            LoanCancelled(
+                loan_id=self.id.value,
+                reservation_id=self.reservation_id.value,
+                reservation_generation=self.reservation_generation,
+                patron_id=self.patron_id,
+                book_id=self.catalog_book_id,
+                reason=reason,
+            )
+        )
+        return True
+
+    @aggregate_transition
     def mark_overdue(self, current_time: datetime) -> None:
         """Mark the loan as overdue (called by a scheduled job)."""
         if self.status != LoanStatus.ACTIVE:
@@ -120,6 +229,7 @@ class Loan(AggregateRoot):
             )
         )
 
+    @aggregate_transition
     def extend(self, days: int, current_time: datetime) -> None:
         """Extend the loan by a number of days."""
         if self.status != LoanStatus.ACTIVE:

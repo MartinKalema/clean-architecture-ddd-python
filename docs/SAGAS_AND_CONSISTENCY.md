@@ -69,9 +69,10 @@ In our borrow saga:
 | Loan was created | Cancel the loan |
 | Confirmation email sent | (cannot unsend — send a correction) |
 
-Real example in code: if the loan cannot be created (the patron does not
-exist), `CreateLoanOnBookReservedHandler` releases the reservation. The
-book becomes available again. See
+Real example in code: if Lending's final patron check rejects the borrow,
+`CreateLoanOnBookReservedHandler` releases that exact reservation. The
+book becomes available again. If a tentative loan already exists when a
+reservation expires, `CatalogBookReleased` cancels that exact loan. See
 `src/application/event_handlers/create_loan_on_book_reserved.py`.
 
 Two important rules for compensations:
@@ -128,10 +129,12 @@ releases them.
 - Settings: `catalog.reservation_ttl_seconds` (default 300s) in etcd
 
 **Important:** the TTL must be much longer than the time it normally
-takes events to travel. If the reaper releases a reservation and *then*
-the loan event arrives, we have a loan for a book we gave back. The
-system detects this and logs a loud `SAGA INCONSISTENCY` message for a
-human to fix.
+takes events to travel. Each reservation carries a UUID, owner, and
+book-local generation fence. If the reaper releases a reservation after
+Lending created its tentative loan, `CatalogBookReleased` cancels only that
+loan. If the delayed `LoanCreated` arrives later, Catalog rejects it and
+Lending again cancels the same loan idempotently. A stale message can never
+confirm or release a newer patron's reservation.
 
 ---
 
@@ -147,28 +150,31 @@ Some actions can be compensated (release a reservation). Some cannot
 3. **After the pivot**: only steps that can be retried until they work.
    No compensation needed — just keep trying.
 
-In our saga the pivot is **loan creation**. The confirmation email comes
-*after* the pivot. That is why a cancelled borrow never emails anyone:
-the email only fires on `LoanCreated`, which only exists past the pivot.
+In this saga, loan creation is still tentative and can be compensated with
+`LoanCancelled`. The pivot is **Catalog confirming the exact loan** and
+publishing `CatalogBookBorrowed`. The confirmation email subscribes to that
+definitive fact—not to `LoanCreated`—so a cancelled borrow never emails
+anyone.
 
 ---
 
 ## 7. Promises must be kept: retries and the dead-letter queue
 
-Everything after the pivot is a **promise**. The loan exists, so the
-email *must* eventually be sent, and the book *must* eventually be
-confirmed. A temporary problem (the email service is down for a minute)
-must not break a promise.
+Everything after the pivot is a **promise**. The exact loan and Catalog book
+agree, so the confirmation email must eventually be sent. A temporary problem
+(the email service is down for a minute) must not break that promise.
 
 So message handling works like this (see `kafka_client.py`):
 
 1. Try to handle the message.
-2. Failed? Wait a moment and **retry** (a few times, waiting longer each
-   time).
-3. Still failing? Park the message on a **dead-letter queue** (a special
-   Kafka topic ending in `.dlq`) where a human can inspect it. The
-   message is saved, never silently lost.
-4. Only then move on to the next message.
+2. Failed transiently? Wait and **retry with bounded backoff until it
+   succeeds**. State-reconciliation events are promises; a brief database
+   outage cannot turn a return into a permanent split.
+3. A structurally malformed event cannot become valid through retry. Park
+   only that poison message on a **dead-letter queue** (a Kafka topic ending
+   in `.dlq`) for inspection and replay.
+4. Commit the source offset only after successful handling or durable poison
+   parking.
 
 Because messages can be delivered more than once, **every handler must be
 idempotent** — running it twice must give the same result as once. For
@@ -177,19 +183,21 @@ moves on instead of failing.
 
 ---
 
-## 8. Guesses: check cheaply before you lock
+## 8. Eligibility: check before and after the lock
 
 Taking a reservation and then discovering the patron doesn't exist is
 wasteful: we lock the book, fail, and compensate — three transactions for
 a "no".
 
-It is cheaper to **guess first**: before reserving, the borrow endpoint
-quickly checks the patron read model. Unknown or suspended patron? Reject
-immediately with a clear error. No lock taken, nothing to undo.
+It is cheaper to **check first**: before reserving, the borrow endpoint uses a
+strongly consistent PostgreSQL patron lookup. Unknown or suspended patron?
+Reject immediately with a clear error. No lock taken, nothing to undo.
 
-The guess can be slightly out of date (read models lag a little), so the
-lending side still does the real, authoritative check. But the guess
-turns almost all doomed borrows into instant, cheap rejections.
+Patron state can still change after that transaction commits. When Lending
+consumes `CatalogBookReserved`, it performs a final lookup by the persisted
+patron ID and requires the canonical email and eligibility to still match.
+A permanent rejection releases the exact reservation; an infrastructure
+failure is retried without pretending the borrow was rejected.
 
 See the pre-flight check in
 `src/application/command_handlers/borrow_book.py`.
@@ -216,10 +224,10 @@ ideology:
 | One-of-a-kind item, conflicts matter | Semantic lock (what this system does) |
 
 A library book is one-of-a-kind — two patrons cannot both take it home —
-so we lock. But we still keep an "apology path": when something truly
-unfixable happens (section 5), the system logs it loudly for a human to
-resolve. In a mature system you would count these incidents and alarm
-when the rate jumps.
+so we lock. Exact identities, fencing, idempotent handlers, and cancellation
+handle the expected failure modes automatically. An "apology path" remains
+for genuinely unrecoverable cases parked in the dead-letter queue; a mature
+system would alarm on and reconcile those incidents.
 
 The three tools, side by side:
 
@@ -281,10 +289,10 @@ the length of that line.
 
 A load test made this visible: borrows poured in from 8 API servers, one
 clerk processed them one by one, and hundreds of books sat waiting in
-RESERVED. Worse, if the line gets longer than the reservation TTL
-(section 5), the reaper starts giving up on reservations that were
-actually fine — the queue's slowness starts *causing* problems, not just
-delaying work.
+RESERVED. Worse, if the line gets longer than the reservation TTL (section
+5), the reaper starts compensating reservations that were otherwise valid.
+Fencing keeps both contexts consistent, but queue slowness now causes
+legitimate borrows to be cancelled instead of merely delayed.
 
 ### The fix: more lines, with one trick
 
@@ -292,25 +300,28 @@ The obvious fix is more lines (partitions) and more clerks (worker
 instances) — one clerk per line, working in parallel. But doesn't that
 scramble the order we just said we need?
 
-Here is the trick: **order only matters per book**. The story of book A
-must stay in sequence, but it does not care what is happening to book B.
-So the rule is:
+Here is the trick: **order only matters inside one aggregate stream**. The
+Catalog story for book A must stay in sequence, but it does not care what is
+happening to book B. The Lending story for a loan has its own stream. So the
+rule is:
 
-> All envelopes about the same book always go into the same line.
+> All envelopes from the same aggregate always go into the same line.
 
 Kafka does this with the message **key**. The Debezium setup already
-stamps every event with the aggregate's ID (the book's ID) as its key,
+stamps every event with its aggregate ID (book ID for Catalog events, loan ID
+for Lending events) as its key,
 and Kafka routes by key: same key → same line, always. So:
 
 ```text
-line 1:  book A reserved → book A borrowed        → clerk 1
-line 2:  book B reserved → book B released        → clerk 2
-line 3:  book C reserved → book C borrowed        → clerk 3
+line 1:  book A reserved → book A borrowed         → clerk 1
+line 2:  book B reserved → book B released         → clerk 2
+line 3:  loan C created  → loan C completed        → clerk 3
 ```
 
-Each book's story stays perfectly in order. Different books proceed in
-parallel. Three clerks ≈ three times the speed — and you can keep adding
-lines.
+Each aggregate's story stays in order. Different aggregates proceed in
+parallel. Cross-context delivery order is deliberately *not* assumed: exact
+reservation/loan identities, generation fences, and idempotent handlers make
+late or duplicate messages safe.
 
 We lose only one thing: the order *between* different books ("did A's
 borrow happen before B's?"). Nothing in this system depends on that, so
@@ -330,8 +341,9 @@ was removed:
   run 2 replicas each (`deploy.replicas`). They join the same consumer
   group and Kafka spreads the lines across them automatically — no code
   changes were needed, because the consumer was already group-based.
-- **Ordering survives.** Debezium keys every message by the aggregate's
-  ID, so all events for one book land in one line, always.
+- **Aggregate ordering survives.** Debezium keys every message by aggregate
+  ID. Cross-aggregate choreography relies on correlation and fencing, not a
+  global order Kafka does not provide.
 
 ### Tuning it
 

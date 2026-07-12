@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from .circuit_breaker import CircuitBreaker, circuit_breaker_registry
 
 if TYPE_CHECKING:
-    from src.domain.shared_kernel import ILogger
+    from src.application.ports import ILogger
 
 
 class CircuitBreakerFactory:

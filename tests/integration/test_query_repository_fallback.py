@@ -5,9 +5,11 @@ When Elasticsearch is unavailable (or its circuit breaker is open),
 searches must degrade to PostgreSQL instead of failing or returning
 empty results.
 """
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.infrastructure.adapters.catalog import BookQueryRepository
@@ -35,6 +37,7 @@ def _repository(test_db, es_client) -> BookQueryRepository:
 
 async def _seed_books(test_db):
     session_factory = async_sessionmaker(bind=test_db.engine, expire_on_commit=False)
+    borrowed_at = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
     async with session_factory() as session:
         session.add(BookModel(
             id="fallback-1", title="Fallback Patterns", author="Ada Resilience",
@@ -42,14 +45,26 @@ async def _seed_books(test_db):
         ))
         session.add(BookModel(
             id="fallback-2", title="Fallback in Practice", author="Grace Degraded",
-            status="borrowed", version=0,
+            status="borrowed",
+            reservation_id="40000000-0000-4000-8000-000000000002",
+            reservation_generation=1,
+            reserved_patron_id="fallback-patron",
+            reserved_patron_email="fallback@example.com",
+            current_loan_id="fallback-loan",
+            borrowed_at=borrowed_at,
+            return_due_date=borrowed_at + timedelta(days=14),
+            version=0,
         ))
         await session.commit()
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def seeded_books(test_db, clean_integration_tables):
+    await _seed_books(test_db)
+
+
 @pytest.mark.asyncio
 async def test_find_all_falls_back_to_postgresql(test_db):
-    await _seed_books(test_db)
     repository = _repository(test_db, _broken_es_client())
 
     books = await repository.find_all(title_contains="Fallback")

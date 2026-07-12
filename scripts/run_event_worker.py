@@ -38,6 +38,8 @@ async def main() -> None:
     logger.info("Starting Domain Event Worker")
     logger.info(f"Kafka: {container.configurations.kafka.bootstrap_servers()}")
 
+    database = container.postgresql()
+    await database.verify_schema_current()
     consumer = container.domain_event_consumer()
 
     loop = asyncio.get_running_loop()
@@ -56,6 +58,17 @@ async def main() -> None:
     except Exception as e:
         logger.error(f"Consumer error: {e}")
         raise
+    finally:
+        # Workflow handlers invalidate Redis after committed writes. The
+        # consumer owns that lazy transport in this process and must close it
+        # during a graceful worker replacement.
+        try:
+            await container.redis_client().close()
+        finally:
+            try:
+                await database.dispose()
+            finally:
+                etcd_adapter.close()
 
 
 if __name__ == "__main__":

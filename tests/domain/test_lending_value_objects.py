@@ -1,8 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import datetime as _datetime, timedelta, timezone
 
 import pytest
 
 from src.domain.lending import DueDate, InvalidLoanIdException, LoanId, LoanStatus
+
+
+def datetime(*args, **kwargs):
+    kwargs.setdefault("tzinfo", timezone.utc)
+    return _datetime(*args, **kwargs)
 
 
 class TestLoanId:

@@ -4,14 +4,15 @@ Get Loan Query Handler.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+
+from src.domain.lending import LoanNotFoundException
 
 from .read_models import LoanReadModel
 
 if TYPE_CHECKING:
     from src.application.query_handlers.interfaces import ILoanQueryRepository
-    from src.domain.shared_kernel import ICache, ILogger
+    from src.application.ports import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -35,17 +36,14 @@ class GetLoanHandler:
         self.cache = cache
         self.logger = logger
 
-    async def handle(self, query: GetLoanQuery) -> Optional[LoanReadModel]:
+    async def handle(self, query: GetLoanQuery) -> LoanReadModel:
         cache_key = self.cache.build_key(self.CACHE_PREFIX, query.loan_id)
 
-        cached = await self.cache.get(cache_key)
-        if cached is not None:
-            self.logger.debug(f"Cache hit for {cache_key}")
-            return LoanReadModel(**cached)
+        async def load() -> dict:
+            result = await self.query_repository.find_by_id(query.loan_id)
+            if result is None:
+                raise LoanNotFoundException(query.loan_id)
+            return result.__dict__
 
-        result = await self.query_repository.find_by_id(query.loan_id)
-        if not result:
-            return None
-
-        await self.cache.set(cache_key, result.__dict__)
-        return result
+        cached = await self.cache.get_or_set(cache_key, load)
+        return LoanReadModel.from_mapping(cached)

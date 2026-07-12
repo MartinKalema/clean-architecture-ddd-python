@@ -12,7 +12,7 @@ from .read_models import BookReadModel
 
 if TYPE_CHECKING:
     from src.application.query_handlers.interfaces import IBookQueryRepository
-    from src.domain.shared_kernel import ICache, ILogger
+    from src.application.ports import ICache, ILogger
 
 
 @dataclass(frozen=True)
@@ -44,17 +44,14 @@ class GetBookHandler:
         """Execute the query to get a book."""
         cache_key = self.cache.build_key(self.CACHE_PREFIX, query.book_id)
 
-        cached = await self.cache.get(cache_key)
-        if cached is not None:
-            self.logger.debug(f"Cache hit for {cache_key}")
-            return BookReadModel(**cached)
+        async def load() -> dict:
+            book = await self.query_repository.find_by_id(query.book_id)
+            if not book:
+                self.logger.warning(f"Book not found: {query.book_id}")
+                raise BookNotFoundException(query.book_id)
+            return book.__dict__
 
-        book = await self.query_repository.find_by_id(query.book_id)
-
-        if not book:
-            self.logger.warning(f"Book not found: {query.book_id}")
-            raise BookNotFoundException(query.book_id)
-
-        await self.cache.set(cache_key, book.__dict__)
+        cached = await self.cache.get_or_set(cache_key, load)
+        book = BookReadModel.from_mapping(cached)
         self.logger.info(f"Retrieved book: {book.title} (query side)")
         return book

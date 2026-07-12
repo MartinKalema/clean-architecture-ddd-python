@@ -32,8 +32,10 @@ class CatalogBookReserved(DomainEvent):
     """
     book_id: str
     title: str
+    reservation_id: str
+    reservation_generation: int
+    patron_id: str
     reserved_at: datetime
-    return_due_date: datetime
     borrower_email: str
 
 
@@ -42,6 +44,10 @@ class CatalogBookBorrowed(DomainEvent):
     """Published when a reservation is confirmed into a final borrow."""
     book_id: str
     title: str
+    reservation_id: str
+    reservation_generation: int
+    patron_id: str
+    loan_id: str
     borrowed_at: datetime
     return_due_date: datetime
     borrower_email: str
@@ -51,6 +57,9 @@ class CatalogBookBorrowed(DomainEvent):
 class CatalogBookReleased(DomainEvent):
     """Published when a reservation is released without becoming a borrow."""
     book_id: str
+    reservation_id: str
+    reservation_generation: int
+    patron_id: str
     reason: str
 
 
@@ -58,3 +67,7 @@ class CatalogBookReleased(DomainEvent):
 class CatalogBookReturned(DomainEvent):
     """Published when a book is returned to the catalog."""
     book_id: str
+    loan_id: str
+    reservation_id: str
+    reservation_generation: int
+    patron_id: str

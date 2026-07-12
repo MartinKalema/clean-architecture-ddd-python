@@ -19,9 +19,17 @@ def test_title_creation():
     assert title.value == "Clean Code"
 
 
+def test_title_and_author_normalize_whitespace():
+    assert Title("  Clean   Code\n").value == "Clean Code"
+    assert Author("  Robert   C. Martin ").value == "Robert C. Martin"
+
+
 def test_title_empty_validation():
     with pytest.raises(ValidationException, match="Title cannot be empty"):
         Title("")
+
+    with pytest.raises(ValidationException, match="Title cannot be empty"):
+        Title("   \t")
 
 
 def test_title_length_validation():

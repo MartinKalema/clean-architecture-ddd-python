@@ -1,3 +1,3 @@
-from .book_metadata import ISBN, Author, BookId, BookStatus, Title
+from .book_metadata import ISBN, Author, BookId, BookStatus, ReservationId, Title
 
-__all__ = ["BookId", "BookStatus", "Title", "Author", "ISBN"]
+__all__ = ["BookId", "ReservationId", "BookStatus", "Title", "Author", "ISBN"]

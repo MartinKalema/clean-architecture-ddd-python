@@ -411,7 +411,7 @@ GET  /books/{id}
 
 # Actions: verb as sub-resource
 POST /books/{id}/borrow
-POST /loans/{id}/renew
+POST /loans/{id}/extend
 POST /loans/{id}/return
 ```
 

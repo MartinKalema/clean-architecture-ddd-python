@@ -26,6 +26,7 @@
     "transforms.outbox.table.field.event.payload": "payload",
     "transforms.outbox.table.expand.json.payload": "true",
     "topic.creation.default.partitions": "4",
-    "topic.creation.default.replication.factor": "1"
+    "topic.creation.default.replication.factor": "3",
+    "topic.creation.default.retention.ms": "2592000000"
   }
 }
