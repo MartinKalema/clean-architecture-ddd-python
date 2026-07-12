@@ -41,6 +41,7 @@ jobs:
   test:
     name: pytest (migrated PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16-alpine
@@ -108,7 +109,7 @@ jobs:
         # PostgreSQL constraints and Alembic state are part of the test gate.
         run: >-
           python -m pytest tests/domain tests/application tests/infrastructure
-          tests/integration tests/presentation -q
+          tests/integration tests/presentation -vv -x
 
   migration-upgrade:
     name: Alembic legacy outbox and correlation upgrades
