@@ -146,12 +146,12 @@ def _loan_reaction(session_factory, patron: PatronReadModel):
     logger = MagicMock()
     directory = _directory(patron)
     return CreateLoanOnBookReservedHandler(
-        create_loan_handler=CreateLoanHandler(
+        create_loan_operation=CreateLoanHandler(
             LoanUnitOfWork(session_factory),
             borrower_directory=directory,
             logger=logger,
         ),
-        release_book_reservation_handler=ReleaseBookReservationHandler(
+        release_book_reservation_operation=ReleaseBookReservationHandler(
             CatalogUnitOfWork(session_factory), logger=logger, clock=_Clock()
         ),
         logger=logger,
@@ -161,10 +161,10 @@ def _loan_reaction(session_factory, patron: PatronReadModel):
 def _confirm_reaction(session_factory):
     logger = MagicMock()
     return ConfirmBorrowOnLoanCreatedHandler(
-        confirm_book_borrow_handler=ConfirmBookBorrowHandler(
+        confirm_book_borrow_operation=ConfirmBookBorrowHandler(
             CatalogUnitOfWork(session_factory), logger=logger, clock=_Clock()
         ),
-        cancel_loan_handler=CancelLoanHandler(
+        cancel_loan_operation=CancelLoanHandler(
             LoanUnitOfWork(session_factory), logger=logger
         ),
         logger=logger,

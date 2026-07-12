@@ -4,6 +4,7 @@ from .exceptions import EmailDeliveryException
 from .interfaces import (
     EventDeliveryIdentity,
     ICache,
+    ICommandHandler,
     IConfigurationProvider,
     IEmailService,
     IEventDispatcher,
@@ -34,6 +35,7 @@ __all__ = [
     "EmailDeliveryException",
     "EventDeliveryIdentity",
     "ICache",
+    "ICommandHandler",
     "IConfigurationProvider",
     "IEmailService",
     "IEventDispatcher",

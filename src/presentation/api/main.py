@@ -14,6 +14,9 @@ from src.application.exceptions import (
 )
 from src.application.query_handlers.pagination import InvalidPaginationError
 from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import api_resources
+from src.composition.runtime_config import ProcessRole
 from src.domain.catalog import (
     BookAlreadyBorrowedException,
     BookNotBorrowedException,
@@ -129,43 +132,10 @@ class App(FastAPI):
 
 @asynccontextmanager
 async def lifespan(app: App):
-    db = app.container.postgresql()
-    try:
-        # Migrations are a deployment responsibility. Refuse traffic when the
-        # migrator has not brought PostgreSQL exactly to this release's head.
-        await db.verify_schema_current()
-
-        # Instantiate circuit breakers eagerly: they register with the global
-        # registry on creation, so /health/circuits reports every breaker from
-        # startup instead of only after the first protected call
-        app.container.sendgrid_circuit_breaker()
-        app.container.elasticsearch_circuit_breaker()
+    # The API resource scope owns every process-local transport and closes all
+    # of them in reverse order, including when validation or startup fails.
+    async with api_resources(app.container):
         yield
-    finally:
-        # Lazy clients may have opened pools during a request. Close every API
-        # process-owned transport even when startup or request handling fails;
-        # one cleanup failure must not prevent the remaining resources closing.
-        logger = app.container.logger()
-        cleanup_errors: list[tuple[str, Exception]] = []
-        for name, provider, close_method in (
-            ("redis", app.container.redis_client, "close"),
-            ("elasticsearch", app.container.elasticsearch_client, "close"),
-            ("projection freshness", app.container.projection_freshness, "close"),
-            ("postgresql", lambda: db, "dispose"),
-        ):
-            try:
-                resource = provider()
-                await getattr(resource, close_method)()
-            except Exception as cleanup_error:
-                cleanup_errors.append((name, cleanup_error))
-        try:
-            app.container.etcd_adapter().close()
-        except Exception as cleanup_error:
-            cleanup_errors.append(("etcd", cleanup_error))
-        for name, resource_error in cleanup_errors:
-            logger.error(
-                f"Failed to close {name} client", exception=resource_error
-            )
 
 
 async def infrastructure_exception_handler(request: Request, exc: Exception):
@@ -256,9 +226,7 @@ def create_app() -> App:
     Run with: uvicorn --factory src.presentation.api.main:create_app
     """
     container = Container()
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
+    bootstrap_container(container, ProcessRole.API)
 
     app = App(
         title="Library API",

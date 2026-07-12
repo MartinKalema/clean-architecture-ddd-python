@@ -22,53 +22,38 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import workflow_resources
+from src.composition.runtime_config import ProcessRole
+from src.container import WorkflowContainer
 
 
 async def main() -> None:
     """Main entry point."""
-    container = Container()
-
-    # Load configuration from etcd
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
+    container = WorkflowContainer()
+    settings = bootstrap_container(container, ProcessRole.WORKFLOW)
 
     logger = container.logger()
     logger.info("Starting Domain Event Worker")
-    logger.info(f"Kafka: {container.configurations.kafka.bootstrap_servers()}")
+    logger.info(f"Kafka: {settings.kafka.bootstrap_servers}")
 
-    database = container.postgresql()
-    await database.verify_schema_current()
-    consumer = container.domain_event_consumer()
+    async with workflow_resources(container) as consumer:
+        loop = asyncio.get_running_loop()
 
-    loop = asyncio.get_running_loop()
+        def signal_handler() -> None:
+            logger.info("Received shutdown signal, stopping...")
+            asyncio.create_task(consumer.stop())
 
-    def signal_handler() -> None:
-        logger.info("Received shutdown signal, stopping...")
-        asyncio.create_task(consumer.stop())
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, signal_handler)
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, signal_handler)
-
-    try:
-        await consumer.start()
-    except asyncio.CancelledError:
-        logger.info("Consumer cancelled")
-    except Exception as e:
-        logger.error(f"Consumer error: {e}")
-        raise
-    finally:
-        # Workflow handlers invalidate Redis after committed writes. The
-        # consumer owns that lazy transport in this process and must close it
-        # during a graceful worker replacement.
         try:
-            await container.redis_client().close()
-        finally:
-            try:
-                await database.dispose()
-            finally:
-                etcd_adapter.close()
+            await consumer.start()
+        except asyncio.CancelledError:
+            logger.info("Consumer cancelled")
+        except Exception as error:
+            logger.error("Consumer failed", exception=error)
+            raise
 
 
 if __name__ == "__main__":

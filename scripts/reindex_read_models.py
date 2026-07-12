@@ -30,6 +30,7 @@ import os
 import sys
 import time
 from datetime import datetime
+from typing import Any
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,7 +39,10 @@ sys.path.insert(0, PROJECT_ROOT)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import search_maintenance_resources
+from src.composition.runtime_config import ProcessRole
+from src.container import MaintenanceContainer
 from src.infrastructure.adapters.catalog.book_model import BookModel
 from src.infrastructure.adapters.lending.loan_model import LoanModel
 from src.infrastructure.adapters.patron.patron_model import PatronModel
@@ -48,7 +52,7 @@ from src.infrastructure.external.elasticsearch_client import ElasticsearchClient
 MAPPINGS_DIR = os.path.join(PROJECT_ROOT, "deploy", "elasticsearch", "mappings")
 BATCH_SIZE = 500
 
-ALIASES = {
+ALIASES: dict[str, Any] = {
     "books": BookModel,
     "patrons": PatronModel,
     "loans": LoanModel,
@@ -68,7 +72,7 @@ def _row_to_dict(row) -> dict:
 
 async def reindex_alias(
     alias: str,
-    container: Container,
+    container: MaintenanceContainer,
     keep_old: bool,
     dual_write_grace_seconds: float = 2.0,
 ) -> None:
@@ -195,20 +199,14 @@ async def main() -> None:
             f"{minimum_grace:.1f}s (the CDC target-discovery cache window)"
         )
 
-    container = Container()
-
-    # Load configuration from etcd
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
+    container = MaintenanceContainer()
+    bootstrap_container(container, ProcessRole.MAINTENANCE)
 
     logger = container.logger()
     aliases = list(ALIASES) if args.index == "all" else [args.index]
     logger.info(f"Starting read-model reindex for: {aliases}")
 
-    es_client = container.elasticsearch_client()
-    database = container.postgresql()
-    try:
+    async with search_maintenance_resources(container) as (database, _):
         # One session-scoped PostgreSQL advisory lock fences the complete job,
         # including ``--index all``. A competing worker fails before it can
         # create an index or mutate the CDC target alias.
@@ -221,9 +219,6 @@ async def main() -> None:
                     dual_write_grace_seconds=args.dual_write_grace_seconds,
                 )
         logger.info("Reindex complete")
-    finally:
-        await es_client.close()
-        await database.dispose()
 
 
 if __name__ == "__main__":

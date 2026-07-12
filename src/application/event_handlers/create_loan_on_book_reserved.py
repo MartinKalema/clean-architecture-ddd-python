@@ -23,11 +23,10 @@ from typing import TYPE_CHECKING
 
 from src.application.command_handlers.create_loan import (
     CreateLoanCommand,
-    CreateLoanHandler,
+    CreateLoanResult,
 )
 from src.application.command_handlers.release_book_reservation import (
     ReleaseBookReservationCommand,
-    ReleaseBookReservationHandler,
 )
 from src.domain.catalog import StaleReservationException
 from src.domain.lending.exceptions import (
@@ -37,7 +36,7 @@ from src.domain.lending.exceptions import (
 )
 
 if TYPE_CHECKING:
-    from src.application.ports import ILogger
+    from src.application.ports import ICommandHandler, ILogger
     from src.domain.catalog import CatalogBookReserved
 
 
@@ -48,12 +47,14 @@ class CreateLoanOnBookReservedHandler:
 
     def __init__(
         self,
-        create_loan_handler: CreateLoanHandler,
-        release_book_reservation_handler: ReleaseBookReservationHandler,
+        create_loan_operation: ICommandHandler[CreateLoanCommand, CreateLoanResult],
+        release_book_reservation_operation: ICommandHandler[
+            ReleaseBookReservationCommand, bool
+        ],
         logger: ILogger,
     ):
-        self.create_loan_handler = create_loan_handler
-        self.release_book_reservation_handler = release_book_reservation_handler
+        self._create_loan = create_loan_operation
+        self._release_book_reservation = release_book_reservation_operation
         self.logger = logger
 
     async def handle(self, event: CatalogBookReserved) -> None:
@@ -68,7 +69,7 @@ class CreateLoanOnBookReservedHandler:
         )
 
         try:
-            result = await self.create_loan_handler.handle(command)
+            result = await self._create_loan.handle(command)
         except (
             BookNotAvailableException,
             PatronBorrowingLimitReachedException,
@@ -92,7 +93,7 @@ class CreateLoanOnBookReservedHandler:
             f"compensating by releasing the reservation"
         )
         try:
-            await self.release_book_reservation_handler.handle(
+            await self._release_book_reservation.handle(
                 ReleaseBookReservationCommand(
                     book_id=event.book_id,
                     reservation_id=event.reservation_id,

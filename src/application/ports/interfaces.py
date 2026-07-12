@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from src.domain.shared_kernel import DomainEvent
 
 T = TypeVar("T")
+CommandT = TypeVar("CommandT", contravariant=True)
+ResultT = TypeVar("ResultT", covariant=True)
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,12 @@ class ILogger(Protocol):
     def warning(self, message: str) -> None: ...
 
     def debug(self, message: str) -> None: ...
+
+
+class ICommandHandler(Protocol[CommandT, ResultT]):
+    """Executes one application command and returns its result."""
+
+    async def handle(self, command: CommandT) -> ResultT: ...
 
 
 class IEventHandler(Protocol):

@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import inspect
 import logging
 import time
 from collections import deque
@@ -367,7 +368,11 @@ class CircuitBreaker:
         if not allowed:
             self.metrics.record_rejection()
             if self.fallback:
-                return await self.fallback(*args, **kwargs) if asyncio.iscoroutinefunction(self.fallback) else self.fallback(*args, **kwargs)
+                return (
+                    await self.fallback(*args, **kwargs)
+                    if inspect.iscoroutinefunction(self.fallback)
+                    else self.fallback(*args, **kwargs)
+                )
             raise CircuitBreakerOpenException(
                 self.name,
                 self._time_until_retry()
@@ -388,7 +393,7 @@ class CircuitBreaker:
 
     async def _run_call(self, func: Callable, *args, **kwargs) -> Any:
         """Run the protected call, off-loop for sync functions, with timeout."""
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             awaitable = func(*args, **kwargs)
             if self.call_timeout:
                 return await asyncio.wait_for(
@@ -508,6 +513,3 @@ class CircuitBreakerRegistry:
         """Reset all circuit breakers."""
         for breaker in self._breakers.values():
             breaker.reset()
-
-
-circuit_breaker_registry = CircuitBreakerRegistry()

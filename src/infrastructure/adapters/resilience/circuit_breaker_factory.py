@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .circuit_breaker import CircuitBreaker, circuit_breaker_registry
+from .circuit_breaker import CircuitBreaker, CircuitBreakerRegistry
 
 if TYPE_CHECKING:
     from src.application.ports import ILogger
@@ -22,7 +22,7 @@ class CircuitBreakerFactory:
 
     Handles:
     - Circuit breaker instantiation with configuration
-    - Automatic registration with the global registry
+    - Explicit registration with the owning process container's registry
 
     Usage in container:
         sendgrid_cb = providers.Singleton(
@@ -40,6 +40,7 @@ class CircuitBreakerFactory:
         success_threshold: int,
         timeout: float,
         logger: ILogger,
+        registry: CircuitBreakerRegistry,
         failure_rate_threshold: float = 50.0,
         window_seconds: float = 60.0,
         minimum_calls: int = 10,
@@ -83,6 +84,6 @@ class CircuitBreakerFactory:
             logger=logger,
         )
 
-        circuit_breaker_registry.register(circuit_breaker)
+        registry.register(circuit_breaker)
 
         return circuit_breaker

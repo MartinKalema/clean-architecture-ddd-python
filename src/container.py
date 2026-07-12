@@ -9,11 +9,13 @@ CQRS Architecture:
 - Commands: Write operations (AddBook, BorrowBook, ReturnBook)
 - Queries: Read operations (ListBooks, GetBook)
 """
-import os
-
 from dependency_injector import containers, providers
 
-from src.application.cache_invalidation import CacheInvalidatingHandler
+from src.application.cache_invalidation import (
+    CacheNamespace,
+    InvalidateCacheAfterCommand,
+    NamespaceCacheInvalidation,
+)
 from src.application.command_handlers import (AddBookHandler,
                                               BorrowBookHandler,
                                               ReturnBookHandler)
@@ -83,9 +85,10 @@ from src.infrastructure.adapters.patron import (
     PatronQueryRepository,
     PatronUnitOfWork,
 )
-from src.infrastructure.adapters.resilience import (CircuitBreakerFactory,
-                                                    circuit_breaker_registry as
-                                                    breaker_registry)
+from src.infrastructure.adapters.resilience import (
+    CircuitBreakerFactory,
+    CircuitBreakerRegistry,
+)
 from src.infrastructure.external.elasticsearch_client import \
     ElasticsearchClient
 from src.infrastructure.external.etcd_client import EtcdClient
@@ -96,7 +99,7 @@ from src.infrastructure.external.sendgrid_client import SendGridClient
 from src.infrastructure.adapters.utc_clock import UtcClock
 
 
-class Container(containers.DeclarativeContainer):
+class ApplicationContainer(containers.DeclarativeContainer):
     """
     Application dependency injection container.
 
@@ -105,28 +108,19 @@ class Container(containers.DeclarativeContainer):
     - Query handlers for read operations
     """
 
-    wiring_config = containers.WiringConfiguration(modules=[
-        "src.presentation.api.routes.book_routes",
-        "src.presentation.api.routes.health_routes",
-        "src.presentation.api.routes.loan_routes",
-        "src.presentation.api.routes.patron_routes",
-        "src.presentation.cli.commands.add_book_command",
-        "src.presentation.cli.commands.list_books_command",
-        "src.presentation.cli.commands.borrow_book_command"
-    ])
-
-    configurations = providers.Configuration()
+    bootstrap = providers.Configuration(strict=True)
+    configurations = providers.Configuration(strict=True)
 
     etcd_client = providers.Singleton(
         EtcdClient,
-        host=os.environ.get("ETCD_HOST", "localhost"),
-        port=int(os.environ.get("ETCD_PORT", "2379")),
+        host=bootstrap.etcd.host,
+        port=bootstrap.etcd.port,
     )
 
     etcd_adapter = providers.Singleton(
         EtcdAdapter,
         client=etcd_client,
-        config_prefix=os.environ.get("ETCD_CONFIG_PREFIX", "/config/"),
+        config_prefix=bootstrap.etcd.prefix,
     )
 
     logger = providers.Singleton(
@@ -145,7 +139,7 @@ class Container(containers.DeclarativeContainer):
         pool_recycle=configurations.database.pool_recycle,
     )
 
-    session_factory = providers.Resource(
+    session_factory = providers.Singleton(
         lambda db: db.session_factory,
         db=postgresql
     )
@@ -168,6 +162,27 @@ class Container(containers.DeclarativeContainer):
     cache = providers.Singleton(
         CacheAdapter,
         client=redis_client,
+    )
+
+    book_cache_invalidation = providers.Singleton(
+        NamespaceCacheInvalidation,
+        cache=cache,
+        namespace=CacheNamespace.BOOK,
+        logger=logger,
+    )
+
+    patron_cache_invalidation = providers.Singleton(
+        NamespaceCacheInvalidation,
+        cache=cache,
+        namespace=CacheNamespace.PATRON,
+        logger=logger,
+    )
+
+    loan_cache_invalidation = providers.Singleton(
+        NamespaceCacheInvalidation,
+        cache=cache,
+        namespace=CacheNamespace.LOAN,
+        logger=logger,
     )
 
     # CDC Pipeline
@@ -230,6 +245,8 @@ class Container(containers.DeclarativeContainer):
         group_id=configurations.kafka.projection_group_id,
     )
 
+    circuit_breaker_registry = providers.Singleton(CircuitBreakerRegistry)
+
     sendgrid_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,
         name=configurations.circuit_breakers.sendgrid.name,
@@ -244,9 +261,8 @@ class Container(containers.DeclarativeContainer):
         # service-health signals. Rate limiting remains retryable.
         excluded_exceptions=(EmailDeliveryException,),
         logger=logger,
+        registry=circuit_breaker_registry,
     )
-
-    circuit_breaker_registry = providers.Object(breaker_registry)
 
     elasticsearch_circuit_breaker = providers.Singleton(
         CircuitBreakerFactory,
@@ -260,6 +276,7 @@ class Container(containers.DeclarativeContainer):
         half_open_max_calls=configurations.circuit_breakers.elasticsearch.half_open_max_calls,
         call_timeout=configurations.circuit_breakers.elasticsearch.call_timeout,
         logger=logger,
+        registry=circuit_breaker_registry,
     )
 
     email_service = providers.Singleton(
@@ -301,21 +318,20 @@ class Container(containers.DeclarativeContainer):
         session_factory=session_factory,
     )
 
-    add_book_handler_core = providers.Factory(
+    add_book_operation = providers.Factory(
         AddBookHandler,
         uow=catalog_uow,
         logger=logger
     )
 
-    add_book_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=add_book_handler_core,
-        cache=cache,
-        entity_type="book",
+    add_book = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=add_book_operation,
+        invalidation=book_cache_invalidation,
         logger=logger,
     )
 
-    borrow_book_handler_core = providers.Factory(
+    borrow_book_operation = providers.Factory(
         BorrowBookHandler,
         uow=catalog_uow,
         borrower_directory=borrower_directory,
@@ -323,11 +339,10 @@ class Container(containers.DeclarativeContainer):
         clock=clock,
     )
 
-    borrow_book_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=borrow_book_handler_core,
-        cache=cache,
-        entity_type="book",
+    borrow_book = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=borrow_book_operation,
+        invalidation=book_cache_invalidation,
         logger=logger,
     )
 
@@ -336,63 +351,59 @@ class Container(containers.DeclarativeContainer):
         uow=catalog_uow,
     )
 
-    return_book_handler_core = providers.Factory(
+    return_book_operation = providers.Factory(
         ReturnBookHandler,
         uow=catalog_uow,
         logger=logger,
         clock=clock,
     )
 
-    return_book_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=return_book_handler_core,
-        cache=cache,
-        entity_type="book",
+    return_book = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=return_book_operation,
+        invalidation=book_cache_invalidation,
         logger=logger,
     )
 
-    confirm_book_borrow_handler_core = providers.Factory(
+    confirm_book_borrow_operation = providers.Factory(
         ConfirmBookBorrowHandler,
         uow=catalog_uow,
         logger=logger,
         clock=clock,
     )
 
-    confirm_book_borrow_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=confirm_book_borrow_handler_core,
-        cache=cache,
-        entity_type="book",
+    confirm_book_borrow = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=confirm_book_borrow_operation,
+        invalidation=book_cache_invalidation,
         logger=logger,
     )
 
-    release_book_reservation_handler_core = providers.Factory(
+    release_book_reservation_operation = providers.Factory(
         ReleaseBookReservationHandler,
         uow=catalog_uow,
         logger=logger,
         clock=clock,
     )
 
-    release_book_reservation_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=release_book_reservation_handler_core,
-        cache=cache,
-        entity_type="book",
+    release_book_reservation = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=release_book_reservation_operation,
+        invalidation=book_cache_invalidation,
         logger=logger,
     )
 
-    release_expired_reservations_handler_core = providers.Factory(
+    release_expired_reservations_operation = providers.Factory(
         ReleaseExpiredReservationsHandler,
         uow=catalog_uow,
         logger=logger,
         clock=clock,
     )
 
-    release_expired_reservations_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=release_expired_reservations_handler_core,
-        cache=cache,
-        entity_type="book",
+    release_expired_reservations = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=release_expired_reservations_operation,
+        invalidation=book_cache_invalidation,
         logger=logger,
     )
 
@@ -417,60 +428,56 @@ class Container(containers.DeclarativeContainer):
         logger=logger
     )
 
-    register_patron_handler_core = providers.Factory(
+    register_patron_operation = providers.Factory(
         RegisterPatronHandler,
         uow=patron_uow,
         logger=logger,
         clock=clock,
     )
 
-    register_patron_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=register_patron_handler_core,
-        cache=cache,
-        entity_type="patron",
+    register_patron = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=register_patron_operation,
+        invalidation=patron_cache_invalidation,
         logger=logger,
     )
 
-    suspend_patron_handler_core = providers.Factory(
+    suspend_patron_operation = providers.Factory(
         SuspendPatronHandler,
         uow=patron_uow,
         logger=logger
     )
 
-    suspend_patron_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=suspend_patron_handler_core,
-        cache=cache,
-        entity_type="patron",
+    suspend_patron = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=suspend_patron_operation,
+        invalidation=patron_cache_invalidation,
         logger=logger,
     )
 
-    reinstate_patron_handler_core = providers.Factory(
+    reinstate_patron_operation = providers.Factory(
         ReinstatePatronHandler,
         uow=patron_uow,
         logger=logger
     )
 
-    reinstate_patron_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=reinstate_patron_handler_core,
-        cache=cache,
-        entity_type="patron",
+    reinstate_patron = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=reinstate_patron_operation,
+        invalidation=patron_cache_invalidation,
         logger=logger,
     )
 
-    upgrade_patron_tier_handler_core = providers.Factory(
+    upgrade_patron_tier_operation = providers.Factory(
         UpgradePatronTierHandler,
         uow=patron_uow,
         logger=logger
     )
 
-    upgrade_patron_tier_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=upgrade_patron_tier_handler_core,
-        cache=cache,
-        entity_type="patron",
+    upgrade_patron_tier = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=upgrade_patron_tier_operation,
+        invalidation=patron_cache_invalidation,
         logger=logger,
     )
 
@@ -505,62 +512,58 @@ class Container(containers.DeclarativeContainer):
         projection_freshness=projection_freshness,
     )
 
-    create_loan_handler_core = providers.Factory(
+    create_loan_operation = providers.Factory(
         CreateLoanHandler,
         uow=loan_uow,
         borrower_directory=borrower_directory,
         logger=logger
     )
 
-    create_loan_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=create_loan_handler_core,
-        cache=cache,
-        entity_type="loan",
+    create_loan = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=create_loan_operation,
+        invalidation=loan_cache_invalidation,
         logger=logger,
     )
 
-    extend_loan_handler_core = providers.Factory(
+    extend_loan_operation = providers.Factory(
         ExtendLoanHandler,
         uow=loan_uow,
         logger=logger,
         clock=clock,
     )
 
-    extend_loan_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=extend_loan_handler_core,
-        cache=cache,
-        entity_type="loan",
+    extend_loan = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=extend_loan_operation,
+        invalidation=loan_cache_invalidation,
         logger=logger,
     )
 
-    return_loan_handler_core = providers.Factory(
+    return_loan_operation = providers.Factory(
         ReturnLoanHandler,
         uow=loan_uow,
         logger=logger,
         clock=clock,
     )
 
-    return_loan_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=return_loan_handler_core,
-        cache=cache,
-        entity_type="loan",
+    return_loan = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=return_loan_operation,
+        invalidation=loan_cache_invalidation,
         logger=logger,
     )
 
-    cancel_loan_handler_core = providers.Factory(
+    cancel_loan_operation = providers.Factory(
         CancelLoanHandler,
         uow=loan_uow,
         logger=logger,
     )
 
-    cancel_loan_handler = providers.Factory(
-        CacheInvalidatingHandler,
-        handler=cancel_loan_handler_core,
-        cache=cache,
-        entity_type="loan",
+    cancel_loan = providers.Factory(
+        InvalidateCacheAfterCommand,
+        operation=cancel_loan_operation,
+        invalidation=loan_cache_invalidation,
         logger=logger,
     )
 
@@ -587,27 +590,27 @@ class Container(containers.DeclarativeContainer):
 
     create_loan_on_book_reserved_handler = providers.Factory(
         CreateLoanOnBookReservedHandler,
-        create_loan_handler=create_loan_handler,
-        release_book_reservation_handler=release_book_reservation_handler,
+        create_loan_operation=create_loan,
+        release_book_reservation_operation=release_book_reservation,
         logger=logger
     )
 
     confirm_borrow_on_loan_created_handler = providers.Factory(
         ConfirmBorrowOnLoanCreatedHandler,
-        confirm_book_borrow_handler=confirm_book_borrow_handler,
-        cancel_loan_handler=cancel_loan_handler,
+        confirm_book_borrow_operation=confirm_book_borrow,
+        cancel_loan_operation=cancel_loan,
         logger=logger
     )
 
     cancel_loan_on_book_released_handler = providers.Factory(
         CancelLoanOnBookReleasedHandler,
-        cancel_loan_handler=cancel_loan_handler,
+        cancel_loan_operation=cancel_loan,
         logger=logger,
     )
 
     return_book_on_loan_completed_handler = providers.Factory(
         ReturnBookOnLoanCompletedHandler,
-        return_book_handler=return_book_handler,
+        return_book_operation=return_book,
         logger=logger
     )
 
@@ -672,3 +675,44 @@ class Container(containers.DeclarativeContainer):
         group_id=configurations.kafka.notification_group_id,
         durable_delivery=False,
     )
+
+
+class Container(ApplicationContainer):
+    """API-only composition root retained as the public FastAPI container."""
+
+    wiring_config = containers.WiringConfiguration(modules=[
+        "src.presentation.api.routes.book_routes",
+        "src.presentation.api.routes.health_routes",
+        "src.presentation.api.routes.loan_routes",
+        "src.presentation.api.routes.patron_routes",
+    ])
+
+
+class CliContainer(ApplicationContainer):
+    """CLI composition root; it never wires API modules."""
+
+    wiring_config = containers.WiringConfiguration(modules=[
+        "src.presentation.cli.commands.add_book_command",
+        "src.presentation.cli.commands.list_books_command",
+        "src.presentation.cli.commands.borrow_book_command",
+    ])
+
+
+class WorkflowContainer(ApplicationContainer):
+    """Correctness-critical cross-context workflow worker composition root."""
+
+
+class NotificationContainer(ApplicationContainer):
+    """Optional notification worker composition root."""
+
+
+class ProjectionContainer(ApplicationContainer):
+    """Elasticsearch projection worker composition root."""
+
+
+class ReaperContainer(ApplicationContainer):
+    """Expired-reservation reaper composition root."""
+
+
+class MaintenanceContainer(ApplicationContainer):
+    """Short-lived administrative command composition root."""

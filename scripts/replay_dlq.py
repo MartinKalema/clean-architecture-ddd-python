@@ -30,7 +30,10 @@ sys.path.insert(0, PROJECT_ROOT)
 from aiokafka import AIOKafkaConsumer
 from aiokafka.structs import OffsetAndMetadata, TopicPartition
 
-from src.container import Container
+from src.composition.bootstrap import bootstrap_container
+from src.composition.lifecycle import kafka_maintenance_resources
+from src.composition.runtime_config import ProcessRole
+from src.container import MaintenanceContainer
 from src.infrastructure.external.kafka_client import decode_dead_letter_field
 
 
@@ -44,16 +47,11 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
-    container = Container()
-
-    # Load configuration from etcd
-    etcd_adapter = container.etcd_adapter()
-    etcd_adapter.load()
-    container.configurations.from_dict(etcd_adapter.get_all())
+    container = MaintenanceContainer()
+    settings = bootstrap_container(container, ProcessRole.MAINTENANCE)
 
     logger = container.logger()
-    kafka_client = container.kafka_client()
-    bootstrap = container.configurations.kafka.bootstrap_servers()
+    bootstrap = settings.kafka.bootstrap_servers
 
     consumer = AIOKafkaConsumer(
         bootstrap_servers=bootstrap,
@@ -62,46 +60,47 @@ async def main() -> None:
         enable_auto_commit=False,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")) if m else None,
     )
-    await consumer.start()
+    async with kafka_maintenance_resources(container) as kafka_client:
+        try:
+            await consumer.start()
+            partition_ids = await consumer.partitions_for_topic(args.topic)
+            if not partition_ids:
+                logger.info(f"No partitions assigned for {args.topic}; nothing to replay")
+                return
+            partitions = [
+                TopicPartition(args.topic, partition_id)
+                for partition_id in sorted(partition_ids)
+            ]
+            consumer.assign(partitions)
 
-    try:
-        partition_ids = await consumer.partitions_for_topic(args.topic)
-        if not partition_ids:
-            logger.info(f"No partitions assigned for {args.topic}; nothing to replay")
-            return
-        partitions = [
-            TopicPartition(args.topic, partition_id)
-            for partition_id in sorted(partition_ids)
-        ]
-        consumer.assign(partitions)
+            beginning_offsets = await consumer.beginning_offsets(partitions)
+            end_offsets = await consumer.end_offsets(partitions)
 
-        beginning_offsets = await consumer.beginning_offsets(partitions)
-        end_offsets = await consumer.end_offsets(partitions)
+            replayed = 0
+            skipped = 0
+            for tp in partitions:
+                committed = None if args.from_beginning else await consumer.committed(tp)
+                start_offset = (
+                    committed
+                    if committed is not None
+                    else beginning_offsets[tp]
+                )
+                consumer.seek(tp, start_offset)
+                partition_replayed, partition_skipped = await replay_partition(
+                    consumer=consumer,
+                    kafka_client=kafka_client,
+                    partition=tp,
+                    end_offset=end_offsets[tp],
+                )
+                replayed += partition_replayed
+                skipped += partition_skipped
 
-        replayed = 0
-        skipped = 0
-        for tp in partitions:
-            committed = None if args.from_beginning else await consumer.committed(tp)
-            start_offset = (
-                committed
-                if committed is not None
-                else beginning_offsets[tp]
+            logger.info(
+                f"Replayed {replayed} message(s) from {args.topic} "
+                f"({skipped} skipped)"
             )
-            consumer.seek(tp, start_offset)
-            partition_replayed, partition_skipped = await replay_partition(
-                consumer=consumer,
-                kafka_client=kafka_client,
-                partition=tp,
-                end_offset=end_offsets[tp],
-            )
-            replayed += partition_replayed
-            skipped += partition_skipped
-
-        logger.info(f"Replayed {replayed} message(s) from {args.topic} ({skipped} skipped)")
-
-    finally:
-        await consumer.stop()
-        await kafka_client.close()
+        finally:
+            await consumer.stop()
 
 
 async def replay_partition(

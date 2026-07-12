@@ -7,7 +7,7 @@ import click
 from dependency_injector.wiring import Provide, inject
 
 from src.application.query_handlers import ListBooksQuery
-from src.container import Container
+from src.container import CliContainer
 
 if TYPE_CHECKING:
     from src.application.query_handlers import ListBooksHandler
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 def list(
     available: bool,
     borrowed: bool,
-    handler: ListBooksHandler = Provide[Container.list_books_handler]
+    handler: ListBooksHandler = Provide[CliContainer.list_books_handler]
 ):
     """List all books in the catalog."""
     query = ListBooksQuery(only_available=available, only_borrowed=borrowed)

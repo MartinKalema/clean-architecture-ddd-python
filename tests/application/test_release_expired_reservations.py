@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from scripts.run_reservation_reaper import release_all_expired
-from src.application.cache_invalidation import CacheInvalidatingHandler
+from src.application.cache_invalidation import (
+    CacheNamespace,
+    InvalidateCacheAfterCommand,
+    NamespaceCacheInvalidation,
+)
 from src.application.command_handlers.release_expired_reservations import (
     ReleaseExpiredReservationsCommand,
     ReleaseExpiredReservationsHandler,
@@ -73,13 +77,14 @@ async def test_worker_crosses_cache_decorator_after_every_committed_batch():
     first.handle.return_value = ReleaseExpiredReservationsResult(2, True)
     second = AsyncMock()
     second.handle.return_value = ReleaseExpiredReservationsResult(1, False)
-    handlers = [
-        CacheInvalidatingHandler(first, cache, "book"),
-        CacheInvalidatingHandler(second, cache, "book"),
+    invalidation = NamespaceCacheInvalidation(cache, CacheNamespace.BOOK)
+    operations = [
+        InvalidateCacheAfterCommand(first, invalidation),
+        InvalidateCacheAfterCommand(second, invalidation),
     ]
 
     total = await release_all_expired(
-        lambda: handlers.pop(0),
+        lambda: operations.pop(0),
         ReleaseExpiredReservationsCommand(ttl_seconds=300, batch_size=2),
     )
 
@@ -95,14 +100,15 @@ async def test_later_batch_failure_cannot_skip_prior_batch_invalidation():
     committed.handle.return_value = ReleaseExpiredReservationsResult(2, True)
     failing = AsyncMock()
     failing.handle.side_effect = RuntimeError("database down")
-    handlers = [
-        CacheInvalidatingHandler(committed, cache, "book"),
-        CacheInvalidatingHandler(failing, cache, "book"),
+    invalidation = NamespaceCacheInvalidation(cache, CacheNamespace.BOOK)
+    operations = [
+        InvalidateCacheAfterCommand(committed, invalidation),
+        InvalidateCacheAfterCommand(failing, invalidation),
     ]
 
     with pytest.raises(RuntimeError, match="database down"):
         await release_all_expired(
-            lambda: handlers.pop(0),
+            lambda: operations.pop(0),
             ReleaseExpiredReservationsCommand(ttl_seconds=300, batch_size=2),
         )
 

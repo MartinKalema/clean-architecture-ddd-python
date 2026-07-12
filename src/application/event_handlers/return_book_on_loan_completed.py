@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING
 
 from src.application.command_handlers.return_book import (
     ReturnBookCommand,
-    ReturnBookHandler,
+    ReturnBookResult,
 )
 from src.domain.catalog import StaleLoanCompletionException
 
 if TYPE_CHECKING:
-    from src.application.ports import ILogger
+    from src.application.ports import ICommandHandler, ILogger
     from src.domain.lending import LoanCompleted
 
 
@@ -19,13 +19,17 @@ class ReturnBookOnLoanCompletedHandler:
 
     inbox_consumer_name = "catalog.return-book-on-loan-completed.v1"
 
-    def __init__(self, return_book_handler: ReturnBookHandler, logger: ILogger):
-        self.return_book_handler = return_book_handler
+    def __init__(
+        self,
+        return_book_operation: ICommandHandler[ReturnBookCommand, ReturnBookResult],
+        logger: ILogger,
+    ):
+        self._return_book = return_book_operation
         self.logger = logger
 
     async def handle(self, event: LoanCompleted) -> None:
         try:
-            await self.return_book_handler.handle(
+            await self._return_book.handle(
                 ReturnBookCommand(
                     book_id=event.book_id,
                     loan_id=event.loan_id,

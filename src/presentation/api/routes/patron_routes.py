@@ -10,20 +10,21 @@ from pydantic import BaseModel, Field, field_validator
 
 from src.application.command_handlers.register_patron import (
     RegisterPatronCommand,
-    RegisterPatronHandler,
+    RegisterPatronResult,
 )
 from src.application.command_handlers.reinstate_patron import (
     ReinstatePatronCommand,
-    ReinstatePatronHandler,
+    ReinstatePatronResult,
 )
 from src.application.command_handlers.suspend_patron import (
     SuspendPatronCommand,
-    SuspendPatronHandler,
+    SuspendPatronResult,
 )
 from src.application.command_handlers.upgrade_patron_tier import (
     UpgradePatronTierCommand,
-    UpgradePatronTierHandler,
+    UpgradePatronTierResult,
 )
+from src.application.ports import ICommandHandler
 from src.application.query_handlers.get_patron import (
     GetPatronHandler,
     GetPatronQuery,
@@ -117,7 +118,9 @@ async def register_patron(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: RegisterPatronHandler = Depends(Provide[Container.register_patron_handler]),
+    operation: ICommandHandler[RegisterPatronCommand, RegisterPatronResult] = Depends(
+        Provide[Container.register_patron]
+    ),
 ):
     """Register a new patron."""
     command = RegisterPatronCommand(
@@ -127,7 +130,7 @@ async def register_patron(
         membership_tier=patron.membership_tier,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     return PatronResponse(**result.__dict__)
 
 
@@ -203,7 +206,9 @@ async def suspend_patron(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: SuspendPatronHandler = Depends(Provide[Container.suspend_patron_handler]),
+    operation: ICommandHandler[SuspendPatronCommand, SuspendPatronResult] = Depends(
+        Provide[Container.suspend_patron]
+    ),
 ):
     """Suspend a patron's borrowing privileges."""
     command = SuspendPatronCommand(
@@ -211,7 +216,7 @@ async def suspend_patron(
         reason=request.reason,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     return PatronResponse(**result.__dict__)
 
 
@@ -223,14 +228,16 @@ async def reinstate_patron(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: ReinstatePatronHandler = Depends(Provide[Container.reinstate_patron_handler]),
+    operation: ICommandHandler[
+        ReinstatePatronCommand, ReinstatePatronResult
+    ] = Depends(Provide[Container.reinstate_patron]),
 ):
     """Reinstate a suspended patron."""
     command = ReinstatePatronCommand(
         patron_id=patron_id,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     return PatronResponse(**result.__dict__)
 
 
@@ -243,7 +250,9 @@ async def upgrade_patron_tier(
         str,
         Header(alias="Idempotency-Key", min_length=8, max_length=128),
     ],
-    handler: UpgradePatronTierHandler = Depends(Provide[Container.upgrade_patron_tier_handler]),
+    operation: ICommandHandler[
+        UpgradePatronTierCommand, UpgradePatronTierResult
+    ] = Depends(Provide[Container.upgrade_patron_tier]),
 ):
     """Upgrade a patron's membership tier."""
     command = UpgradePatronTierCommand(
@@ -251,5 +260,5 @@ async def upgrade_patron_tier(
         new_tier=request.new_tier,
         idempotency_key=idempotency_key,
     )
-    result = await handler.handle(command)
+    result = await operation.handle(command)
     return PatronResponse(**result.__dict__)
