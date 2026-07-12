@@ -9,7 +9,7 @@ def set_page_headers(
     next_cursor: str | None,
     total: int | None,
 ) -> None:
-    """Expose continuation metadata without changing legacy list bodies."""
+    """Expose continuation metadata for list responses."""
     if next_cursor is not None:
         response.headers["X-Next-Cursor"] = next_cursor
     if total is not None:

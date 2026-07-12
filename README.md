@@ -268,6 +268,10 @@ Startup fails fast if `alembic_version` is absent, behind, ahead, or on a
 different migration branch. In Docker Compose, the one-shot `migrator` service
 runs first and every API instance verifies its result.
 
+The project is pre-release, so revision `baseline_20260712` is the only
+supported schema and must be applied to an empty database. Drop and recreate any development
+database built from an earlier migration; no old-schema conversion is kept.
+
 ## Testing
 
 ```bash

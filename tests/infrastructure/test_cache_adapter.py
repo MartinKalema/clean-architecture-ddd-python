@@ -82,7 +82,7 @@ async def test_get_or_set_collapses_concurrent_misses():
         return {"value": 42}
 
     results = await asyncio.gather(*(
-        cache.get_or_set("book:item:v2:key", factory) for _ in range(20)
+        cache.get_or_set("book:item:v1:key", factory) for _ in range(20)
     ))
 
     assert calls == 1
@@ -97,7 +97,7 @@ async def test_entity_invalidation_uses_hashed_item_and_bounded_patterns():
     await cache.invalidate_entity("book", "secret-book-id")
 
     assert "secret-book-id" not in client.deleted[0]
-    assert client.patterns == ["book:list:v2:*", "book:count:v2:*"]
+    assert client.patterns == ["book:list:v1:*", "book:count:v1:*"]
     assert client.generations["book"] == 1
 
 
@@ -115,7 +115,7 @@ async def test_write_generation_prevents_inflight_stale_cache_population():
         return next(values)
 
     read = asyncio.create_task(
-        cache.get_or_set("book:item:v2:key", factory)
+        cache.get_or_set("book:item:v1:key", factory)
     )
     await started.wait()
     await cache.invalidate_all("book")
@@ -123,7 +123,7 @@ async def test_write_generation_prevents_inflight_stale_cache_population():
 
     assert await read == "current"
     assert "old" not in client.values.values()
-    assert client.values["book:item:v2:key:g1"] == "current"
+    assert client.values["book:item:v1:key:g1"] == "current"
 
 
 @pytest.mark.asyncio
@@ -131,7 +131,7 @@ async def test_failed_write_fence_bypasses_stale_generation_until_recovery():
     client = FakeCacheClient()
     cache = CacheAdapter(client)
     cache.RECOVERY_INITIAL_DELAY_SECONDS = 0.01
-    key = "book:item:v2:key"
+    key = "book:item:v1:key"
     client.values[f"{key}:g0"] = "stale"
     client.generation_writes_available = False
 
@@ -156,7 +156,7 @@ async def test_failed_write_fence_bypasses_stale_generation_until_recovery():
 async def test_generation_read_failure_bypasses_cache_without_refilling_it():
     client = FakeCacheClient()
     cache = CacheAdapter(client)
-    key = "book:item:v2:key"
+    key = "book:item:v1:key"
     client.values[f"{key}:g0"] = "stale"
     client.generation_reads_available = False
     factory = AsyncMock(return_value="database")
@@ -223,7 +223,7 @@ async def test_pattern_deletion_unlinks_in_bounded_batches():
     client = RedisClient()
     client._client = fake
 
-    deleted = await client.delete_pattern("book:list:v2:*")
+    deleted = await client.delete_pattern("book:list:v1:*")
 
     assert deleted == 1_201
     assert [len(call.args) for call in fake.unlink.await_args_list] == [500, 500, 201]

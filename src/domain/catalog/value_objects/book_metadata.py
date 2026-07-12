@@ -39,8 +39,8 @@ class BookId:
         try:
             value = str(uuid.UUID(value))
         except ValueError:
-            # Legacy and external catalog ids remain valid when they are
-            # bounded opaque identifiers rather than UUIDs.
+            # External catalog IDs may be bounded opaque identifiers rather
+            # than UUIDs.
             pass
         object.__setattr__(self, "value", value)
 

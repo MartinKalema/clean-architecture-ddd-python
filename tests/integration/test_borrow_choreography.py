@@ -45,6 +45,7 @@ from src.application.ports import BorrowerProfile
 from src.application.query_handlers import PatronReadModel
 from src.domain.catalog import (
     BookStatus,
+    CatalogBookBorrowed,
     CatalogBookReleased,
     CatalogBookReserved,
 )
@@ -56,7 +57,6 @@ from src.domain.lending import (
 )
 from src.infrastructure.adapters.catalog import CatalogUnitOfWork
 from src.infrastructure.adapters.events import (
-    EVENT_TYPES,
     deserialize_event,
     outbox_type_for_event_class,
 )
@@ -99,8 +99,8 @@ def _directory(patron: PatronReadModel):
     return directory
 
 
-async def _latest_outbox_event(session_factory, event_type, aggregate_id):
-    wire_type = outbox_type_for_event_class(EVENT_TYPES[event_type])
+async def _latest_outbox_event(session_factory, event_class, aggregate_id):
+    wire_type = outbox_type_for_event_class(event_class)
     async with session_factory() as session:
         result = await session.execute(
             select(OutboxMessageModel)
@@ -112,7 +112,7 @@ async def _latest_outbox_event(session_factory, event_type, aggregate_id):
             )
         )
         row = result.scalars().first()
-    assert row is not None, f"missing {event_type} for {aggregate_id}"
+    assert row is not None, f"missing {event_class.__name__} for {aggregate_id}"
     return deserialize_event(json.loads(row.payload))
 
 
@@ -136,7 +136,7 @@ async def _reserve(test_db, title: str, patron: PatronReadModel):
     assert reserved.status == BookStatus.RESERVED.value
 
     event = await _latest_outbox_event(
-        session_factory, "CatalogBookReserved", book.id
+        session_factory, CatalogBookReserved, book.id
     )
     assert isinstance(event, CatalogBookReserved)
     return book, event, session_factory
@@ -190,7 +190,7 @@ async def _complete_borrow(test_db, title, patron):
     assert loan is not None
 
     created = await _latest_outbox_event(
-        session_factory, "LoanCreated", loan.id.value
+        session_factory, LoanCreated, loan.id.value
     )
     assert isinstance(created, LoanCreated)
     await _confirm_reaction(session_factory).handle(created)
@@ -217,7 +217,7 @@ async def test_full_saga_persists_exact_correlation_and_confirms_catalog(test_db
     assert catalog_book.reservation_id.value == reserved.reservation_id
 
     definitive = await _latest_outbox_event(
-        session_factory, "CatalogBookBorrowed", book_result.id
+        session_factory, CatalogBookBorrowed, book_result.id
     )
     assert definitive.loan_id == loan.id.value
     assert definitive.borrower_email == patron.email
@@ -259,7 +259,7 @@ async def test_final_lending_decision_enforces_patron_tier_limit(test_db):
     async with LoanUnitOfWork(session_factory) as uow:
         assert await uow.loans.get_active_loan_for_book(book_result.id) is None
     released = await _latest_outbox_event(
-        session_factory, "CatalogBookReleased", book_result.id
+        session_factory, CatalogBookReleased, book_result.id
     )
     assert "borrowing limit" in released.reason
 
@@ -371,7 +371,7 @@ async def test_authoritative_loan_return_reconciles_exact_catalog_loan(test_db):
         LoanUnitOfWork(session_factory), logger=MagicMock(), clock=_Clock()
     ).handle(ReturnLoanCommand(loan_id=loan.id.value))
     completed = await _latest_outbox_event(
-        session_factory, "LoanCompleted", loan.id.value
+        session_factory, LoanCompleted, loan.id.value
     )
     assert isinstance(completed, LoanCompleted)
 
@@ -404,7 +404,7 @@ async def test_expired_reservation_cancels_its_loan_and_cannot_hijack_new_owner(
         old_loan = await uow.loans.get_active_loan_for_book(book_result.id)
     assert old_loan is not None
     delayed_created = await _latest_outbox_event(
-        session_factory, "LoanCreated", old_loan.id.value
+        session_factory, LoanCreated, old_loan.id.value
     )
 
     # Expire the semantic lock after Lending committed but before Catalog
@@ -426,7 +426,7 @@ async def test_expired_reservation_cancels_its_loan_and_cannot_hijack_new_owner(
     assert result.released_count == 1
 
     released = await _latest_outbox_event(
-        session_factory, "CatalogBookReleased", book_result.id
+        session_factory, CatalogBookReleased, book_result.id
     )
     assert isinstance(released, CatalogBookReleased)
     await CancelLoanOnBookReleasedHandler(
@@ -448,7 +448,7 @@ async def test_expired_reservation_cancels_its_loan_and_cannot_hijack_new_owner(
         )
     )
     new_reservation = await _latest_outbox_event(
-        session_factory, "CatalogBookReserved", book_result.id
+        session_factory, CatalogBookReserved, book_result.id
     )
     assert new_reservation.reservation_id != old_reservation.reservation_id
     assert (
@@ -475,7 +475,7 @@ async def test_old_completion_cannot_return_a_newer_reservation(test_db):
         LoanUnitOfWork(session_factory), logger=MagicMock(), clock=_Clock()
     ).handle(ReturnLoanCommand(loan_id=loan.id.value))
     old_completion = await _latest_outbox_event(
-        session_factory, "LoanCompleted", loan.id.value
+        session_factory, LoanCompleted, loan.id.value
     )
     return_reaction = ReturnBookOnLoanCompletedHandler(
         ReturnBookHandler(
