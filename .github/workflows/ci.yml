@@ -107,7 +107,7 @@ jobs:
         # Integration tests use the migrated PostgreSQL service above so
         # PostgreSQL constraints and Alembic state are part of the test gate.
         run: >-
-          pytest tests/domain tests/application tests/infrastructure
+          python -m pytest tests/domain tests/application tests/infrastructure
           tests/integration tests/presentation -q
 
   migration-upgrade:
